@@ -1241,9 +1241,27 @@ function renderDispatchTab(){
   });
   if(!isLocked()){
     var btnTruck=document.createElement('button');
-    btnTruck.style.cssText='width:100%;padding:13px;background:#e0e0e0;color:#111;border:2.5px solid #333;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:14px;font-family:var(--font);';
+    btnTruck.style.cssText='width:100%;padding:13px;background:#e0e0e0;color:#111;border:2.5px solid #333;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:10px;font-family:var(--font);';
     btnTruck.textContent='➕ Ajouter un camion';btnTruck.onclick=addTruck;
     container.appendChild(btnTruck);
+    // Bouton validation dispatch — juste sous "Ajouter un camion"
+    if(isDispatchValide()){
+      var validBanner=document.createElement('div');
+      validBanner.style.cssText='background:#d4f0e0;border:2px solid #009A44;border-radius:12px;padding:14px;text-align:center;margin-bottom:14px;';
+      validBanner.innerHTML='<div style="font-size:20px;margin-bottom:4px;">✅</div><div style="font-size:15px;font-weight:800;color:#006b2d;">Dispatch validé !</div><div style="font-size:12px;color:#006b2d;margin-top:4px;">Tous les clients sont affectés et planifiés</div>';
+      container.appendChild(validBanner);
+      var btnAnnuler=document.createElement('button');
+      btnAnnuler.style.cssText='width:100%;padding:12px;background:#fff3cd;color:#856404;border:2px solid #856404;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:14px;';
+      btnAnnuler.textContent='↩️ Annuler la validation';
+      btnAnnuler.onclick=annulerValidationDispatch;
+      container.appendChild(btnAnnuler);
+    } else {
+      var btnValid=document.createElement('button');
+      btnValid.style.cssText='width:100%;padding:14px;background:#1a237e;color:#fff;border:2.5px solid #0d1b6b;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:14px;';
+      btnValid.textContent='✅ Valider le dispatch';
+      btnValid.onclick=validerDispatch;
+      container.appendChild(btnValid);
+    }
   }
   var sl2=document.createElement('div');sl2.className='slabel';sl2.textContent='Clients par département — tap pour affecter';container.appendChild(sl2);
   var deptMap={};
@@ -1279,29 +1297,6 @@ function renderDispatchTab(){
   btnPdf.style.cssText='width:100%;padding:13px;background:#009A44;color:#fff;border:2.5px solid #006b2d;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;margin-top:8px;font-family:var(--font);';
   btnPdf.textContent='📄 Exporter PDF complet';btnPdf.onclick=exportPDF;
   container.appendChild(btnPdf);
-
-  // Bouton validation dispatch
-  if(!isLocked()){
-    var divider=document.createElement('div');divider.style.cssText='border-top:2px solid #e0e0e0;margin:16px 0;';
-    container.appendChild(divider);
-    if(isDispatchValide()){
-      var validBanner=document.createElement('div');
-      validBanner.style.cssText='background:#d4f0e0;border:2px solid #009A44;border-radius:12px;padding:14px;text-align:center;margin-bottom:10px;';
-      validBanner.innerHTML='<div style="font-size:20px;margin-bottom:4px;">✅</div><div style="font-size:15px;font-weight:800;color:#006b2d;">Dispatch validé !</div><div style="font-size:12px;color:#006b2d;margin-top:4px;">Tous les clients sont affectés et planifiés</div>';
-      container.appendChild(validBanner);
-      var btnAnnuler=document.createElement('button');
-      btnAnnuler.style.cssText='width:100%;padding:12px;background:#fff3cd;color:#856404;border:2px solid #856404;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);';
-      btnAnnuler.textContent='↩️ Annuler la validation';
-      btnAnnuler.onclick=annulerValidationDispatch;
-      container.appendChild(btnAnnuler);
-    } else {
-      var btnValid=document.createElement('button');
-      btnValid.style.cssText='width:100%;padding:14px;background:#1a237e;color:#fff;border:2.5px solid #0d1b6b;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font);';
-      btnValid.textContent='✅ Valider le dispatch';
-      btnValid.onclick=validerDispatch;
-      container.appendChild(btnValid);
-    }
-  }
 }
 
 // CAMION RENAME + ADD + SUPPRIMER
