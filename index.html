@@ -600,6 +600,8 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
 
 
+
+
 // ===== FIREBASE SYNC =====
 var db = null;
 var firebaseReady = false;
@@ -1311,12 +1313,57 @@ function saveClient(){
   var prenom=(document.getElementById('f-prenom')||{}).value||'';
   var nom=(document.getElementById('f-nom')||{}).value||'';
   var cp=(document.getElementById('f-cp')||{}).value||'';
-  prenom=prenom.trim();nom=nom.trim();cp=cp.trim();
+  var tel=(document.getElementById('f-tel')||{}).value||'';
+  prenom=prenom.trim();nom=nom.trim();cp=cp.trim();tel=tel.trim();
   if(!prenom||!nom||!cp){
     showToastNew('⚠️ Prénom, nom et code postal requis.');return;
   }
-  var tel=(document.getElementById('f-tel')||{}).value||'';
-  var adresse=(document.getElementById('f-adresse')||{}).value||'';
+  // Vérifier doublon dans la collecte courante
+  var cls=clientsParCollecte[currentCollecteId]||{};
+  var nomComplet=(prenom+' '+nom).toLowerCase();
+  var telClean=tel.replace(/\s/g,'');
+  var doublon=Object.values(cls).find(function(c){
+    var memeNom=(c.name||'').toLowerCase()===nomComplet;
+    var memeTel=telClean&&c.tel&&c.tel.replace(/\s/g,'')===telClean;
+    return memeNom||memeTel;
+  });
+  if(doublon){
+    document.getElementById('doublon-nom').textContent=doublon.name;
+    document.getElementById('doublon-info').textContent=(doublon.colis||'')+' — '+(doublon.prix||0)+' €';
+    openModal('modal-doublon');
+    return;
+  }
+  // Pas de doublon — ouvrir confirmation
+  ouvrirConfirmClient();
+}
+
+function ouvrirConfirmClient(){
+  var prenom=(document.getElementById('f-prenom')||{}).value.trim();
+  var nom=(document.getElementById('f-nom')||{}).value.trim();
+  var tel=(document.getElementById('f-tel')||{}).value.trim();
+  var adresse=(document.getElementById('f-adresse')||{}).value.trim();
+  var cp=(document.getElementById('f-cp')||{}).value.trim();
+  var ville=(document.getElementById('f-ville')||{}).value.trim();
+  var colis=(document.getElementById('f-colis')||{}).value.trim();
+  var prix=(document.getElementById('f-prix')||{}).value.trim();
+  var recap=document.getElementById('confirm-client-recap');
+  if(recap){
+    recap.innerHTML=
+      '<div style="margin-bottom:6px;font-size:15px;font-weight:800;">'+prenom+' '+nom+'</div>'
+      +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📞 '+(tel||'—')+'</div>'
+      +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📍 '+(adresse?adresse+', ':'')+cp+' '+ville+'</div>'
+      +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📦 '+(colis||'—')+'</div>'
+      +'<div style="font-size:14px;font-weight:800;color:#006b2d;margin-top:6px;">💰 '+(prix||0)+' €</div>';
+  }
+  openModal('modal-confirm-client');
+}
+
+function saveClientConfirme(){
+  var prenom=(document.getElementById('f-prenom')||{}).value.trim()||'';
+  var nom=(document.getElementById('f-nom')||{}).value.trim()||'';
+  var cp=(document.getElementById('f-cp')||{}).value.trim()||'';
+  var tel=(document.getElementById('f-tel')||{}).value.trim()||'';
+  var adresse=(document.getElementById('f-adresse')||{}).value.trim()||'';
   var ville=(document.getElementById('f-ville')||{}).value||'';
   var colis=(document.getElementById('f-colis')||{}).value||'';
   var prix=parseFloat((document.getElementById('f-prix')||{}).value)||0;
@@ -2200,6 +2247,22 @@ if(typeof firebase !== 'undefined'){
 
 
 
+
+
 </script>
+
+<div class="modal-overlay" id="modal-confirm-client">
+  <div class="modal-sheet">
+    <div class="modal-confirm">
+      <div class="modal-emoji">✅</div>
+      <div class="modal-confirm-title">Confirmer l'ajout ?</div>
+      <div id="confirm-client-recap" style="background:#f9f9f9;border-radius:10px;padding:12px;margin:10px 0;text-align:left;border:1.5px solid #e0e0e0;"></div>
+      <div class="modal-confirm-btns">
+        <button class="btn-sm btn-gray-sm" onclick="closeModal('modal-confirm-client')">Annuler</button>
+        <button class="btn-sm btn-green-sm" onclick="closeModal('modal-confirm-client');saveClientConfirme();">✅ Confirmer</button>
+      </div>
+    </div>
+  </div>
+</div>
 </body>
 </html>
