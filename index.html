@@ -662,8 +662,13 @@ function ecouterChangements(){
     if(activeScreen){
       var id = activeScreen.id;
       if(id==='s-home') renderCollectesList();
-      else if(id==='s-collecte') renderCollecteContent();
+      else if(id==='s-collecte'){
+        updateCollecteHeader();
+        if(currentSubtab==='clients') renderClientsTab();
+        else if(currentSubtab==='dispatch') renderDispatchTab();
+      }
       else if(id==='s-camion' && currentCamion) renderCamion(currentCamion);
+      else if(id==='s-clients') renderContacts();
     }
   });
 }
