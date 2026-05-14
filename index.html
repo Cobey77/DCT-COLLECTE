@@ -287,8 +287,10 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-</head>
 
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
 <body>
 <div class="app">
 
@@ -467,6 +469,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div class="suggestions" id="suggestions"></div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="f-tel" placeholder="06 00 00 00 00" type="tel" oninput="showSuggestions(this.value)"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="f-adresse" placeholder="12 rue Pasteur"></div>
+    <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="f-infos" placeholder="Appt 3B · Bât C · Digicode 1234..."></div>
     <div class="form-row">
       <div class="fg"><label class="fl">Code postal</label><input class="fi" id="f-cp" placeholder="93300" maxlength="5"></div>
       <div class="fg"><label class="fl">Ville</label><input class="fi" id="f-ville" placeholder="Aubervilliers"></div>
@@ -500,6 +503,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     </div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="e-tel" type="tel"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="e-adresse"></div>
+    <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="e-infos" placeholder="Appt · Bât · Digicode..."></div>
     <div class="form-row">
       <div class="fg"><label class="fl">Code postal</label><input class="fi" id="e-cp"></div>
       <div class="fg"><label class="fl">Ville</label><input class="fi" id="e-ville"></div>
@@ -588,13 +592,22 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div class="modal-overlay" id="modal-annuler"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">↩️</div><div class="modal-confirm-title">Annuler cette décision ?</div><div class="modal-confirm-sub" id="annuler-sub"></div><input type="hidden" id="annuler-type" value=""><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-annuler')">Non, garder</button><button class="btn-sm" style="background:#856404;color:#fff;border:2px solid #5a4000;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerAnnuler()">↩️ Oui, annuler</button></div></div></div></div>
 <div class="modal-overlay" id="modal-clear-activite"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🗑️</div><div class="modal-confirm-title">Effacer mon historique ?</div><div class="modal-confirm-sub">Irréversible. Les autres profils garderont le leur.</div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-clear-activite')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="effacerActivite()">🗑️ Effacer</button></div></div></div></div>
 <div class="modal-overlay" id="modal-del-camion"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🚛</div><div class="modal-confirm-title">Supprimer ce camion ?</div><div class="modal-confirm-sub" id="del-camion-sub"></div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-del-camion')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerSupprimerCamion()">🗑️ Supprimer</button></div></div></div></div>
-<div class="modal-overlay" id="modal-contact-edit"><div class="modal-sheet"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title" style="margin-bottom:0;" id="ce-title">Modifier</div><button onclick="closeModal('modal-contact-edit')" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button></div><input type="hidden" id="ce-key"><div class="form-row"><div class="fg"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div><div class="fg"><label class="fl">Nom</label><input class="fi" id="ce-nom"></div></div><div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div><div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div><div class="form-row"><div class="fg"><label class="fl">Code postal</label><input class="fi" id="ce-cp" maxlength="5"></div><div class="fg"><label class="fl">Ville</label><input class="fi" id="ce-ville"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-contact-edit')">Annuler</button><button class="btn-sm btn-green-sm" onclick="saveContactEdit()">✅ Enregistrer</button></div><button onclick="demanderSupprimerContact()" style="width:100%;padding:12px;background:#fde0e0;color:#992020;border:2px solid #c0392b;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:10px;">🗑️ Supprimer</button></div></div>
+<div class="modal-overlay" id="modal-contact-edit"><div class="modal-sheet"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title" style="margin-bottom:0;" id="ce-title">Modifier</div><button onclick="closeModal('modal-contact-edit')" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button></div><input type="hidden" id="ce-key"><div class="form-row"><div class="fg"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div><div class="fg"><label class="fl">Nom</label><input class="fi" id="ce-nom"></div></div><div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div><div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div><div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="ce-infos" placeholder="Appt · Bât · Digicode..."></div><div class="form-row"><div class="fg"><label class="fl">Code postal</label><input class="fi" id="ce-cp" maxlength="5"></div><div class="fg"><label class="fl">Ville</label><input class="fi" id="ce-ville"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-contact-edit')">Annuler</button><button class="btn-sm btn-green-sm" onclick="saveContactEdit()">✅ Enregistrer</button></div><button onclick="demanderSupprimerContact()" style="width:100%;padding:12px;background:#fde0e0;color:#992020;border:2px solid #c0392b;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:10px;">🗑️ Supprimer</button></div></div>
 <div class="modal-overlay" id="modal-del-contact"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🗑️</div><div class="modal-confirm-title">Supprimer ce contact ?</div><div class="modal-confirm-sub" id="del-contact-sub"></div><input type="hidden" id="del-contact-key"><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-del-contact')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerSupprimerContact()">🗑️ Supprimer</button></div></div></div></div>
 <div class="modal-overlay" id="modal-waze"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">📍</div><div class="modal-confirm-title">Ouvrir Waze ?</div><div class="modal-confirm-sub" id="waze-adresse"></div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-waze')">Annuler</button><button class="btn-sm btn-green-sm" id="waze-btn">🗺️ Ouvrir Waze</button></div></div></div></div>
 <div class="modal-overlay" id="modal-dispatch-invalid"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">⚠️</div><div class="modal-confirm-title">Dispatch incomplet</div><div class="modal-confirm-sub" id="dispatch-errors" style="text-align:left;white-space:pre-line;"></div><div style="margin-top:16px;"><button class="btn-sm btn-green-sm" style="width:100%;" onclick="closeModal('modal-dispatch-invalid')">OK, je corrige</button></div></div></div></div>
 <div class="modal-overlay" id="modal-dispatch-confirm"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">✅</div><div class="modal-confirm-title">Valider le dispatch ?</div><div class="modal-confirm-sub">Tous les clients sont affectés et ont une heure.</div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-dispatch-confirm')">Annuler</button><button class="btn-sm btn-green-sm" onclick="confirmerValiderDispatch()">✅ Valider</button></div></div></div></div>
+<div class="modal-overlay" id="modal-doublon"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">⚠️</div><div class="modal-confirm-title">Client déjà existant</div><div class="modal-confirm-sub"><strong id="doublon-nom"></strong> est déjà dans cette collecte.<br><span id="doublon-info" style="color:#888;font-size:12px;"></span></div><div style="font-size:13px;color:#555;margin:10px 0;">Voulez-vous l'ajouter quand même ?</div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-doublon')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="closeModal('modal-doublon');ouvrirConfirmClient();">Ajouter quand même</button></div></div></div></div>
+<div class="modal-overlay" id="modal-confirm-client"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">✅</div><div class="modal-confirm-title">Confirmer l'ajout ?</div><div id="confirm-client-recap" style="background:#f9f9f9;border-radius:10px;padding:12px;margin:10px 0;text-align:left;border:1.5px solid #e0e0e0;"></div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-confirm-client')">Annuler</button><button class="btn-sm btn-green-sm" onclick="closeModal('modal-confirm-client');saveClientConfirme();">✅ Confirmer</button></div></div></div></div>
 
 <script>
+
+
+
+
+
+
+
 
 
 
@@ -635,6 +648,9 @@ function initFirebase(){
 function ecouterChangements(){
   if(!db) return;
   db.ref('dct').on('value', function(snapshot){
+    // Ne JAMAIS traiter si on est sur l'écran login
+    var activeNow = document.querySelector('.screen.active');
+    if(!activeNow || activeNow.id === 's-login') return;
     var data = snapshot.val();
     if(!data) return;
     // Ne pas écraser si c'est nous qui venons d'écrire
@@ -694,6 +710,7 @@ function ecouterChangements(){
     var activeScreen = document.querySelector('.screen.active');
     if(activeScreen){
       var id = activeScreen.id;
+      if(id==='s-login') return; // Ne pas interférer avec l'écran de login
       if(id==='s-home') renderCollectesList();
       else if(id==='s-collecte'){
         updateCollecteHeader();
@@ -868,7 +885,9 @@ function buildLogin(){
   COLLABS.forEach(function(c){
     html+='<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div>'+(c.admin?'':'<div class="login-role">Collaborateur</div>')+'</div><svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></div>';
   });
-  document.getElementById('login-cards').innerHTML=html;
+  var lc=document.getElementById('login-cards');
+  if(lc) lc.innerHTML=html;
+  else console.error('login-cards introuvable!');
   var v=document.getElementById('app-version');
   if(v)v.textContent=APP_VERSION;
 }
@@ -1231,7 +1250,7 @@ function openClientFiche(id,retour){
   if(av){av.textContent=init;av.style.background=c.bg;av.style.color=c.color;av.style.border='2px solid '+c.color;av.style.width='50px';av.style.height='50px';av.style.fontSize='15px';}
   var an=document.getElementById('client-av-name');if(an)an.textContent=c.name;
   var aby=document.getElementById('client-av-by');if(aby){aby.textContent='Ajouté par '+c.by;aby.style.color=c.color;}
-  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     var key=fid.replace('e-','');
     el.value=c[key]||'';
@@ -1249,7 +1268,7 @@ function openClientFiche(id,retour){
 function saveClientEdit(){
   var cls=getClients();if(!currentClientId||!cls[currentClientId])return;
   var c=cls[currentClientId];
-  ['prenom','nom','tel','adresse','ville','cp','colis'].forEach(function(k){
+  ['prenom','nom','tel','adresse','infos','ville','cp','colis'].forEach(function(k){
     var el=document.getElementById('e-'+k);if(el)c[k]=el.value.trim();
   });
   var ep=document.getElementById('e-prix');if(ep)c.prix=parseFloat(ep.value)||0;
@@ -1279,7 +1298,7 @@ function ouvrirAjoutClient(){
   var c=collectes.find(function(x){return x.id===currentCollecteId;});
   var lb=document.getElementById('add-collecte-label');if(lb)lb.textContent=c?c.date:'Collecte';
   var ab=document.getElementById('add-by');if(ab){ab.textContent=currentUser.name;ab.style.color=currentUser.color;}
-  ['f-prenom','f-nom','f-tel','f-adresse','f-ville','f-cp','f-colis','f-prix'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  ['f-prenom','f-nom','f-tel','f-adresse','f-infos','f-ville','f-cp','f-colis','f-prix'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   var sug=document.getElementById('suggestions');if(sug)sug.classList.remove('show');
   goTo('s-add');
 }
@@ -1361,6 +1380,7 @@ function ouvrirConfirmClient(){
   var nom=(document.getElementById('f-nom')||{}).value.trim();
   var tel=(document.getElementById('f-tel')||{}).value.trim();
   var adresse=(document.getElementById('f-adresse')||{}).value.trim();
+  var infos=(document.getElementById('f-infos')||{}).value||'';infos=infos.trim();
   var cp=(document.getElementById('f-cp')||{}).value.trim();
   var ville=(document.getElementById('f-ville')||{}).value.trim();
   var colis=(document.getElementById('f-colis')||{}).value.trim();
@@ -1371,6 +1391,7 @@ function ouvrirConfirmClient(){
       '<div style="margin-bottom:6px;font-size:15px;font-weight:800;">'+prenom+' '+nom+'</div>'
       +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📞 '+(tel||'—')+'</div>'
       +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📍 '+(adresse?adresse+', ':'')+cp+' '+ville+'</div>'
+      +(infos?'<div style="font-size:12px;color:#777;margin-bottom:3px;margin-left:18px;">'+infos+'</div>':'')
       +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📦 '+(colis||'—')+'</div>'
       +'<div style="font-size:14px;font-weight:800;color:#006b2d;margin-top:6px;">💰 '+(prix||0)+' €</div>';
   }
@@ -1383,6 +1404,7 @@ function saveClientConfirme(){
   var cp=(document.getElementById('f-cp')||{}).value.trim()||'';
   var tel=(document.getElementById('f-tel')||{}).value.trim()||'';
   var adresse=(document.getElementById('f-adresse')||{}).value.trim()||'';
+  var infos=(document.getElementById('f-infos')||{}).value.trim()||'';
   var ville=(document.getElementById('f-ville')||{}).value||'';
   var colis=(document.getElementById('f-colis')||{}).value||'';
   var prix=parseFloat((document.getElementById('f-prix')||{}).value)||0;
@@ -1390,7 +1412,7 @@ function saveClientConfirme(){
   var id='C'+(Date.now()%999999);
   var collab=COLLABS.find(function(c){return c.name===currentUser.name;})||COLLABS[0];
   if(!clientsParCollecte[currentCollecteId])clientsParCollecte[currentCollecteId]={};
-  clientsParCollecte[currentCollecteId][id]={name:prenom+' '+nom,prenom:prenom,nom:nom,tel:tel.trim(),adresse:adresse.trim(),ville:ville.trim(),cp:cp,dept:dept,colis:colis.trim(),prix:prix,bg:collab.bg,color:collab.color,by:currentUser.name};
+  clientsParCollecte[currentCollecteId][id]={name:prenom+' '+nom,prenom:prenom,nom:nom,tel:tel.trim(),adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,colis:colis.trim(),prix:prix,bg:collab.bg,color:collab.color,by:currentUser.name};
   if(!dispatchParCollecte[currentCollecteId])dispatchParCollecte[currentCollecteId]={trucks:{},assigned:{}};
   dispatchParCollecte[currentCollecteId].assigned[id]=null;
   if(!window.dctContacts)window.dctContacts={};
@@ -1698,7 +1720,8 @@ function renderCamion(k){
     // ADRESSE cliquable Waze avec confirmation
     var adresseEl=document.createElement('div');adresseEl.className='route-detail-row';
     adresseEl.style.cssText='cursor:pointer;';
-    adresseEl.innerHTML='📍 <strong style="color:#009A44;text-decoration:underline;">'+adresseFull+'</strong>';
+    var infosFull=(c.infos||'').trim();
+    adresseEl.innerHTML='📍 <strong style="color:#009A44;text-decoration:underline;">'+adresseFull+'</strong>'+(infosFull?'<br><span style="font-size:11px;color:#555;margin-left:18px;">'+infosFull+'</span>':'');
     (function(wl,af){
       adresseEl.onclick=function(){ouvrirModalWaze(wl,af);};
     })(wazeLink,adresseFull);
@@ -1841,17 +1864,19 @@ function confirmRefus(){
 
 // NOUVELLE COLLECTE
 function buildSundays(){
-  var grid=document.getElementById('sunday-grid');if(!grid)return;
-  var m=['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
-  var d=new Date();var diff=(7-d.getDay())%7||7;d.setDate(d.getDate()+diff);
-  grid.innerHTML='';
-  for(var i=0;i<6;i++){
-    var nd=new Date(d);nd.setDate(d.getDate()+i*7);
-    var chip=document.createElement('div');chip.className='sunday-chip'+(i===0?' sel':'');
-    chip.textContent='Dim. '+nd.getDate()+' '+m[nd.getMonth()];
-    (function(ch){ch.onclick=function(){grid.querySelectorAll('.sunday-chip').forEach(function(c){c.classList.remove('sel');});ch.classList.add('sel');};})(chip);
-    grid.appendChild(chip);
-  }
+  try{
+    var grid=document.getElementById('sunday-grid');if(!grid)return;
+    var m=['jan','fév','mar','avr','mai','juin','juil','août','sep','oct','nov','déc'];
+    var d=new Date();var diff=(7-d.getDay())%7||7;d.setDate(d.getDate()+diff);
+    grid.innerHTML='';
+    for(var i=0;i<6;i++){
+      var nd=new Date(d);nd.setDate(d.getDate()+i*7);
+      var chip=document.createElement('div');chip.className='sunday-chip'+(i===0?' sel':'');
+      chip.textContent='Dim. '+nd.getDate()+' '+m[nd.getMonth()];
+      (function(ch){ch.onclick=function(){grid.querySelectorAll('.sunday-chip').forEach(function(c){c.classList.remove('sel');});ch.classList.add('sel');};})(chip);
+      grid.appendChild(chip);
+    }
+  }catch(e){}
 }
 function toggleExcep(){
   excepOn=!excepOn;
@@ -2253,12 +2278,21 @@ function exportCamionPDF(){
 // INIT
 charger();
 buildLogin();
-buildSundays();
-renderCollectesList();
-// Initialiser Firebase après chargement
-if(typeof firebase !== 'undefined'){
-  initFirebase();
-}
+try{ buildSundays(); }catch(e){}
+try{ renderCollectesList(); }catch(e){}
+// Initialiser Firebase après un délai pour ne pas bloquer l'affichage des profils
+setTimeout(function(){
+  if(typeof firebase !== 'undefined'){
+    initFirebase();
+  }
+}, 2000);
+
+
+
+
+
+
+
 
 
 
@@ -2269,33 +2303,5 @@ if(typeof firebase !== 'undefined'){
 
 
 </script>
-
-<div class="modal-overlay" id="modal-doublon">
-  <div class="modal-sheet">
-    <div class="modal-confirm">
-      <div class="modal-emoji">⚠️</div>
-      <div class="modal-confirm-title">Client déjà existant</div>
-      <div class="modal-confirm-sub"><strong id="doublon-nom"></strong> est déjà dans cette collecte.<br><span id="doublon-info" style="color:#888;font-size:12px;"></span></div>
-      <div style="font-size:13px;color:#555;margin:10px 0;">Voulez-vous l'ajouter quand même ?</div>
-      <div class="modal-confirm-btns">
-        <button class="btn-sm btn-gray-sm" onclick="closeModal('modal-doublon')">Annuler</button>
-        <button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="closeModal('modal-doublon');ouvrirConfirmClient();">Ajouter quand même</button>
-      </div>
-    </div>
-  </div>
-</div>
-<div class="modal-overlay" id="modal-confirm-client">
-  <div class="modal-sheet">
-    <div class="modal-confirm">
-      <div class="modal-emoji">✅</div>
-      <div class="modal-confirm-title">Confirmer l'ajout ?</div>
-      <div id="confirm-client-recap" style="background:#f9f9f9;border-radius:10px;padding:12px;margin:10px 0;text-align:left;border:1.5px solid #e0e0e0;"></div>
-      <div class="modal-confirm-btns">
-        <button class="btn-sm btn-gray-sm" onclick="closeModal('modal-confirm-client')">Annuler</button>
-        <button class="btn-sm btn-green-sm" onclick="closeModal('modal-confirm-client');saveClientConfirme();">✅ Confirmer</button>
-      </div>
-    </div>
-  </div>
-</div>
 </body>
 </html>
