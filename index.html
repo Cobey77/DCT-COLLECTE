@@ -599,6 +599,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
 
 
+
 // ===== FIREBASE SYNC =====
 var db = null;
 var firebaseReady = false;
@@ -634,10 +635,38 @@ function ecouterChangements(){
     if(!data) return;
     // Ne pas écraser si c'est nous qui venons d'écrire
     if(window._lastWriteTime && Date.now() - window._lastWriteTime < 2000) return;
-    if(data.collectes) collectes = data.collectes;
-    if(data.clients) Object.assign(clientsParCollecte, data.clients);
-    if(data.dispatch) Object.assign(dispatchParCollecte, data.dispatch);
-    if(data.contacts) window.dctContacts = data.contacts;
+    if(data.collectes){
+      // Firebase peut convertir les arrays en objects — normaliser
+      var cols = data.collectes;
+      if(!Array.isArray(cols)) cols = Object.values(cols);
+      collectes = cols.filter(Boolean);
+    }
+    if(data.clients && typeof data.clients==='object'){
+      Object.assign(clientsParCollecte, data.clients);
+    }
+    if(data.dispatch && typeof data.dispatch==='object'){
+      Object.keys(data.dispatch).forEach(function(colId){
+        var d = data.dispatch[colId];
+        if(!d) return;
+        if(!d.trucks) d.trucks={};
+        if(!d.assigned) d.assigned={};
+        Object.keys(d.trucks).forEach(function(k){
+          var tk = d.trucks[k];
+          if(!tk){ delete d.trucks[k]; return; }
+          // Convertir objets Firebase en tableaux
+          if(!tk.clients) tk.clients=[];
+          else if(!Array.isArray(tk.clients)) tk.clients=Object.values(tk.clients).filter(Boolean);
+          if(!tk.validated) tk.validated=[];
+          else if(!Array.isArray(tk.validated)) tk.validated=Object.values(tk.validated).filter(Boolean);
+          if(!tk.refused) tk.refused=[];
+          else if(!Array.isArray(tk.refused)) tk.refused=Object.values(tk.refused).filter(Boolean);
+          if(!tk.hours || typeof tk.hours!=='object') tk.hours={};
+          if(!tk.name) tk.name='Camion '+k;
+        });
+      });
+      Object.assign(dispatchParCollecte, data.dispatch);
+    }
+    if(data.contacts && typeof data.contacts==='object') window.dctContacts = data.contacts;
     if(data.activite){
       var al = document.getElementById('activity-list');
       if(al && data.activite.indexOf('Aucune')===-1){
@@ -796,9 +825,17 @@ function setNav(tab){
   else if(tab==='clients'){goTo('s-clients');renderContacts();}
   else if(tab==='activite'){
     goTo('s-activite');
-    // Remettre le badge à 0 pour cet utilisateur
-    localStorage.setItem('dct_notif_'+currentUser.id, '0');
-    updateNotifBadge();
+    // Marquer tout comme vu
+    if(firebaseReady && db){
+      db.ref('dct_notifs/'+currentUser.id).once('value', function(snap){
+        var total = snap.val() || 0;
+        localStorage.setItem('dct_notif_seen_'+currentUser.id, total);
+        updateNotifBadge();
+      });
+    } else {
+      localStorage.setItem('dct_notif_'+currentUser.id, '0');
+      updateNotifBadge();
+    }
   }
 }
 function openModal(id){var el=document.getElementById(id);if(el)el.classList.add('show');}
@@ -889,6 +926,24 @@ function finalisLogin(collab){
   var hg=document.getElementById('home-greet');
   if(hg)hg.textContent='Bonjour '+currentUser.name+' !';
   updateNotifBadge();
+  // Écouter les notifs Firebase en temps réel
+  if(firebaseReady && db){
+    db.ref('dct_notifs/'+collab.id).on('value', function(snap){
+      var total = snap.val() || 0;
+      var seen = parseInt(localStorage.getItem('dct_notif_seen_'+collab.id)||'0');
+      var unseen = Math.max(0, total - seen);
+      // Mettre à jour badge
+      var badges = document.querySelectorAll('#notif-badge, .notif-badge-tab');
+      badges.forEach(function(badge){
+        if(unseen > 0){
+          badge.textContent = unseen > 99 ? '99+' : String(unseen);
+          badge.style.display = 'flex';
+        } else {
+          badge.style.display = 'none';
+        }
+      });
+    });
+  }
   goTo('s-home');
 }
 
@@ -1000,12 +1055,39 @@ function confirmerSupprimerCollecte(){
   sauvegarder();renderCollectesList();
 }
 function ouvrirCollecte(id){
-  currentCollecteId=id;
-  if(!dispatchParCollecte[id])dispatchParCollecte[id]={trucks:{},assigned:{}};
-  if(!clientsParCollecte[id])clientsParCollecte[id]={};
-  truckCount=Object.keys(getTrucks()).length;
-  currentSubtab='clients';
-  updateCollecteHeader();renderCollecteContent();goTo('s-collecte');
+  try{
+    currentCollecteId=id;
+    if(!dispatchParCollecte[id])dispatchParCollecte[id]={trucks:{},assigned:{}};
+    if(!clientsParCollecte[id])clientsParCollecte[id]={};
+    // Normaliser les données du dispatch (Firebase convertit arrays en objects)
+    var trks=dispatchParCollecte[id].trucks;
+    Object.keys(trks||{}).forEach(function(k){
+      var tk=trks[k]; if(!tk){delete trks[k];return;}
+      if(!tk.clients) tk.clients=[];
+      else if(!Array.isArray(tk.clients)) tk.clients=Object.values(tk.clients).filter(Boolean);
+      if(!tk.validated) tk.validated=[];
+      else if(!Array.isArray(tk.validated)) tk.validated=Object.values(tk.validated).filter(Boolean);
+      if(!tk.refused) tk.refused=[];
+      else if(!Array.isArray(tk.refused)) tk.refused=Object.values(tk.refused).filter(Boolean);
+      if(!tk.hours||typeof tk.hours!=='object') tk.hours={};
+      if(!tk.name) tk.name='Camion '+k;
+    });
+    // Sécuriser assigned
+    var asgn=dispatchParCollecte[id].assigned;
+    if(asgn){
+      Object.keys(asgn).forEach(function(cid){
+        if(asgn[cid]===undefined)asgn[cid]=null;
+      });
+    }
+    truckCount=Object.keys(getTrucks()).length;
+    currentSubtab='clients';
+    updateCollecteHeader();
+    renderCollecteContent();
+    goTo('s-collecte');
+  }catch(e){
+    console.error('Erreur ouvrirCollecte:',e);
+    showToastNew("Erreur ouverture collecte.");
+  }
 }
 function updateCollecteHeader(){
   var c=collectes.find(function(x){return x.id===currentCollecteId;});
@@ -1769,14 +1851,28 @@ function addActivity(emoji,bg,text,time){
   item.setAttribute('data-ts', Date.now());
   item.innerHTML='<div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div>';
   list.insertBefore(item,list.firstChild);
-  // Incrémenter le compteur de tous les collaborateurs sauf l'auteur
-  COLLABS.forEach(function(co){
-    if(co.name !== currentUser.name){
-      var key = 'dct_notif_'+co.id;
-      var count = parseInt(localStorage.getItem(key)||'0') + 1;
-      localStorage.setItem(key, count);
-    }
-  });
+  // Incrémenter le compteur global dans Firebase
+  if(firebaseReady && db){
+    var notifRef = db.ref('dct_notifs');
+    notifRef.transaction(function(current){
+      var data = current || {};
+      COLLABS.forEach(function(co){
+        if(co.name !== currentUser.name && !co.admin){
+          data[co.id] = (data[co.id]||0) + 1;
+        }
+      });
+      return data;
+    });
+  } else {
+    // Fallback localStorage
+    COLLABS.forEach(function(co){
+      if(co.name !== currentUser.name && !co.admin){
+        var key = 'dct_notif_'+co.id;
+        var count = parseInt(localStorage.getItem(key)||'0') + 1;
+        localStorage.setItem(key, count);
+      }
+    });
+  }
   sauvegarder();
 }
 function effacerActivite(){
@@ -2099,6 +2195,7 @@ renderCollectesList();
 if(typeof firebase !== 'undefined'){
   initFirebase();
 }
+
 
 
 
