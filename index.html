@@ -602,6 +602,8 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
 
 
+
+
 // ===== FIREBASE SYNC =====
 var db = null;
 var firebaseReady = false;
@@ -745,7 +747,24 @@ var DEPT_NAMES = {'75':'Paris','77':'Seine-et-Marne','78':'Yvelines','91':'Esson
 var STATUTS = ['a_venir','en_cours','terminee'];
 var STATUT_LABELS = {a_venir:'À venir',en_cours:'En cours',terminee:'Terminée'};
 
-function getTc(k){return TRUCK_COLORS[k]||{bg:'#f0f0f0',color:'#333',bar:'#666'};}
+function getTc(k){
+  // Couleurs par index numérique
+  var colors=[
+    {bg:'#e3f2fd',color:'#0d47a1',bar:'#1565c0'},
+    {bg:'#fff8e1',color:'#e65100',bar:'#ef6c00'},
+    {bg:'#f3e5f5',color:'#6a1b9a',bar:'#7b1fa2'},
+    {bg:'#fce4ec',color:'#880e4f',bar:'#ad1457'},
+    {bg:'#e8f5e9',color:'#1b5e20',bar:'#2e7d32'},
+    {bg:'#e0f7fa',color:'#006064',bar:'#00838f'},
+    {bg:'#fff3e0',color:'#bf360c',bar:'#d84315'},
+    {bg:'#f1f8e9',color:'#33691e',bar:'#558b2f'},
+    {bg:'#fbe9e7',color:'#bf360c',bar:'#e64a19'},
+    {bg:'#e8eaf6',color:'#283593',bar:'#303f9f'}
+  ];
+  // Extraire le numéro de la clé (T01 -> 0, T02 -> 1, etc.)
+  var num = parseInt(k.replace('T',''))||1;
+  return colors[(num-1)%colors.length]||{bg:'#f0f0f0',color:'#333',bar:'#666'};
+}
 function initiales(p,n){return ((p||'')[0]||'').toUpperCase()+((n||'')[0]||'').toUpperCase();}
 
 // STATE
@@ -1547,15 +1566,13 @@ function confirmRename(k){
   sauvegarder();renderDispatchTab();
 }
 function addTruck(){
-  var letters='ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   var trks=getTrucks();
-  // Trouver la première lettre disponible
-  var k=null;
-  for(var i=0;i<letters.length;i++){
-    if(!trks[letters[i]]){k=letters[i];break;}
-  }
-  if(!k) return; // Max 26 camions
-  trks[k]={name:'Camion '+k,clients:[],validated:[],refused:[],hours:{}};
+  // Trouver le premier numéro disponible
+  var num=1;
+  while(trks['T'+String(num).padStart(2,'0')]) num++;
+  if(num>99) return; // Max 99 camions
+  var k='T'+String(num).padStart(2,'0');
+  trks[k]={name:'Camion '+String(num).padStart(2,'0'),clients:[],validated:[],refused:[],hours:{}};
   truckCount=Object.keys(trks).length;
   sauvegarder();renderDispatchTab();
 }
@@ -2249,8 +2266,24 @@ if(typeof firebase !== 'undefined'){
 
 
 
+
+
 </script>
 
+<div class="modal-overlay" id="modal-doublon">
+  <div class="modal-sheet">
+    <div class="modal-confirm">
+      <div class="modal-emoji">⚠️</div>
+      <div class="modal-confirm-title">Client déjà existant</div>
+      <div class="modal-confirm-sub"><strong id="doublon-nom"></strong> est déjà dans cette collecte.<br><span id="doublon-info" style="color:#888;font-size:12px;"></span></div>
+      <div style="font-size:13px;color:#555;margin:10px 0;">Voulez-vous l'ajouter quand même ?</div>
+      <div class="modal-confirm-btns">
+        <button class="btn-sm btn-gray-sm" onclick="closeModal('modal-doublon')">Annuler</button>
+        <button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="closeModal('modal-doublon');ouvrirConfirmClient();">Ajouter quand même</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="modal-overlay" id="modal-confirm-client">
   <div class="modal-sheet">
     <div class="modal-confirm">
