@@ -284,6 +284,9 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 /* NOTIF BADGE */
 #notif-badge{font-family:var(--font);}
 </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 </head>
 
 <body>
@@ -595,6 +598,95 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
 
 
+
+// ===== FIREBASE SYNC =====
+var db = null;
+var firebaseReady = false;
+var syncTimeout = null;
+
+function initFirebase(){
+  try {
+    var firebaseConfig = {
+      apiKey: "AIzaSyCs7oTZAG8vzhqY3rSEqCnwSnQY8hm_f2A",
+      authDomain: "dakar-collecte.firebaseapp.com",
+      databaseURL: "https://dakar-collecte-default-rtdb.europe-west1.firebasedatabase.app",
+      projectId: "dakar-collecte",
+      storageBucket: "dakar-collecte.firebasestorage.app",
+      messagingSenderId: "910296510414",
+      appId: "1:910296510414:web:de6b814b3420adcd68859f"
+    };
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+    firebaseReady = true;
+    console.log("Firebase OK");
+    // Écouter les changements en temps réel
+    ecouterChangements();
+  } catch(e) {
+    console.log("Firebase non disponible:", e);
+    firebaseReady = false;
+  }
+}
+
+function ecouterChangements(){
+  if(!db) return;
+  db.ref('dct').on('value', function(snapshot){
+    var data = snapshot.val();
+    if(!data) return;
+    // Ne pas écraser si c'est nous qui venons d'écrire
+    if(window._lastWriteTime && Date.now() - window._lastWriteTime < 2000) return;
+    if(data.collectes) collectes = data.collectes;
+    if(data.clients) Object.assign(clientsParCollecte, data.clients);
+    if(data.dispatch) Object.assign(dispatchParCollecte, data.dispatch);
+    if(data.contacts) window.dctContacts = data.contacts;
+    if(data.activite){
+      var al = document.getElementById('activity-list');
+      if(al && data.activite.indexOf('Aucune')===-1){
+        // Appliquer le filtre de suppression de l'utilisateur courant
+        var deletedAt = currentUser ? parseInt(localStorage.getItem('dct_activite_deleted_'+currentUser.id)||'0') : 0;
+        if(deletedAt > 0){
+          var tmp = document.createElement('div');
+          tmp.innerHTML = data.activite;
+          var kept = [];
+          tmp.querySelectorAll('.activity-item').forEach(function(item){
+            var ts = parseInt(item.getAttribute('data-ts')||'9999999999999');
+            if(ts > deletedAt) kept.push(item.outerHTML);
+          });
+          al.innerHTML = kept.length ? kept.join('') : '<div style="text-align:center;color:#aaa;padding:40px 20px;font-size:14px;"><div style="font-size:32px;margin-bottom:10px;">📋</div>Aucune activité pour le moment.</div>';
+        } else {
+          al.innerHTML = data.activite;
+        }
+      }
+    }
+    // Mettre à jour l'affichage si on est sur un écran concerné
+    var activeScreen = document.querySelector('.screen.active');
+    if(activeScreen){
+      var id = activeScreen.id;
+      if(id==='s-home') renderCollectesList();
+      else if(id==='s-collecte') renderCollecteContent();
+      else if(id==='s-camion' && currentCamion) renderCamion(currentCamion);
+    }
+  });
+}
+
+function sauvegarderFirebase(){
+  if(!db || !firebaseReady) return;
+  clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(function(){
+    window._lastWriteTime = Date.now();
+    var al = document.getElementById('activity-list');
+    var activiteHtml = al ? al.innerHTML : '';
+    db.ref('dct').set({
+      collectes: collectes,
+      clients: clientsParCollecte,
+      dispatch: dispatchParCollecte,
+      contacts: window.dctContacts || {},
+      activite: activiteHtml
+    }).catch(function(e){ console.log("Erreur sync:", e); });
+  }, 800); // Debounce 800ms pour grouper les écritures
+}
+
+// ===== FIN FIREBASE =====
+
 var APP_VERSION = 'v1.2.0';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
@@ -665,6 +757,8 @@ function sauvegarder(){
     if(al)localStorage.setItem('dct_v3_activite',al.innerHTML);
     if(window.dctContacts)localStorage.setItem('dct_v3_contacts',JSON.stringify(window.dctContacts));
   }catch(e){}
+  // Sync Firebase
+  sauvegarderFirebase();
 }
 function charger(){
   try{
@@ -1996,6 +2090,10 @@ charger();
 buildLogin();
 buildSundays();
 renderCollectesList();
+// Initialiser Firebase après chargement
+if(typeof firebase !== 'undefined'){
+  initFirebase();
+}
 
 
 
