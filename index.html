@@ -993,7 +993,7 @@ function finalisLogin(collab){
   updateNotifBadge();
   // Afficher/cacher le bouton admin dans le header
   var adminHeaderBtn = document.getElementById('btn-admin-panel');
-  if(adminHeaderBtn) adminHeaderBtn.style.display = (currentUser && currentUser.admin) ? 'block' : 'none';
+  if(adminHeaderBtn) adminHeaderBtn.style.display = (currentUser && currentUser.admin) ? 'flex' : 'none';
   // Si admin → aller sur s-home comme les autres
   // Le panneau admin est accessible via le bouton dans l'accueil
   // Écouter les notifs Firebase en temps réel
@@ -1575,6 +1575,13 @@ function renderDispatchTab(){
       container.appendChild(btnValid);
     }
   }
+  // === BOUTON CARTE ===
+  var mapBtn=document.createElement('button');
+  mapBtn.style.cssText='width:100%;padding:13px;background:#0d47a1;color:#fff;border:2.5px solid #0a2d6e;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:10px;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;';
+  mapBtn.innerHTML='🗺️ Carte des clients — organiser le dispatch';
+  mapBtn.onclick=ouvrirCarteDispatch;
+  container.appendChild(mapBtn);
+  // === FIN BOUTON CARTE ===
   var sl2=document.createElement('div');sl2.className='slabel';sl2.textContent='Clients par département — tap pour affecter';container.appendChild(sl2);
   var deptMap={};
   Object.entries(cls).forEach(function(entry){
@@ -1610,6 +1617,976 @@ function renderDispatchTab(){
   btnPdf.textContent='📄 Exporter PDF complet';btnPdf.onclick=exportPDF;
   container.appendChild(btnPdf);
 }
+
+
+// ===== CARTE DISPATCH =====
+
+var _mapSelection = [];
+var _mapInstance = null;
+var _mapMarkers = {};
+var _mapPolyline = null; // Ligne de trajet
+
+function ouvrirCarteDispatch(){
+  if(typeof L === 'undefined'){
+    // Charger Leaflet depuis jsdelivr
+    if(!document.getElementById('leaflet-css')){
+      var link = document.createElement('link');
+      link.id = 'leaflet-css';
+      link.rel = 'stylesheet';
+      link.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css';
+      document.head.appendChild(link);
+    }
+    if(!document.getElementById('leaflet-js')){
+      var script = document.createElement('script');
+      script.id = 'leaflet-js';
+      script.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js';
+      script.onload = function(){
+        setTimeout(function(){ _ouvrirCarteModal(); }, 200);
+      };
+      script.onerror = function(){
+        showToastNew('❌ Impossible de charger la carte. Vérifiez votre connexion.');
+      };
+      document.head.appendChild(script);
+    } else {
+      // Script en cours de chargement, attendre
+      var wait = setInterval(function(){
+        if(typeof L !== 'undefined'){
+          clearInterval(wait);
+          _ouvrirCarteModal();
+        }
+      }, 100);
+    }
+  } else {
+    _ouvrirCarteModal();
+  }
+}
+
+function _ouvrirCarteModal(){
+  _mapSelection = [];
+  var cls = getClients();
+  var asgn = getAssigned();
+  var trks = getTrucks();
+  var clientList = Object.entries(cls);
+
+  // Modal plein écran
+  var modal = document.getElementById('modal-carte-dispatch');
+  if(modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'modal-carte-dispatch';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:9999;display:flex;flex-direction:column;';
+  document.body.appendChild(modal);
+
+  // Camions pour le select
+  var truckOptions = '<option value="">-- Choisir un camion --</option>';
+  Object.keys(trks).forEach(function(k){
+    truckOptions += '<option value="'+k+'">'+trks[k].name+'</option>';
+  });
+
+  modal.innerHTML =
+    '<div style="background:#0d47a1;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">' +
+      '<div style="font-size:15px;font-weight:800;">🗺️ Carte des clients</div>' +
+      '<button onclick="fermerCarteDispatch()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">✕ Fermer</button>' +
+    '</div>' +
+    '<div style="background:#e3f2fd;padding:8px 14px;font-size:11px;color:#0d47a1;font-weight:600;flex-shrink:0;">' +
+      '👆 Clic = sélectionner · ℹ️ = détails client · 🔴 Non affecté · 🟢 Affecté' +
+    '</div>' +
+    '<div id="carte-filtres" style="background:#f5f5f5;padding:6px 10px;display:flex;gap:6px;flex-wrap:wrap;flex-shrink:0;"></div>' +
+    '<div id="carte-map" style="flex:1;"></div>' +
+    '<div id="carte-bas" style="background:#fff;border-top:2px solid #e0e0e0;padding:12px;flex-shrink:0;">' +
+      '<div id="carte-selection" style="min-height:32px;margin-bottom:8px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;">' +
+        '<span style="font-size:12px;color:#aaa;font-style:italic;">Aucun client sélectionné</span>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-bottom:8px;">' +
+        '<select id="carte-camion-select" style="flex:1;padding:10px;border:2px solid #0d47a1;border-radius:8px;font-size:13px;font-family:var(--font);font-weight:700;">' +
+          truckOptions +
+        '</select>' +
+        '<button onclick="validerCarteSelection()" style="padding:10px 16px;background:#009A44;color:#fff;border:2.5px solid #006b2d;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);">✅ Affecter</button>' +
+      '</div>' +
+      '<button onclick="_resetCarteSelection()" style="width:100%;padding:9px;background:#fde0e0;color:#c0392b;border:1.5px solid #c0392b;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">🗑️ Effacer la sélection</button>' +
+    '</div>';
+
+  // Init carte après que le DOM est rendu
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      try {
+        if(_mapInstance){ try{_mapInstance.remove();}catch(e){} _mapInstance = null; }
+        _mapMarkers = {};
+
+        var mapEl = document.getElementById('carte-map');
+        if(!mapEl){ showToastNew('❌ Erreur carte'); return; }
+
+        _mapInstance = L.map(mapEl, {zoomControl:true}).setView([48.8566, 2.3522], 10);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+          attribution: '© OSM', maxZoom:18
+        }).addTo(_mapInstance);
+
+        // Marqueur DÉPART fixe - Emerainville 77184
+        var iconDepart = L.divIcon({
+          className:'',
+          html:'<div style="background:#00c853;color:#003d00;border-radius:10px;padding:5px 12px;font-size:12px;font-weight:800;border:3px solid #00e676;box-shadow:0 2px 10px rgba(0,200,83,0.5);white-space:nowrap;letter-spacing:0.5px;">🚛 DÉPART</div>',
+          iconAnchor:[35,16]
+        });
+        // Géocodage précis du point de départ
+        _geocodeAdresse('Emerainville', '77184', function(latD, lngD){
+          var coordsD = (latD && lngD) ? [latD, lngD] : [48.7739, 2.6158];
+          L.marker(coordsD, {icon:iconDepart, zIndexOffset:1000})
+            .addTo(_mapInstance)
+            .bindPopup('<b>🚛 Point de départ</b><br>Emerainville 77184');
+        });
+
+        // Marqueur ARRIVÉE fixe - Mitry-Mory 77290
+        var iconArrivee = L.divIcon({
+          className:'',
+          html:'<div style="background:#d50000;color:#fff;text-shadow:0 0 4px #000,0 0 4px #000;border-radius:10px;padding:5px 12px;font-size:12px;font-weight:800;border:3px solid #ff5252;box-shadow:0 2px 10px rgba(213,0,0,0.5);white-space:nowrap;letter-spacing:0.5px;">🏁 ARRIVÉE</div>',
+          iconAnchor:[35,16]
+        });
+        // Géocodage précis du point d'arrivée
+        _geocodeAdresse('21 rue Gay Lussac, Mitry-Mory', '77290', function(latA, lngA){
+          var coordsA = (latA && lngA) ? [latA, lngA] : [48.9906, 2.6153];
+          L.marker(coordsA, {icon:iconArrivee, zIndexOffset:1000})
+            .addTo(_mapInstance)
+            .bindPopup('<b>🏁 Point d\'arrivée</b><br>21 rue Gay Lussac, Mitry-Mory 77290');
+        });
+
+        if(clientList.length === 0){
+          showToastNew('⚠️ Aucun client dans cette collecte.');
+          return;
+        }
+
+        // Remplir les filtres camions
+        var filtresEl = document.getElementById('carte-filtres');
+        if(filtresEl){
+          var trksLocal = getTrucks();
+          // Boutons filtre créés via DOM pour éviter guillemets imbriqués
+          var btnStyle = 'border-radius:20px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;color:#fff;margin:2px;display:inline-block;';
+          var bTous = document.createElement('span');
+          bTous.id='filtre-tous'; bTous.style.cssText=btnStyle+'background:#0d47a1;';
+          bTous.textContent='Tous'; bTous.onclick=function(){_filtrerCarte(null);};
+          filtresEl.appendChild(bTous);
+          Object.keys(trksLocal).forEach(function(k){
+            var tc=getTc(k);
+            var btn=document.createElement('span');
+            btn.id='filtre-'+k; btn.style.cssText=btnStyle+'background:'+tc.color+';';
+            btn.textContent=trksLocal[k].name;
+            (function(kk){btn.onclick=function(){_filtrerCarte(kk);};})(k);
+            filtresEl.appendChild(btn);
+          });
+          var bNone=document.createElement('span');
+          bNone.id='filtre-none'; bNone.style.cssText=btnStyle+'background:#c0392b;';
+          bNone.textContent='Non affectés'; bNone.onclick=function(){_filtrerCarte('none');};
+          filtresEl.appendChild(bNone);
+        }
+
+        // Réinitialiser les polylines
+        _mapPolylines = {};
+
+        // Spinner
+        var spinEl = document.createElement('div');
+        spinEl.id = 'carte-spinner';
+        spinEl.style.cssText = 'position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:999;background:rgba(13,71,161,0.9);color:#fff;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;';
+        spinEl.textContent = '📍 Localisation 0/'+clientList.length+'...';
+        mapEl.style.position = 'relative';
+        mapEl.appendChild(spinEl);
+
+        var geocoded = 0;
+        var total = clientList.length;
+
+        function onGeocoded(id, c, lat, lng){
+          geocoded++;
+          var spinEl2 = document.getElementById('carte-spinner');
+          if(spinEl2) spinEl2.textContent = '📍 Localisation '+geocoded+'/'+total+'...';
+          if(lat && lng){
+            _ajouterMarqueur(id, c, lat, lng, !!asgn[id], asgn, trks);
+          }
+          if(geocoded >= total){
+            if(spinEl2) spinEl2.remove();
+            var bounds = Object.values(_mapMarkers).map(function(m){ return m.getLatLng(); });
+            // Inclure les points départ et arrivée dans le zoom
+            bounds.push(L.latLng(48.7739, 2.6158));
+            bounds.push(L.latLng(48.9906, 2.6153));
+            // Redessiner les tracés existants des camions
+            var trksExist = getTrucks();
+            var asnExist = getAssigned();
+            Object.keys(trksExist).forEach(function(k){
+              var tk = trksExist[k];
+              var tc3 = getTc(k);
+              if(!tk.clients || tk.clients.length < 2) return;
+              var pts3 = tk.clients.map(function(id){
+                return _mapMarkers[id] ? _mapMarkers[id].getLatLng() : null;
+              }).filter(Boolean);
+              if(pts3.length < 2) return;
+              if(!_mapPolylines[k]) _mapPolylines[k] = [];
+              var line3 = L.polyline(pts3, {color:tc3.color, weight:3, opacity:0.9}).addTo(_mapInstance);
+              _mapPolylines[k].push(line3);
+              for(var si2=0;si2<pts3.length-1;si2++){
+                var pA3=pts3[si2], pB3=pts3[si2+1];
+                var midLat3=(pA3.lat+pB3.lat)/2, midLng3=(pA3.lng+pB3.lng)/2;
+                var angle3=Math.atan2(pB3.lng-pA3.lng,pB3.lat-pA3.lat)*180/Math.PI;
+                var ai3=L.divIcon({className:'',html:'<div style="transform:rotate('+angle3+'deg);color:'+tc3.color+';font-size:16px;font-weight:900;line-height:1;margin:-8px 0 0 -6px;">▲</div>',iconSize:[12,12],iconAnchor:[6,8]});
+                _mapPolylines[k].push(L.marker([midLat3,midLng3],{icon:ai3,interactive:false}).addTo(_mapInstance));
+              }
+              // Numéros d'ordre
+              tk.clients.forEach(function(id, i){
+                var m = _mapMarkers[id];
+                if(!m) return;
+                var icon3 = L.divIcon({className:'',html:'<div style="background:'+tc3.color+';color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);font-family:sans-serif;">'+(i+1)+'</div>',iconSize:[36,36],iconAnchor:[18,18]});
+                m.setIcon(icon3);
+              });
+            });
+
+            if(bounds.length > 0){
+              try{ _mapInstance.fitBounds(bounds, {padding:[40,40]}); }catch(e){}
+            } else {
+              var noAddr = document.createElement('div');
+              noAddr.style.cssText = 'position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:999;background:rgba(255,255,255,0.95);padding:20px;border-radius:12px;font-weight:700;font-size:13px;color:#c0392b;text-align:center;border:2px solid #c0392b;';
+              noAddr.innerHTML = '⚠️ Aucune adresse localisée.<br><span style="font-size:11px;color:#555;font-weight:400;">Vérifiez que les clients ont<br>une adresse et un code postal.</span>';
+              mapEl.appendChild(noAddr);
+            }
+          }
+        }
+
+        // Lancer le géocodage pour chaque client
+        clientList.forEach(function(entry){
+          var id = entry[0], c = entry[1];
+          var adresse = [c.adresse, c.cp, c.ville].filter(Boolean).join(' ').trim();
+          if(!adresse){
+            onGeocoded(id, c, null, null);
+            return;
+          }
+          _geocodeAdresse(adresse, c.cp||'', function(lat, lng){
+            onGeocoded(id, c, lat, lng);
+          });
+        });
+
+      } catch(err) {
+        console.error('[CARTE] erreur init:', err);
+        showToastNew('❌ Erreur initialisation carte: '+err.message);
+      }
+    });
+  });
+}
+
+
+// Géocodage local par code postal — aucun appel réseau requis
+// Table des coordonnées des principales villes françaises par CP
+var CP_COORDS = {
+  // Paris arrondissements
+  "75001":[48.8600,2.3477],"75002":[48.8667,2.3469],"75003":[48.8632,2.3601],
+  "75004":[48.8537,2.3530],"75005":[48.8462,2.3519],"75006":[48.8490,2.3334],
+  "75007":[48.8566,2.3203],"75008":[48.8742,2.3061],"75009":[48.8771,2.3394],
+  "75010":[48.8762,2.3573],"75011":[48.8591,2.3789],"75012":[48.8435,2.3912],
+  "75013":[48.8296,2.3618],"75014":[48.8294,2.3264],"75015":[48.8416,2.2988],
+  "75016":[48.8603,2.2744],"75017":[48.8875,2.3131],"75018":[48.8920,2.3466],
+  "75019":[48.8872,2.3817],"75020":[48.8640,2.3997],
+  // Hauts-de-Seine 92
+  "92000":[48.9036,2.3147],"92100":[48.8990,2.2393],"92110":[48.8211,2.2457],
+  "92120":[48.8139,2.2306],"92130":[48.7967,2.3289],"92140":[48.7922,2.2394],
+  "92150":[48.8211,2.2106],"92160":[48.8606,2.2197],"92170":[48.9261,2.2378],
+  "92190":[48.8053,2.3019],"92200":[48.9036,2.2181],"92210":[48.8964,2.1786],
+  "92220":[48.9314,2.2308],"92230":[48.8314,2.2333],"92240":[48.8478,2.2333],
+  "92250":[48.8572,2.1886],"92260":[48.8350,2.1958],"92270":[48.8786,2.2542],
+  "92290":[48.8703,2.1686],"92300":[48.9172,2.1978],"92310":[48.8214,2.1792],
+  "92320":[48.8603,2.1958],"92330":[48.8164,2.2297],"92340":[48.7964,2.2681],
+  "92350":[48.8314,2.1736],"92360":[48.7869,2.2136],"92370":[48.8172,2.2908],
+  "92380":[48.8906,2.1611],"75000":[48.8566,2.3522],
+  // Seine-Saint-Denis 93
+  "93000":[48.9359,2.3539],"93100":[48.9167,2.4736],"93110":[48.9550,2.3858],
+  "93120":[48.9197,2.5069],"93130":[48.9519,2.4669],"93140":[48.9233,2.4408],
+  "93150":[48.9189,2.3667],"93160":[48.9122,2.3944],"93170":[48.9386,2.4628],
+  "93190":[48.9564,2.5497],"93200":[48.9358,2.3564],"93210":[48.9006,2.3664],
+  "93220":[48.9636,2.4858],"93230":[48.9103,2.3981],"93240":[48.8900,2.4697],
+  "93250":[48.9467,2.5208],"93260":[48.9233,2.5344],"93270":[48.9053,2.5039],
+  "93290":[48.9628,2.4117],"93300":[48.9167,2.3833],"93310":[48.9619,2.3956],
+  "93320":[48.9781,2.4764],"93330":[48.9372,2.5383],"93340":[48.9042,2.4417],
+  "93350":[48.9653,2.4567],"93360":[48.9444,2.3147],"93370":[48.9392,2.5831],
+  "93380":[48.9428,2.5197],"93390":[48.9489,2.5711],"93400":[48.9328,2.4733],
+  "93410":[48.9506,2.5117],"93420":[48.9731,2.4297],"93430":[48.9281,2.4214],
+  "93440":[48.9831,2.5083],"93450":[48.9539,2.4939],"93460":[49.0022,2.4731],
+  "93470":[48.9403,2.5628],"93480":[48.9483,2.3936],"93490":[48.9853,2.4492],
+  "93500":[48.9414,2.5019],"93600":[48.9181,2.5469],"93700":[48.9219,2.5144],
+  // Val-de-Marne 94
+  "94000":[48.7883,2.4681],"94100":[48.8119,2.4736],"94110":[48.8283,2.5203],
+  "94120":[48.7828,2.4239],"94130":[48.8036,2.4514],"94140":[48.7853,2.5214],
+  "94150":[48.7772,2.4767],"94160":[48.7592,2.5072],"94170":[48.7731,2.4172],
+  "94190":[48.7539,2.4731],"94200":[48.8194,2.4536],"94210":[48.7744,2.5347],
+  "94220":[48.8153,2.4217],"94230":[48.7942,2.4311],"94240":[48.7697,2.5608],
+  "94250":[48.7942,2.5547],"94260":[48.7503,2.4594],"94270":[48.7744,2.4903],
+  "94290":[48.8056,2.4789],"94300":[48.8103,2.4889],"94310":[48.7622,2.5194],
+  "94320":[48.8189,2.5122],"94340":[48.7581,2.4375],"94350":[48.7456,2.4822],
+  "94360":[48.7881,2.4444],"94370":[48.7567,2.5483],"94380":[48.7736,2.4544],
+  "94390":[48.7697,2.4431],"94400":[48.8039,2.5317],"94410":[48.7881,2.5239],
+  "94420":[48.7997,2.5617],"94430":[48.7747,2.5003],"94440":[48.7564,2.4158],
+  "94450":[48.7489,2.5086],"94460":[48.7686,2.5822],"94470":[48.7714,2.5658],
+  "94480":[48.7808,2.5764],"94490":[48.7533,2.5661],"94500":[48.7911,2.4006],
+  "94510":[48.7578,2.5894],"94520":[48.7400,2.5292],"94550":[48.7353,2.5481],
+  // Val-d'Oise 95
+  "95000":[49.0361,2.0769],"95100":[49.0547,2.1358],"95110":[49.0697,2.0664],
+  "95120":[49.0869,2.1194],"95130":[49.0781,2.0833],"95140":[49.0500,2.0461],
+  "95150":[49.0178,2.1119],"95160":[49.0172,2.0778],"95170":[49.0414,2.1492],
+  "95190":[49.0592,2.0972],"95200":[49.0167,2.0833],"95210":[49.0939,2.1831],
+  "95220":[49.0775,2.1631],"95230":[49.0708,2.1153],"95240":[49.1022,2.2328],
+  "95250":[49.1028,2.2072],"95260":[49.0492,2.1867],"95270":[49.0503,2.2361],
+  "95290":[49.0733,2.2733],"95300":[49.0503,1.9944],"95310":[49.0867,2.0581],
+  "95320":[49.0636,2.2086],"95330":[49.0458,2.2061],"95340":[49.1028,2.1458],
+  "95350":[49.1033,2.1253],"95360":[49.0203,2.1425],"95370":[49.0281,2.1583],
+  "95380":[49.0639,2.0736],"95390":[49.0736,2.1497],"95400":[49.0083,2.1317],
+  "95410":[49.0825,1.9547],"95420":[49.0625,1.9822],"95430":[49.1156,2.2253],
+  "95440":[49.0775,2.0078],"95450":[49.0628,2.2453],"95460":[49.0850,2.2556],
+  "95470":[49.0947,2.2856],"95480":[49.0633,2.2258],"95490":[49.0758,1.9922],
+  "95500":[49.0917,2.1056],"95510":[49.0983,1.9633],"95520":[49.0933,2.1919],
+  "95530":[49.1178,2.1992],"95540":[49.0606,2.2742],"95550":[49.0814,2.3069],
+  "95560":[49.0997,2.2703],"95570":[49.0606,2.1472],"95580":[49.0556,2.2972],
+  "95590":[49.0708,2.3058],"95600":[49.1183,2.2394],"95610":[49.1031,2.2597],
+  "95620":[49.1006,2.2769],"95630":[49.0881,2.2892],"95640":[49.0997,2.2461],
+  "95650":[49.0622,2.3183],"95660":[49.0781,2.3289],"95670":[49.0564,2.3317],
+  "95680":[49.0789,2.3497],"95690":[49.0692,2.3625],"95700":[49.0706,2.3825],
+  // Seine-et-Marne 77
+  "77184":[48.7739,2.6158],"77290":[48.9906,2.6153],"77000":[48.5414,2.6625],"77100":[48.5250,2.6556],"77120":[48.5733,2.7069],
+  "77140":[48.5469,2.7344],"77150":[48.5317,2.7469],"77160":[48.5500,2.6656],
+  "77170":[48.5906,2.5892],"77176":[48.5933,2.5856],"77180":[48.5339,2.6206],
+  "77185":[48.5736,2.5942],"77190":[48.5033,2.6692],"77200":[48.5033,2.7236],
+  "77210":[48.5267,2.6869],"77220":[48.5067,2.7017],"77230":[48.5483,2.7811],
+  "77240":[48.4906,2.6847],"77250":[48.4700,2.6911],"77260":[48.4983,2.7706],
+  "77270":[48.4772,2.7147],"77280":[48.5208,2.7647],"77290":[48.4781,2.6581],
+  "77300":[48.5217,2.7039],"77310":[48.5483,2.7636],"77320":[48.5436,2.7556],
+  // Essonne 91
+  "91000":[48.6269,2.4386],"91100":[48.6211,2.4228],"91120":[48.6353,2.4050],
+  "91130":[48.6900,2.3811],"91140":[48.6994,2.4681],"91150":[48.6469,2.3519],
+  "91160":[48.6531,2.4103],"91170":[48.7006,2.4044],"91180":[48.6403,2.3244],
+  "91190":[48.6569,2.3683],"91200":[48.6136,2.3997],"91210":[48.6203,2.3714],
+  "91220":[48.7094,2.3917],"91230":[48.6936,2.3600],"91240":[48.6781,2.3428],
+  "91250":[48.6369,2.3528],"91260":[48.6414,2.3667],"91270":[48.6242,2.3531],
+  "91280":[48.6514,2.3417],"91290":[48.6369,2.3456],"91300":[48.6208,2.3586],
+  "91310":[48.6092,2.3703],"91320":[48.6306,2.3742],"91330":[48.6161,2.3856],
+  "91340":[48.6214,2.3989],"91350":[48.5994,2.4094],"91360":[48.5939,2.4461],
+  "91370":[48.5794,2.4478],"91380":[48.5931,2.4197],"91390":[48.5756,2.4289],
+  "91400":[48.5706,2.4422],"91410":[48.5578,2.4431],"91420":[48.5650,2.4228],
+  "91430":[48.5622,2.4025],"91440":[48.5522,2.3947],"91450":[48.5506,2.4019],
+  "91460":[48.5442,2.4111],"91470":[48.5400,2.4192],"91480":[48.5333,2.4272],
+  "91490":[48.5261,2.4272],"91500":[48.5167,2.4333],"91510":[48.5083,2.4358],
+  "91520":[48.4989,2.4433],"91530":[48.4917,2.4531],"91540":[48.4833,2.4631],
+  "91550":[48.4761,2.4711],"91560":[48.4694,2.4819],"91570":[48.4628,2.4908],
+  "91580":[48.4556,2.5000],"91590":[48.4489,2.5083],"91600":[48.4414,2.5167],
+  "91620":[48.4261,2.5172],"91630":[48.4189,2.5261],"91640":[48.4111,2.5344],
+  "91650":[48.4042,2.5422],"91660":[48.3972,2.5508],"91670":[48.3897,2.5589],
+  "91680":[48.3822,2.5669],"91690":[48.3744,2.5742],"91700":[48.3678,2.5833],
+  // Yvelines 78
+  "78000":[48.8025,2.1353],"78100":[48.8000,2.1203],"78110":[48.8128,2.1283],
+  "78120":[48.7978,2.0958],"78130":[48.8306,2.1000],"78140":[48.7914,2.0736],
+  "78150":[48.8256,2.0761],"78160":[48.8100,2.0878],"78170":[48.8342,2.0394],
+  "78180":[48.8417,2.1072],"78190":[48.8192,2.1644],"78200":[48.8053,2.1544],
+  "78210":[48.8322,2.1453],"78220":[48.8300,2.1572],"78230":[48.8369,2.1386],
+  "78240":[48.8439,2.1325],"78250":[48.8503,2.1264],"78260":[48.8556,2.1197],
+  "78270":[48.8608,2.1144],"78280":[48.8656,2.1069],"78290":[48.8711,2.1019],
+  "78300":[48.7767,2.1111],"78310":[48.7644,2.1133],"78320":[48.7658,2.0953],
+  "78330":[48.7742,2.0808],"78340":[48.7817,2.0669],"78350":[48.7867,2.0528],
+  "78360":[48.7911,2.0367],"78370":[48.7947,2.0194],"78380":[48.7981,2.0036],
+  "78390":[48.8014,1.9858],"78400":[48.8050,1.9697],"78410":[48.8083,1.9522],
+  "78420":[48.8111,1.9361],"78430":[48.8144,1.9172],"78440":[48.8178,1.9014],
+  "78450":[48.8211,1.8833],"78460":[48.8244,1.8661],"78470":[48.8278,1.8503],
+  "78480":[48.8311,1.8328],"78490":[48.8339,1.8172],"78500":[48.8369,1.8000],
+  // Grandes villes France
+  "69001":[45.7640,4.8357],"69002":[45.7505,4.8321],"69003":[45.7503,4.8541],
+  "69004":[45.7669,4.8264],"69005":[45.7575,4.8233],"69006":[45.7617,4.8455],
+  "69007":[45.7390,4.8333],"69008":[45.7342,4.8528],"69009":[45.7686,4.8028],
+  "69100":[45.7869,4.8142],"69110":[45.7667,4.8919],"69120":[45.7856,4.8758],
+  "69130":[45.7369,4.8156],"69140":[45.7503,4.8061],"69150":[45.7644,4.7758],
+  "69160":[45.7656,4.7394],"69170":[45.7508,4.7703],"69190":[45.7631,4.7114],
+  "69200":[45.7742,4.7242],"69210":[45.7522,4.8939],"69220":[45.7925,4.8894],
+  "69230":[45.7542,4.9208],"69240":[45.7847,4.8408],"69250":[45.7742,4.8731],
+  "69260":[45.8025,4.8808],"69270":[45.7692,4.8647],"69280":[45.7683,4.9078],
+  "69290":[45.8022,4.8517],"69300":[45.7578,4.8753],"69310":[45.7514,4.9125],
+  "13001":[43.2965,5.3698],"13002":[43.3006,5.3683],"13003":[43.3056,5.3808],
+  "13004":[43.2978,5.3869],"13005":[43.2894,5.3892],"13006":[43.2869,5.3792],
+  "13007":[43.2903,5.3622],"13008":[43.2631,5.3728],"13009":[43.2558,5.4114],
+  "13010":[43.2728,5.4069],"13011":[43.2922,5.4369],"13012":[43.2944,5.4242],
+  "13013":[43.3203,5.4253],"13014":[43.3303,5.4058],"13015":[43.3517,5.3886],
+  "13016":[43.3639,5.3236],"13100":[43.5297,5.4474],"13300":[43.4292,5.2153],
+  "13400":[43.5378,5.4458],"13500":[43.4528,5.0561],"13600":[43.5208,5.5622],
+  "13700":[43.5569,5.5539],"13800":[43.4539,5.4353],"13900":[43.5250,5.2211],
+  "31000":[43.6047,1.4442],"31100":[43.6167,1.4528],"31200":[43.6128,1.4186],
+  "31300":[43.5928,1.4744],"31400":[43.5856,1.4308],"31500":[43.6278,1.4728],
+  "33000":[44.8378,-0.5792],"33100":[44.8569,-0.5761],"33200":[44.8181,-0.5706],
+  "33300":[44.8653,-0.5394],"33400":[44.8939,-0.5250],"33500":[44.8278,-0.6422],
+  "33600":[44.9008,-0.5011],"33700":[44.9264,-0.4972],"33800":[44.8472,-0.5969],
+  "44000":[47.2184,-1.5536],"44100":[47.2417,-1.5528],"44200":[47.1986,-1.5744],
+  "44300":[47.2181,-1.5194],"44400":[47.2161,-1.5892],"44600":[47.2386,-1.5800],
+  "44700":[47.1931,-1.5494],"44800":[47.2081,-1.6025],
+  "67000":[48.5734,7.7521],"67100":[48.5728,7.7406],"67200":[48.5606,7.7478],
+  "67300":[48.5806,7.7578],"67400":[48.5728,7.7189],"67500":[48.5867,7.7400],
+  "59000":[50.6292,3.0573],"59100":[50.6622,3.0803],"59160":[50.6356,3.0786],
+  "59200":[50.6969,3.1658],"59260":[50.6697,3.0789],"59300":[50.6561,3.1042],
+  "59400":[50.6258,3.0944],"59500":[50.6458,3.0542],"59700":[50.6261,3.0442],
+  "59800":[50.6464,3.0697],"59000":[50.6292,3.0573],
+  "06000":[43.7102,7.2620],"06100":[43.7200,7.2533],"06200":[43.7022,7.2853],
+  "06300":[43.7261,7.2908],"06400":[43.6897,7.2978],"06500":[43.7439,7.3017],
+  "06600":[43.6781,7.1978],"06700":[43.6814,7.1475],"06800":[43.7022,7.2689],
+  "34000":[43.6119,3.8772],"34090":[43.6219,3.8472],"34170":[43.6397,3.8556],
+  "34400":[43.5833,3.9058],"34500":[43.5614,3.8831],"34070":[43.5969,3.9003],
+  "34080":[43.6078,3.9239],"34000":[43.6119,3.8772],
+  "76000":[49.4431,1.0993],"76100":[49.4406,1.1128],"76120":[49.4489,1.1081],
+  "76130":[49.4222,1.0828],"76140":[49.4539,1.0875],"76300":[49.4853,1.1122],
+  "76400":[49.5183,1.0406],"76500":[49.4231,1.0739],"76600":[49.4678,0.9081],
+  "76700":[49.4781,1.0994],"76800":[49.4347,1.0628],
+  "57000":[49.1193,6.1727],"57050":[49.0989,6.1806],"57070":[49.1333,6.1319],
+  "57100":[49.1169,6.1939],"57130":[49.1031,6.2239],"57140":[49.1406,6.1528],
+  "57150":[49.1092,6.2431],"57160":[49.1222,6.2083],"57190":[49.1317,6.1906],
+  "57200":[49.1414,6.1444],"57210":[49.1486,6.1347],"57220":[49.1211,6.1861],
+  "57230":[49.1447,6.1239],"57240":[49.1331,6.1122],"57245":[49.1281,6.1011],
+  "57250":[49.1494,6.0831],"57260":[49.1397,6.1047],"57270":[49.1294,6.0908],
+  "57280":[49.1375,6.0769],"57290":[49.1403,6.0619],"57300":[49.1514,6.0572],
+  "57310":[49.1564,6.0397],"57320":[49.1592,6.0244],"57330":[49.1647,6.0097],
+  "57340":[49.1672,5.9936],"57350":[49.1722,5.9808],"57360":[49.1736,5.9636],
+  "57370":[49.1758,5.9494],"57380":[49.1786,5.9364],"57390":[49.1811,5.9222],
+  "57400":[49.1861,5.9097],"57420":[49.1917,5.8858],"57430":[49.1961,5.8694],
+  "57440":[49.2017,5.8558],"57450":[49.2053,5.8408],"57460":[49.2094,5.8258],
+  "57470":[49.2133,5.8122],"57480":[49.2178,5.7986],"57490":[49.2214,5.7836],
+  "57500":[49.2258,5.7694],"57520":[49.2308,5.7478],
+};
+
+function _geocodeAdresse(adresse, cp, callback){
+  // Construire la requête d'adresse complète
+  var fullQuery = (adresse || '').trim();
+  if(cp) fullQuery += ' ' + cp;
+  fullQuery = fullQuery.trim();
+
+  if(!fullQuery){
+    callback(null, null);
+    return;
+  }
+
+  // Appel à l'API gratuite adresse.data.gouv.fr (géocodage précis France)
+  var url = 'https://api-adresse.data.gouv.fr/search/?q=' + encodeURIComponent(fullQuery) + '&limit=1';
+  if(cp) url += '&postcode=' + encodeURIComponent(cp);
+
+  fetch(url)
+    .then(function(res){ return res.json(); })
+    .then(function(data){
+      if(data && data.features && data.features.length > 0){
+        var coords = data.features[0].geometry.coordinates;
+        // L'API retourne [longitude, latitude] — inverser pour Leaflet
+        callback(coords[1], coords[0]);
+      } else {
+        // Fallback sur la table locale par CP
+        _geocodeFallbackCP(cp, callback);
+      }
+    })
+    .catch(function(err){
+      console.warn('[GEOCODE] Erreur API, fallback CP:', err);
+      // Fallback sur la table locale par CP en cas d'erreur réseau
+      _geocodeFallbackCP(cp, callback);
+    });
+}
+
+function _geocodeFallbackCP(cp, callback){
+  if(cp && CP_COORDS[cp]){
+    var coords = CP_COORDS[cp];
+    var lat = coords[0] + (Math.random()-0.5)*0.004;
+    var lng = coords[1] + (Math.random()-0.5)*0.004;
+    callback(lat, lng);
+    return;
+  }
+  if(cp && cp.length >= 2){
+    var dept = cp.substring(0,2);
+    var keys = Object.keys(CP_COORDS).filter(function(k){ return k.startsWith(dept); });
+    if(keys.length > 0){
+      var coords = CP_COORDS[keys[0]];
+      var lat = coords[0] + (Math.random()-0.5)*0.01;
+      var lng = coords[1] + (Math.random()-0.5)*0.01;
+      callback(lat, lng);
+      return;
+    }
+  }
+  callback(null, null);
+}
+
+function _geocodeParCP(cp, callback){
+  _geocodeAdresse('', cp, callback);
+}
+
+function _getCouleurMarqueur(id, isAffected, asgn, trks){
+  if(!isAffected) return {bg:'#c0392b', border:'#fff'}; // Rouge = non affecté
+  var tk = asgn[id];
+  if(tk && trks[tk]){
+    var tc = getTc(tk);
+    return {bg: tc.color, border:'#fff'};
+  }
+  return {bg:'#009A44', border:'#fff'};
+}
+
+function _ajouterMarqueur(id, c, lat, lng, isAffected, asgn, trks){
+  if(!_mapInstance) return;
+  var col = _getCouleurMarqueur(id, isAffected, asgn, trks);
+  var asgTruck = asgn[id] ? (trks[asgn[id]] ? trks[asgn[id]].name : '') : '';
+  var icon = L.divIcon({
+    className: '',
+    html: '<div style="background:'+col.bg+';color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border:3px solid '+col.border+';box-shadow:0 2px 6px rgba(0,0,0,0.35);cursor:pointer;font-family:sans-serif;">'+initiales(c.prenom,c.nom)+'</div>',
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+  var marker = L.marker([lat, lng], {icon: icon}).addTo(_mapInstance);
+  // Popup avec infos client
+  var popupHtml = '<div style="font-family:sans-serif;min-width:160px;">'+
+    '<div style="font-weight:800;font-size:14px;margin-bottom:4px;">'+c.name+'</div>'+
+    (c.adresse ? '<div style="font-size:12px;color:#555;">📍 '+c.adresse+'</div>' : '')+
+    (c.cp||c.ville ? '<div style="font-size:12px;color:#555;">'+(c.cp||'')+' '+(c.ville||'')+'</div>' : '')+
+    (c.colis ? '<div style="font-size:12px;color:#555;margin-top:3px;">📦 '+c.colis+'</div>' : '')+
+    (c.prix ? '<div style="font-size:12px;font-weight:700;color:#006b2d;margin-top:3px;">💶 '+c.prix+' €</div>' : '')+
+    '<div style="margin-top:6px;font-size:11px;color:'+(isAffected?'#006b2d':'#c0392b')+';font-weight:700;">'+(isAffected?'✅ '+asgTruck:'⬜ Non affecté')+'</div>'+
+    '</div>';
+  marker._clientId = id;
+  marker._clientData = c;
+  marker._isAffected = isAffected;
+  marker._asgTruck = asgn[id]||null;
+
+  // Clic simple sur le marqueur = sélectionner/désélectionner
+  marker.on('click', function(){ _toggleClientSelection(id, c, marker); });
+
+  // Bouton "i" décalé à côté du marqueur pour voir les détails
+  var infoIcon = L.divIcon({
+    className: '',
+    html: '<div style="background:#0d47a1;color:#fff;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.4);cursor:pointer;font-family:serif;font-style:italic;">i</div>',
+    iconSize: [26, 26],
+    iconAnchor: [-8, 30]
+  });
+  var infoMarker = L.marker([lat, lng], {icon: infoIcon, zIndexOffset: 500, interactive: true}).addTo(_mapInstance);
+  infoMarker.bindPopup(popupHtml, {maxWidth: 220});
+  // Stocker le marqueur info pour pouvoir le supprimer plus tard
+  marker._infoMarker = infoMarker;
+
+  _mapMarkers[id] = marker;
+}
+
+function _checkAllGeocoded(done, total){
+  if(done >= total && _mapInstance){
+    var spinEl = document.getElementById('carte-spinner');
+    if(spinEl) spinEl.remove();
+    var bounds = [];
+    Object.values(_mapMarkers).forEach(function(m){ bounds.push(m.getLatLng()); });
+    if(bounds.length > 0){
+      try { _mapInstance.fitBounds(bounds, {padding: [30, 30]}); } catch(e){}
+    } else {
+      var spinEl2 = document.getElementById('carte-spinner');
+      if(!spinEl2){
+        var sp = document.createElement('div');
+        sp.style.cssText='position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:999;background:rgba(255,255,255,0.95);padding:16px 24px;border-radius:12px;font-weight:700;font-size:13px;color:#c0392b;text-align:center;';
+        sp.innerHTML='⚠️ Aucune adresse localisée.<br><small>Vérifiez les adresses des clients.</small>';
+        var mapEl = document.getElementById('carte-map');
+        if(mapEl) mapEl.appendChild(sp);
+      }
+    }
+  }
+}
+
+function _toggleClientSelection(id, c, marker){
+  var inSelection = _mapSelection.findIndex(function(s){ return s.id === id; }) >= 0;
+
+  if(inSelection){
+    // Client ORANGE → désélection → redevient rouge
+    _mapSelection = _mapSelection.filter(function(s){ return s.id !== id; });
+    marker._isAffected = false;
+    _updateMarkerIcon(id, marker, false);
+    _updateNumeros();
+    _updateSelectionUI();
+    return;
+  }
+
+  var asgn = getAssigned();
+  var truckKey = asgn[id];
+
+  if(truckKey){
+    // Client COLORÉ (déjà affecté) → retirer du camion + mettre en sélection orange
+    _retirerClientDuCamion(id, truckKey);
+    marker._isAffected = false;
+    marker._asgTruck = null;
+    _mapSelection.push({id: id, data: c});
+    _updateMarkerIcon(id, marker, true);
+  } else {
+    // Client ROUGE (non affecté) → sélection orange
+    _mapSelection.push({id: id, data: c});
+    _updateMarkerIcon(id, marker, true);
+  }
+
+  _updateNumeros();
+  _updateSelectionUI();
+}
+
+function _retirerClientDuCamion(id, truckKey){
+  // Retirer le client du dispatch
+  if(!dispatchParCollecte[currentCollecteId]) return;
+  var dispatch = dispatchParCollecte[currentCollecteId];
+  if(dispatch.assigned) dispatch.assigned[id] = null;
+  if(dispatch.trucks && dispatch.trucks[truckKey]){
+    var truck = dispatch.trucks[truckKey];
+    truck.clients = truck.clients.filter(function(cid){ return cid !== id; });
+  }
+  // Recalculer et redessiner le tracé du camion
+  _redessinerTraceCamion(truckKey);
+  sauvegarder();
+}
+
+function _redessinerTraceCamion(truckKey){
+  if(!_mapInstance) return;
+  // Supprimer l'ancien tracé du camion
+  if(_mapPolylines[truckKey]){
+    _mapPolylines[truckKey].forEach(function(l){ try{l.remove();}catch(e){}; });
+    delete _mapPolylines[truckKey];
+  }
+  // Remettre à jour les icônes des clients restants dans ce camion
+  var dispatch = dispatchParCollecte[currentCollecteId];
+  if(!dispatch || !dispatch.trucks || !dispatch.trucks[truckKey]) return;
+  var truck = dispatch.trucks[truckKey];
+  var tc = getTc(truckKey);
+  if(!truck.clients || truck.clients.length === 0) return;
+
+  // Remettre les numéros d'ordre corrects
+  truck.clients.forEach(function(id, i){
+    var m = _mapMarkers[id];
+    if(!m) return;
+    var icon = L.divIcon({
+      className:'',
+      html:'<div style="background:'+tc.color+';color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);font-family:sans-serif;">'+(i+1)+'</div>',
+      iconSize:[36,36], iconAnchor:[18,18]
+    });
+    m.setIcon(icon);
+    m._isAffected = true;
+  });
+
+  // Redessiner le tracé si au moins 2 clients restants
+  if(truck.clients.length < 2) return;
+  var pts = truck.clients.map(function(id){
+    return _mapMarkers[id] ? _mapMarkers[id].getLatLng() : null;
+  }).filter(Boolean);
+  if(pts.length < 2) return;
+
+  _mapPolylines[truckKey] = [];
+  var line = L.polyline(pts, {color:tc.color, weight:3, opacity:0.9}).addTo(_mapInstance);
+  _mapPolylines[truckKey].push(line);
+
+  // Flèches directionnelles
+  for(var i=0; i<pts.length-1; i++){
+    var pA=pts[i], pB=pts[i+1];
+    var midLat=(pA.lat+pB.lat)/2, midLng=(pA.lng+pB.lng)/2;
+    var angle=Math.atan2(pB.lng-pA.lng, pB.lat-pA.lat)*180/Math.PI;
+    var arrowIcon = L.divIcon({
+      className:'',
+      html:'<div style="transform:rotate('+angle+'deg);color:'+tc.color+';font-size:16px;font-weight:900;line-height:1;margin:-8px 0 0 -6px;">▲</div>',
+      iconSize:[12,12], iconAnchor:[6,8]
+    });
+    _mapPolylines[truckKey].push(
+      L.marker([midLat,midLng],{icon:arrowIcon,interactive:false}).addTo(_mapInstance)
+    );
+  }
+}
+
+function _updateMarkerIcon(id, marker, selected){
+  var isAffected = marker._isAffected;
+  var ordre = _mapSelection.findIndex(function(s){ return s.id === id; });
+  var asgn = getAssigned();
+  var trks = getTrucks();
+  var col = selected ? {bg:'#e65100',border:'#fff'} : _getCouleurMarqueur(id, isAffected, asgn, trks);
+  var label = selected ? (ordre + 1) + '' : initiales(marker._clientData.prenom, marker._clientData.nom);
+  var icon = L.divIcon({
+    className: '',
+    html: '<div style="background:'+col.bg+';color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:'+(selected?'14':'11')+'px;font-weight:800;border:3px solid '+col.border+';box-shadow:0 2px 8px rgba(0,0,0,0.4);cursor:pointer;font-family:sans-serif;">'+label+'</div>',
+    iconSize: [36, 36],
+    iconAnchor: [18, 18]
+  });
+  marker.setIcon(icon);
+}
+
+function _updateNumeros(){
+  // Mettre à jour les numéros sur tous les marqueurs sélectionnés
+  _mapSelection.forEach(function(s, i){
+    var marker = _mapMarkers[s.id];
+    if(!marker) return;
+    var icon = L.divIcon({
+      className: '',
+      html: '<div style="'+
+        'background:#e65100;'+
+        'color:#fff;'+
+        'border-radius:50%;'+
+        'width:36px;height:36px;'+
+        'display:flex;align-items:center;justify-content:center;'+
+        'font-size:14px;font-weight:800;'+
+        'border:3px solid #fff;'+
+        'box-shadow:0 2px 8px rgba(0,0,0,0.4);'+
+        'cursor:pointer;'+
+        'font-family:sans-serif;'+
+        '">'+(i+1)+'</div>',
+      iconSize: [36, 36],
+      iconAnchor: [18, 18]
+    });
+    marker.setIcon(icon);
+  });
+}
+
+function _updateSelectionUI(){
+  var zone = document.getElementById('carte-selection');
+  if(!zone) return;
+
+  // Dessiner la ligne de trajet
+  if(_mapPolyline){ try{_mapPolyline.remove();}catch(e){} _mapPolyline = null; }
+  if(_mapSelection.length > 1 && _mapInstance){
+    var pts = _mapSelection.map(function(s){
+      var m = _mapMarkers[s.id];
+      return m ? m.getLatLng() : null;
+    }).filter(Boolean);
+    if(pts.length > 1){
+      _mapPolyline = L.polyline(pts, {color:'#e65100',weight:3,opacity:0.8,dashArray:'8,6'}).addTo(_mapInstance);
+    }
+  }
+
+  zone.innerHTML = '';
+
+  if(_mapSelection.length === 0){
+    var empty = document.createElement('span');
+    empty.style.cssText = 'font-size:12px;color:#aaa;font-style:italic;';
+    empty.textContent = 'Aucun client sélectionné';
+    zone.appendChild(empty);
+    return;
+  }
+
+  // Distance estimée
+  if(_mapSelection.length > 1){
+    var totalDist = 0;
+    for(var i=0;i<_mapSelection.length-1;i++){
+      var mA = _mapMarkers[_mapSelection[i].id];
+      var mB = _mapMarkers[_mapSelection[i+1].id];
+      if(mA && mB) totalDist += mA.getLatLng().distanceTo(mB.getLatLng());
+    }
+    var km = Math.round(totalDist/1000*1.3);
+    var mins = Math.round(km*2.2);
+    var dist = document.createElement('div');
+    dist.style.cssText = 'font-size:11px;color:#e65100;font-weight:700;margin-bottom:6px;width:100%;';
+    dist.textContent = '📏 ~'+km+' km · ⏱ ~'+mins+' min estimés';
+    zone.appendChild(dist);
+  }
+
+  // Pills clients sélectionnés
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:5px;align-items:center;';
+
+  _mapSelection.forEach(function(s, i){
+    var pill = document.createElement('span');
+    pill.style.cssText = 'background:#e65100;color:#fff;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;display:inline-flex;align-items:center;gap:4px;';
+    var txt = document.createTextNode((i+1)+'. '+s.data.name+' ');
+    pill.appendChild(txt);
+    var x = document.createElement('span');
+    x.textContent = '✕';
+    x.style.cssText = 'cursor:pointer;opacity:0.8;';
+    (function(sid){ x.onclick = function(){ _retirerSelection(sid); }; })(s.id);
+    pill.appendChild(x);
+    wrap.appendChild(pill);
+  });
+
+  // Bouton annuler dernier
+  var btnUndo = document.createElement('span');
+  btnUndo.textContent = '↩️';
+  btnUndo.title = 'Annuler dernier';
+  btnUndo.style.cssText = 'background:#856404;color:#fff;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:700;cursor:pointer;';
+  btnUndo.onclick = _annulerDernierClic;
+  wrap.appendChild(btnUndo);
+
+  zone.appendChild(wrap);
+}
+
+
+function _annulerDernierClic(){
+  if(_mapSelection.length === 0) return;
+  var last = _mapSelection[_mapSelection.length - 1];
+  _retirerSelection(last.id);
+}
+
+function _retirerSelection(id){
+  var idx = _mapSelection.findIndex(function(s){ return s.id === id; });
+  if(idx < 0) return;
+  _mapSelection.splice(idx, 1);
+  var marker = _mapMarkers[id];
+  if(marker){
+    marker._isAffected = false;
+    _updateMarkerIcon(id, marker, false);
+  }
+  _updateNumeros();
+  _updateSelectionUI();
+}
+
+function _resetCarteSelection(){
+  var asgn = getAssigned();
+  var trks = getTrucks();
+  // Copier la sélection avant de la vider
+  var oldSelection = _mapSelection.slice();
+  // Vider la sélection EN PREMIER pour que _updateMarkerIcon ne les trouve plus
+  _mapSelection = [];
+  // Maintenant remettre chaque marqueur à sa vraie couleur
+  oldSelection.forEach(function(s){
+    var marker = _mapMarkers[s.id];
+    if(marker){
+      marker._isAffected = !!asgn[s.id];
+      var col = _getCouleurMarqueur(s.id, marker._isAffected, asgn, trks);
+      var label = initiales(marker._clientData.prenom, marker._clientData.nom);
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:'+col.bg+';color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border:3px solid '+col.border+';box-shadow:0 2px 8px rgba(0,0,0,0.4);cursor:pointer;font-family:sans-serif;">'+label+'</div>',
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+      });
+      marker.setIcon(icon);
+    }
+  });
+  _updateSelectionUI();
+  showToastNew('✅ Sélection effacée');
+}
+
+function validerCarteSelection(){
+  if(_mapSelection.length === 0){
+    showToastNew('⚠️ Sélectionnez au moins un client sur la carte.');
+    return;
+  }
+  var sel = document.getElementById('carte-camion-select');
+  if(!sel || !sel.value){
+    showToastNew('⚠️ Choisissez un camion.');
+    return;
+  }
+  var truckKey = sel.value;
+
+  // Utiliser les bonnes variables globales de l'app
+  if(!dispatchParCollecte[currentCollecteId]){
+    dispatchParCollecte[currentCollecteId] = {trucks:{}, assigned:{}};
+  }
+  var dispatch = dispatchParCollecte[currentCollecteId];
+  if(!dispatch.trucks) dispatch.trucks = {};
+  if(!dispatch.assigned) dispatch.assigned = {};
+  if(!dispatch.trucks[truckKey]){
+    dispatch.trucks[truckKey] = {clients:[], hours:{}, validated:[], refused:[]};
+  }
+  var truck = dispatch.trucks[truckKey];
+
+  // Affecter chaque client dans l'ordre de sélection
+  _mapSelection.forEach(function(s){
+    var id = s.id;
+    // Retirer d'un ancien camion si déjà affecté
+    Object.keys(dispatch.trucks).forEach(function(k){
+      var t = dispatch.trucks[k];
+      if(!t || !t.clients) return;
+      var pos = t.clients.indexOf(id);
+      if(pos >= 0) t.clients.splice(pos, 1);
+    });
+    dispatch.assigned[id] = truckKey;
+    if(truck.clients.indexOf(id) < 0){
+      truck.clients.push(id);
+    }
+  });
+
+  // Sauvegarder avec la bonne fonction
+  sauvegarder();
+
+  var trks = getTrucks();
+  var truckName = trks[truckKey] ? trks[truckKey].name : truckKey;
+  showToastNew('✅ '+_mapSelection.length+' client(s) affecté(s) à '+truckName+' !');
+
+  // Tracer la ligne permanente avec flèches pour ce camion
+  if(_mapInstance && _mapSelection.length > 0){
+    var tc2 = getTc(truckKey);
+    // Supprimer l'ancienne ligne de ce camion si elle existe
+    if(_mapPolylines[truckKey]){
+      _mapPolylines[truckKey].forEach(function(l){ try{l.remove();}catch(e){} });
+    }
+    _mapPolylines[truckKey] = [];
+    // Construire les points du tracé (ordre dans truck.clients)
+    var pts2 = truck.clients.map(function(id){
+      return _mapMarkers[id] ? _mapMarkers[id].getLatLng() : null;
+    }).filter(Boolean);
+    if(pts2.length > 1){
+      // Ligne principale
+      var line = L.polyline(pts2, {
+        color: tc2.color, weight:3, opacity:0.9, dashArray:null
+      }).addTo(_mapInstance);
+      _mapPolylines[truckKey].push(line);
+      // Flèches directionnelles sur chaque segment
+      for(var si=0; si<pts2.length-1; si++){
+        var pA = pts2[si], pB = pts2[si+1];
+        // Point milieu du segment
+        var midLat = (pA.lat+pB.lat)/2;
+        var midLng = (pA.lng+pB.lng)/2;
+        // Angle de la flèche
+        var angle = Math.atan2(pB.lng-pA.lng, pB.lat-pA.lat) * 180/Math.PI;
+        var arrowIcon = L.divIcon({
+          className:'',
+          html:'<div style="transform:rotate('+angle+'deg);color:'+tc2.color+';font-size:16px;font-weight:900;line-height:1;margin:-8px 0 0 -6px;">▲</div>',
+          iconSize:[12,12],
+          iconAnchor:[6,8]
+        });
+        var arrow = L.marker([midLat, midLng], {icon:arrowIcon, interactive:false}).addTo(_mapInstance);
+        _mapPolylines[truckKey].push(arrow);
+      }
+      // Numéros d'ordre sur les marqueurs
+      truck.clients.forEach(function(id, i){
+        var m = _mapMarkers[id];
+        if(!m) return;
+        var icon = L.divIcon({
+          className:'',
+          html:'<div style="background:'+tc2.color+';color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.4);font-family:sans-serif;">'+(i+1)+'</div>',
+          iconSize:[36,36], iconAnchor:[18,18]
+        });
+        m.setIcon(icon);
+        m._isAffected = true;
+      });
+    }
+  }
+
+  // Mettre à jour les marqueurs non numérotés
+  _mapSelection.forEach(function(s){
+    var marker = _mapMarkers[s.id];
+    if(marker) marker._isAffected = true;
+  });
+  _mapSelection = [];
+  _updateSelectionUI();
+
+  // Rafraîchir le sélecteur
+  var truckOptions = '<option value="">-- Choisir un camion --</option>';
+  Object.keys(trks).forEach(function(k){
+    truckOptions += '<option value="'+k+'">'+trks[k].name+'</option>';
+  });
+  if(sel) sel.innerHTML = truckOptions;
+}
+
+function _filtrerCarte(truckKey){
+  // Mettre à jour visuel boutons filtre
+  document.querySelectorAll('[id^="filtre-"]').forEach(function(el){
+    el.style.opacity = '0.45';
+  });
+  var activeEl = document.getElementById('filtre-'+(truckKey||'tous'));
+  if(activeEl) activeEl.style.opacity = '1';
+
+  // Afficher/cacher marqueurs selon filtre
+  var asgn = getAssigned();
+  Object.keys(_mapMarkers).forEach(function(id){
+    var marker = _mapMarkers[id];
+    if(!marker) return;
+    var show = true;
+    if(truckKey === 'none') show = !asgn[id];
+    else if(truckKey) show = asgn[id] === truckKey;
+    if(show){ marker.addTo(_mapInstance); }
+    else { marker.remove(); }
+  });
+}
+
+function fermerCarteDispatch(){
+  var modal = document.getElementById('modal-carte-dispatch');
+  if(modal){ modal.remove(); }
+  if(_mapPolyline){ try{_mapPolyline.remove();}catch(e){} _mapPolyline = null; }
+  Object.keys(_mapPolylines).forEach(function(k){
+    _mapPolylines[k].forEach(function(l){ try{l.remove();}catch(e){}; });
+  });
+  _mapPolylines = {};
+  if(_mapInstance){ try{_mapInstance.remove();}catch(e){} _mapInstance = null; }
+  _mapMarkers = {};
+  _mapSelection = [];
+  renderDispatchTab();
+}
+
+// ===== FIN CARTE DISPATCH =====
 
 // CAMION RENAME + ADD + SUPPRIMER
 function toggleRename(k){
@@ -2283,7 +3260,51 @@ function genererPDF(titre,contenu){
     +'<div class="no-print" style="margin-top:24px;padding:16px;background:#f0f0f0;border-radius:10px;text-align:center;">'
     +'<p style="font-size:13px;color:#555;margin-bottom:12px;">Sur iPhone : Partager → Imprimer → Pincer → Partager → Enregistrer en PDF</p>'
     +'<button onclick="window.print()" style="background:#009A44;color:white;border:none;padding:14px 24px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;width:100%;">🖨️ Imprimer</button>'
-    +'</div></body></html>';
+    +'</div>
+<script>
+// === TEST DATA: 10 clients avec des vraies adresses ===
+(function(){
+  var TEST_CLIENTS = {
+    "test_1": {prenom:"Fatou", nom:"Diallo", tel:"06 12 34 56 78", adresse:"12 rue Pasteur", cp:"93300", ville:"Aubervilliers", colis:"2 valises", prix:50, name:"Fatou Diallo", addedBy:"IS"},
+    "test_2": {prenom:"Mamadou", nom:"Sow", tel:"06 23 45 67 89", adresse:"5 avenue de la République", cp:"75011", ville:"Paris", colis:"1 carton", prix:75, name:"Mamadou Sow", addedBy:"IS"},
+    "test_3": {prenom:"Aissatou", nom:"Ba", tel:"06 34 56 78 90", adresse:"22 boulevard Voltaire", cp:"75011", ville:"Paris", colis:"3 sacs", prix:60, name:"Aissatou Ba", addedBy:"IS"},
+    "test_4": {prenom:"Omar", nom:"Ndiaye", tel:"06 45 67 89 01", adresse:"8 rue de Belleville", cp:"75020", ville:"Paris", colis:"1 valise + 1 sac", prix:45, name:"Omar Ndiaye", addedBy:"AB"},
+    "test_5": {prenom:"Aminata", nom:"Sy", tel:"06 56 78 90 12", adresse:"15 avenue Jean Jaurès", cp:"93500", ville:"Pantin", colis:"2 cartons", prix:80, name:"Aminata Sy", addedBy:"AB"},
+    "test_6": {prenom:"Ibrahima", nom:"Diop", tel:"06 67 89 01 23", adresse:"3 rue du Château", cp:"93200", ville:"Saint-Denis", colis:"1 gros carton", prix:55, name:"Ibrahima Diop", addedBy:"SA"},
+    "test_7": {prenom:"Mariam", nom:"Coulibaly", tel:"06 78 90 12 34", adresse:"10 boulevard de Strasbourg", cp:"94130", ville:"Nogent-sur-Marne", colis:"4 sacs", prix:90, name:"Mariam Coulibaly", addedBy:"SA"},
+    "test_8": {prenom:"Moussa", nom:"Keita", tel:"06 89 01 23 45", adresse:"25 rue de Paris", cp:"93100", ville:"Montreuil", colis:"2 valises", prix:65, name:"Moussa Keita", addedBy:"IB"},
+    "test_9": {prenom:"Kadiatou", nom:"Traore", tel:"06 90 12 34 56", adresse:"7 avenue Gambetta", cp:"94100", ville:"Saint-Maur-des-Fossés", colis:"1 carton fragile", prix:70, name:"Kadiatou Traore", addedBy:"IB"},
+    "test_10": {prenom:"Sekou", nom:"Camara", tel:"06 01 23 45 67", adresse:"18 rue Victor Hugo", cp:"92110", ville:"Clichy", colis:"3 cartons", prix:85, name:"Sekou Camara", addedBy:"BO"}
+  };
+
+  // Attendre que l'app soit chargée
+  window.addEventListener('load', function(){
+    setTimeout(function(){
+      // Vérifier s'il y a une collecte en cours
+      try {
+        var collectes = JSON.parse(localStorage.getItem('dct_collectes') || '[]');
+        if(collectes.length === 0) return; // Pas de collecte, on ne fait rien
+        var lastCollecte = collectes[collectes.length - 1];
+        var key = 'dct_clients_' + lastCollecte.id;
+        var existing = JSON.parse(localStorage.getItem(key) || '{}');
+        // Si déjà 10+ clients, ne pas écraser
+        if(Object.keys(existing).length >= 10) return;
+        // Ajouter les 10 clients de test
+        Object.keys(TEST_CLIENTS).forEach(function(id){
+          existing[id] = TEST_CLIENTS[id];
+        });
+        localStorage.setItem(key, JSON.stringify(existing));
+        console.log('[TEST] 10 clients ajoutés à la collecte ' + lastCollecte.id);
+        // Recharger pour afficher
+        location.reload();
+      } catch(e){
+        console.error('[TEST] Erreur:', e);
+      }
+    }, 500);
+  });
+})();
+</script>
+</body></html>';
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var url=URL.createObjectURL(blob);
   var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
