@@ -742,7 +742,7 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.2.0';
+var APP_VERSION = 'v1.3.0';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1356,7 +1356,7 @@ function saveClient(){
   if(!prenom||!nom||!cp){
     showToastNew('⚠️ Prénom, nom et code postal requis.');return;
   }
-  // Vérifier doublon dans la collecte courante
+  // Vérifier doublon par téléphone dans la collecte courante
   var cls=clientsParCollecte[currentCollecteId]||{};
   var nomComplet=(prenom+' '+nom).toLowerCase();
   var telClean=tel.replace(/\s/g,'');
@@ -1370,6 +1370,18 @@ function saveClient(){
     document.getElementById('doublon-info').textContent=(doublon.colis||'')+' — '+(doublon.prix||0)+' €';
     openModal('modal-doublon');
     return;
+  }
+  // Vérifier doublon par téléphone dans le carnet global
+  if(telClean && window.dctContacts){
+    var contactExistant=Object.values(window.dctContacts).find(function(c){
+      return c.tel && c.tel.replace(/\s/g,'')===telClean;
+    });
+    if(contactExistant && contactExistant.name.toLowerCase()!==nomComplet){
+      document.getElementById('doublon-nom').textContent=contactExistant.name+' (carnet)';
+      document.getElementById('doublon-info').textContent='Même téléphone: '+tel;
+      openModal('modal-doublon');
+      return;
+    }
   }
   // Pas de doublon — ouvrir confirmation
   ouvrirConfirmClient();
@@ -1720,8 +1732,7 @@ function renderCamion(k){
     // ADRESSE cliquable Waze avec confirmation
     var adresseEl=document.createElement('div');adresseEl.className='route-detail-row';
     adresseEl.style.cssText='cursor:pointer;';
-    var infosFull=(c.infos||'').trim();
-    adresseEl.innerHTML='📍 <strong style="color:#009A44;text-decoration:underline;">'+adresseFull+'</strong>'+(infosFull?'<br><span style="font-size:11px;color:#555;margin-left:18px;">'+infosFull+'</span>':'');
+    adresseEl.innerHTML='📍 <strong style="color:#009A44;text-decoration:underline;">'+adresseFull+'</strong>';
     (function(wl,af){
       adresseEl.onclick=function(){ouvrirModalWaze(wl,af);};
     })(wazeLink,adresseFull);
@@ -2068,6 +2079,18 @@ function saveContactEdit(){
   var ville = document.getElementById('ce-ville').value.trim();
   
   if(!prenom||!nom){ showToastNew('Prénom et nom requis.'); return; }
+  
+  // Vérifier doublon téléphone (sauf le contact lui-même)
+  if(tel && window.dctContacts){
+    var telClean = tel.replace(/ /g,'');
+    var doublon = Object.entries(window.dctContacts).find(function(e){
+      return e[0] !== key && e[1].tel && e[1].tel.replace(/ /g,'') === telClean;
+    });
+    if(doublon){
+      showToastNew('Ce numéro appartient déjà à '+doublon[1].name+' dans le carnet.');
+      return;
+    }
+  }
   
   // Mettre à jour le carnet global
   if(!window.dctContacts) window.dctContacts = {};
