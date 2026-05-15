@@ -742,7 +742,7 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.3.0';
+var APP_VERSION = 'v1.3.1';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -874,6 +874,10 @@ function setNav(tab){
       localStorage.setItem('dct_notif_'+currentUser.id, '0');
       updateNotifBadge();
     }
+    // Si admin → charger aussi les connexions
+    if(currentUser && currentUser.admin){
+      afficherConnexionsAdmin();
+    }
   }
 }
 function openModal(id){var el=document.getElementById(id);if(el)el.classList.add('show');}
@@ -934,6 +938,23 @@ function validerPinAdmin(){
 
 function finalisLogin(collab){
   currentUser = collab;
+  // Enregistrer la connexion (visible uniquement par l'admin)
+  if(!collab.admin){
+    var now = new Date();
+    var dateStr = now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
+    var heureStr = now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
+    var timeLabel = dateStr+' à '+heureStr;
+    if(firebaseReady && db){
+      db.ref('dct_connexions').push({
+        who: collab.name,
+        id: collab.id,
+        bg: collab.bg,
+        color: collab.color,
+        date: timeLabel,
+        ts: Date.now()
+      });
+    }
+  }
   // Charger l'activité globale
   try{
     var a = localStorage.getItem('dct_v3_activite');
@@ -2296,6 +2317,32 @@ function exportCamionPDF(){
   sorted.forEach(function(id,i){var c=cls[id];if(!c)return;var val=(tk.validated||[]).includes(id),ref=(tk.refused||[]).includes(id);rows+='<tr><td>'+(i+1)+'</td><td>'+((tk.hours&&tk.hours[id])||'--')+'</td><td>'+c.name+'</td><td>'+(c.adresse||'')+', '+(c.cp||'')+' '+(c.ville||'')+'</td><td>'+(c.tel||'')+'</td><td>'+(c.colis||'')+'</td><td>'+(c.prix||0)+' €</td><td>'+(val?'<span class="ok">OK</span>':ref?'<span class="no">Non</span>':'<span class="wait">...</span>')+'</td></tr>';});
   rows+='</table>';
   genererPDF('Feuille — '+tk.name,'<h2>'+tk.name+'</h2><p>Prévu: '+tot+' € | Collecté: '+col+' €</p>'+rows);
+}
+
+
+
+function afficherConnexionsAdmin(){
+  if(!db) return;
+  db.ref('dct_connexions').orderByChild('ts').limitToLast(50).once('value', function(snap){
+    var data = snap.val();
+    if(!data) return;
+    var list = document.getElementById('activity-list');
+    if(!list) return;
+    // Ajouter les connexions en haut de la liste
+    var connexions = Object.values(data).sort(function(a,b){ return b.ts - a.ts; });
+    connexions.forEach(function(conn){
+      var item = document.createElement('div');
+      item.className = 'activity-item';
+      item.style.background = '#f0f4ff';
+      item.style.borderLeft = '3px solid #1a237e';
+      item.style.marginBottom = '6px';
+      item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">🔑</div>'
+        + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong>'
+        + " s'est connecté(e)</div>"
+        + '<div class="activity-time">'+conn.date+'</div></div>';
+      list.insertBefore(item, list.firstChild);
+    });
+  });
 }
 
 // INIT
