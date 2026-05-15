@@ -551,6 +551,18 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   </div>
 
 
+
+<!-- ADMIN -->
+<div class="screen" id="s-admin">
+  <div class="header" style="background:#1a1a2e;color:#fff;flex-shrink:0;">
+    <button class="btn-back" onclick="quitterAdmin()" style="color:#fff;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);">← Quitter</button>
+    <div class="h-title" style="color:#fff;">⚙️ Administration</div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content" id="admin-panel"></div>
+</div>
+
+
 <!-- ADMIN -->
 <div class="screen" id="s-admin">
   <div class="header" style="background:#1a1a2e;color:#fff;">
@@ -637,6 +649,8 @@ function initFirebase(){
     db = firebase.database();
     firebaseReady = true;
     console.log("Firebase OK");
+    // Charger la config (collabs, PIN)
+    chargerConfigFirebase();
     // Écouter les changements en temps réel
     ecouterChangements();
   } catch(e) {
@@ -742,7 +756,7 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.3.1';
+var APP_VERSION = 'v1.3.2';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -987,6 +1001,12 @@ function finalisLogin(collab){
   var hg=document.getElementById('home-greet');
   if(hg)hg.textContent='Bonjour '+currentUser.name+' !';
   updateNotifBadge();
+  // Si admin → aller sur l'écran admin au lieu de s-home
+  if(currentUser && currentUser.admin){
+    renderAdminPanel();
+    goTo('s-admin');
+    return;
+  }
   // Écouter les notifs Firebase en temps réel
   if(firebaseReady && db){
     db.ref('dct_notifs/'+collab.id).on('value', function(snap){
@@ -2323,12 +2343,15 @@ function exportCamionPDF(){
 
 function afficherConnexionsAdmin(){
   if(!db) return;
-  db.ref('dct_connexions').orderByChild('ts').limitToLast(50).once('value', function(snap){
+  // Ne charger que les connexions depuis la dernière visite
+  var lastSeen = parseInt(localStorage.getItem('dct_admin_connexions_seen') || '0');
+  db.ref('dct_connexions').orderByChild('ts').startAt(lastSeen + 1).once('value', function(snap){
     var data = snap.val();
+    // Mettre à jour le timestamp "vu" maintenant
+    localStorage.setItem('dct_admin_connexions_seen', Date.now());
     if(!data) return;
     var list = document.getElementById('activity-list');
     if(!list) return;
-    // Ajouter les connexions en haut de la liste
     var connexions = Object.values(data).sort(function(a,b){ return b.ts - a.ts; });
     connexions.forEach(function(conn){
       var item = document.createElement('div');
@@ -2344,6 +2367,194 @@ function afficherConnexionsAdmin(){
     });
   });
 }
+
+
+
+// ===== PANNEAU ADMINISTRATEUR =====
+
+function renderAdminPanel(){
+  var panel = document.getElementById('admin-panel');
+  if(!panel) return;
+  renderAdminCollabs();
+}
+
+function renderAdminCollabs(){
+  var panel = document.getElementById('admin-panel');
+  if(!panel) return;
+
+  var html = '<div style="padding:16px;">';
+
+  // Titre section
+  html += '<div style="font-size:16px;font-weight:800;color:#1a1a2e;margin-bottom:16px;">👥 Collaborateurs</div>';
+
+  // Liste des collaborateurs existants
+  COLLABS.forEach(function(c, idx){
+    if(c.admin) return;
+    html += '<div style="display:flex;align-items:center;gap:10px;padding:12px;background:#fff;border:1.5px solid #e0e0e0;border-radius:10px;margin-bottom:8px;">'
+      + '<div style="width:40px;height:40px;border-radius:50%;background:'+c.bg+';color:'+c.color+';display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid '+c.color+';">'+c.id+'</div>'
+      + '<div style="flex:1;">'
+      + '<div style="font-weight:800;font-size:14px;color:#111;">'+c.name+'</div>'
+      + '<div style="font-size:11px;color:#888;">'+c.id+' · '+c.color+'</div>'
+      + '</div>'
+      + '<button onclick="demanderSupprimerCollab('+idx+')" style="padding:6px 12px;background:#fde0e0;color:#c0392b;border:1.5px solid #c0392b;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">🗑️</button>'
+      + '</div>';
+  });
+
+  // Formulaire ajout nouveau collaborateur
+  html += '<div style="margin-top:20px;padding:16px;background:#f0fff4;border:2px solid #009A44;border-radius:12px;">'
+    + '<div style="font-size:13px;font-weight:800;color:#006b2d;margin-bottom:12px;">➕ Nouveau collaborateur</div>'
+    + '<div style="margin-bottom:10px;">'
+    + '<label style="font-size:11px;color:#555;font-weight:700;display:block;margin-bottom:4px;">Prénom</label>'
+    + '<input id="new-collab-name" type="text" placeholder="Ex: Moussa" style="width:100%;padding:10px;border:1.5px solid #009A44;border-radius:8px;font-size:14px;font-family:var(--font);box-sizing:border-box;">'
+    + '</div>'
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:11px;color:#555;font-weight:700;display:block;margin-bottom:8px;">Couleur</label>'
+    + '<div id="color-picker" style="display:flex;flex-wrap:wrap;gap:8px;">';
+
+  var PALETTE = [
+    {bg:'#FFE8CC',color:'#A04800'},
+    {bg:'#E0E4FF',color:'#252599'},
+    {bg:'#CFFAFE',color:'#0e7490'},
+    {bg:'#EDE9FE',color:'#7c3aed'},
+    {bg:'#FEF3C7',color:'#92400e'},
+    {bg:'#fce4ec',color:'#880e4f'},
+    {bg:'#e8f5e9',color:'#1b5e20'},
+    {bg:'#e0f7fa',color:'#006064'},
+    {bg:'#fff3e0',color:'#bf360c'},
+    {bg:'#f3e5f5',color:'#6a1b9a'},
+    {bg:'#fbe9e7',color:'#bf360c'},
+    {bg:'#e8eaf6',color:'#283593'},
+  ];
+  PALETTE.forEach(function(p, i){
+    html += '<div onclick="selectColor('+i+')" id="color-opt-'+i+'" '
+      + 'style="width:36px;height:36px;border-radius:50%;background:'+p.bg+';border:3px solid '+p.color+';cursor:pointer;display:flex;align-items:center;justify-content:center;'
+      + (i===0?'box-shadow:0 0 0 3px #009A44;':'')
+      + '" data-bg="'+p.bg+'" data-color="'+p.color+'">'
+      + '<div style="width:18px;height:18px;border-radius:50%;background:'+p.color+';"></div>'
+      + '</div>';
+  });
+
+  html += '</div></div>'
+    + '<button onclick="ajouterCollab()" style="width:100%;padding:13px;background:#009A44;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">✅ Ajouter le collaborateur</button>'
+    + '</div>';
+
+  // Bouton changer PIN
+  html += '<div style="margin-top:16px;padding:16px;background:#f0f4ff;border:2px solid #1a237e;border-radius:12px;">'
+    + '<div style="font-size:13px;font-weight:800;color:#1a237e;margin-bottom:10px;">🔐 Code PIN administrateur</div>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<input id="new-pin-input" type="password" inputmode="numeric" maxlength="6" placeholder="Nouveau code" style="flex:1;padding:10px;border:1.5px solid #1a237e;border-radius:8px;font-size:16px;font-family:var(--font);letter-spacing:4px;">'
+    + '<button onclick="changerPin()" style="padding:10px 16px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Changer</button>'
+    + '</div>'
+    + '</div>';
+
+  html += '</div>';
+  panel.innerHTML = html;
+  window._selectedColorIdx = 0;
+}
+
+var _selectedColorIdx = 0;
+
+function selectColor(idx){
+  _selectedColorIdx = idx;
+  var opts = document.querySelectorAll('[id^="color-opt-"]');
+  opts.forEach(function(el, i){
+    el.style.boxShadow = i === idx ? '0 0 0 3px #009A44' : '';
+  });
+}
+
+function ajouterCollab(){
+  var nameEl = document.getElementById('new-collab-name');
+  if(!nameEl || !nameEl.value.trim()){
+    showToastNew('⚠️ Entrez un prénom.');
+    return;
+  }
+  var name = nameEl.value.trim();
+  // Vérifier doublon
+  if(COLLABS.find(function(c){ return c.name.toLowerCase() === name.toLowerCase(); })){
+    showToastNew('⚠️ Ce prénom existe déjà.');
+    return;
+  }
+  var PALETTE = [
+    {bg:'#FFE8CC',color:'#A04800'},{bg:'#E0E4FF',color:'#252599'},
+    {bg:'#CFFAFE',color:'#0e7490'},{bg:'#EDE9FE',color:'#7c3aed'},
+    {bg:'#FEF3C7',color:'#92400e'},{bg:'#fce4ec',color:'#880e4f'},
+    {bg:'#e8f5e9',color:'#1b5e20'},{bg:'#e0f7fa',color:'#006064'},
+    {bg:'#fff3e0',color:'#bf360c'},{bg:'#f3e5f5',color:'#6a1b9a'},
+    {bg:'#fbe9e7',color:'#bf360c'},{bg:'#e8eaf6',color:'#283593'},
+  ];
+  var palette = PALETTE[_selectedColorIdx || 0];
+  var initials = name.substring(0,2).toUpperCase();
+  // Trouver un ID unique
+  var id = initials;
+  var counter = 1;
+  while(COLLABS.find(function(c){ return c.id === id; })){
+    id = initials + counter; counter++;
+  }
+  COLLABS.push({id:id, name:name, bg:palette.bg, color:palette.color});
+  // Sauvegarder dans Firebase
+  if(firebaseReady && db){
+    db.ref('dct_config/collabs').set(COLLABS.filter(function(c){ return !c.admin; }));
+  }
+  showToastNew('✅ '+name+' ajouté(e) !');
+  nameEl.value = '';
+  renderAdminCollabs();
+}
+
+function demanderSupprimerCollab(idx){
+  var c = COLLABS[idx];
+  if(!c || c.admin) return;
+  if(confirm('Supprimer ' + c.name + ' ? Cette action est irréversible.')) {
+    COLLABS.splice(idx, 1);
+    if(firebaseReady && db){
+      db.ref('dct_config/collabs').set(COLLABS.filter(function(c){ return !c.admin; }));
+    }
+    showToastNew('✅ Collaborateur supprimé.');
+    renderAdminCollabs();
+  }
+}
+
+function changerPin(){
+  var inp = document.getElementById('new-pin-input');
+  if(!inp) return;
+  var val = inp.value.trim();
+  if(val.length < 4 || isNaN(val)){
+    showToastNew('⚠️ Code invalide — minimum 4 chiffres.');
+    return;
+  }
+  localStorage.setItem('dct_admin_pin', val);
+  if(firebaseReady && db){
+    db.ref('dct_config/pin').set(val);
+  }
+  showToastNew('✅ Code PIN modifié !');
+  inp.value = '';
+}
+
+function quitterAdmin(){
+  currentUser = null;
+  goTo('s-login');
+  buildLogin();
+}
+
+// Charger les collabs depuis Firebase au démarrage
+function chargerConfigFirebase(){
+  if(!db) return;
+  db.ref('dct_config/collabs').once('value', function(snap){
+    var data = snap.val();
+    if(data && Array.isArray(data) && data.length > 0){
+      // Garder l'admin, remplacer les autres
+      var admin = COLLABS.find(function(c){ return c.admin; });
+      COLLABS = data;
+      if(admin) COLLABS.push(admin);
+      buildLogin();
+    }
+  });
+  db.ref('dct_config/pin').once('value', function(snap){
+    var pin = snap.val();
+    if(pin) localStorage.setItem('dct_admin_pin', pin);
+  });
+}
+
+// ===== FIN PANNEAU ADMINISTRATEUR =====
 
 // INIT
 charger();
