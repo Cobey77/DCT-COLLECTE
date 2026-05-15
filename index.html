@@ -3260,51 +3260,7 @@ function genererPDF(titre,contenu){
     +'<div class="no-print" style="margin-top:24px;padding:16px;background:#f0f0f0;border-radius:10px;text-align:center;">'
     +'<p style="font-size:13px;color:#555;margin-bottom:12px;">Sur iPhone : Partager → Imprimer → Pincer → Partager → Enregistrer en PDF</p>'
     +'<button onclick="window.print()" style="background:#009A44;color:white;border:none;padding:14px 24px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;width:100%;">🖨️ Imprimer</button>'
-    +'</div>
-<script>
-// === TEST DATA: 10 clients avec des vraies adresses ===
-(function(){
-  var TEST_CLIENTS = {
-    "test_1": {prenom:"Fatou", nom:"Diallo", tel:"06 12 34 56 78", adresse:"12 rue Pasteur", cp:"93300", ville:"Aubervilliers", colis:"2 valises", prix:50, name:"Fatou Diallo", addedBy:"IS"},
-    "test_2": {prenom:"Mamadou", nom:"Sow", tel:"06 23 45 67 89", adresse:"5 avenue de la République", cp:"75011", ville:"Paris", colis:"1 carton", prix:75, name:"Mamadou Sow", addedBy:"IS"},
-    "test_3": {prenom:"Aissatou", nom:"Ba", tel:"06 34 56 78 90", adresse:"22 boulevard Voltaire", cp:"75011", ville:"Paris", colis:"3 sacs", prix:60, name:"Aissatou Ba", addedBy:"IS"},
-    "test_4": {prenom:"Omar", nom:"Ndiaye", tel:"06 45 67 89 01", adresse:"8 rue de Belleville", cp:"75020", ville:"Paris", colis:"1 valise + 1 sac", prix:45, name:"Omar Ndiaye", addedBy:"AB"},
-    "test_5": {prenom:"Aminata", nom:"Sy", tel:"06 56 78 90 12", adresse:"15 avenue Jean Jaurès", cp:"93500", ville:"Pantin", colis:"2 cartons", prix:80, name:"Aminata Sy", addedBy:"AB"},
-    "test_6": {prenom:"Ibrahima", nom:"Diop", tel:"06 67 89 01 23", adresse:"3 rue du Château", cp:"93200", ville:"Saint-Denis", colis:"1 gros carton", prix:55, name:"Ibrahima Diop", addedBy:"SA"},
-    "test_7": {prenom:"Mariam", nom:"Coulibaly", tel:"06 78 90 12 34", adresse:"10 boulevard de Strasbourg", cp:"94130", ville:"Nogent-sur-Marne", colis:"4 sacs", prix:90, name:"Mariam Coulibaly", addedBy:"SA"},
-    "test_8": {prenom:"Moussa", nom:"Keita", tel:"06 89 01 23 45", adresse:"25 rue de Paris", cp:"93100", ville:"Montreuil", colis:"2 valises", prix:65, name:"Moussa Keita", addedBy:"IB"},
-    "test_9": {prenom:"Kadiatou", nom:"Traore", tel:"06 90 12 34 56", adresse:"7 avenue Gambetta", cp:"94100", ville:"Saint-Maur-des-Fossés", colis:"1 carton fragile", prix:70, name:"Kadiatou Traore", addedBy:"IB"},
-    "test_10": {prenom:"Sekou", nom:"Camara", tel:"06 01 23 45 67", adresse:"18 rue Victor Hugo", cp:"92110", ville:"Clichy", colis:"3 cartons", prix:85, name:"Sekou Camara", addedBy:"BO"}
-  };
-
-  // Attendre que l'app soit chargée
-  window.addEventListener('load', function(){
-    setTimeout(function(){
-      // Vérifier s'il y a une collecte en cours
-      try {
-        var collectes = JSON.parse(localStorage.getItem('dct_collectes') || '[]');
-        if(collectes.length === 0) return; // Pas de collecte, on ne fait rien
-        var lastCollecte = collectes[collectes.length - 1];
-        var key = 'dct_clients_' + lastCollecte.id;
-        var existing = JSON.parse(localStorage.getItem(key) || '{}');
-        // Si déjà 10+ clients, ne pas écraser
-        if(Object.keys(existing).length >= 10) return;
-        // Ajouter les 10 clients de test
-        Object.keys(TEST_CLIENTS).forEach(function(id){
-          existing[id] = TEST_CLIENTS[id];
-        });
-        localStorage.setItem(key, JSON.stringify(existing));
-        console.log('[TEST] 10 clients ajoutés à la collecte ' + lastCollecte.id);
-        // Recharger pour afficher
-        location.reload();
-      } catch(e){
-        console.error('[TEST] Erreur:', e);
-      }
-    }, 500);
-  });
-})();
-</script>
-</body></html>';
+    +'</div></body></html>';
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var url=URL.createObjectURL(blob);
   var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
