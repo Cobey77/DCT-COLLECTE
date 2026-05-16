@@ -715,9 +715,8 @@ function ecouterChangements(){
     if(data.activite){
       var al = document.getElementById('activity-list');
       if(al && data.activite.indexOf('Aucune')===-1){
-        // Appliquer le filtre de suppression de l'utilisateur courant
-        var deletedAt = currentUser ? parseInt(localStorage.getItem('dct_activite_deleted_'+currentUser.id)||'0') : 0;
-        if(deletedAt > 0){
+        // Charger deletedAt depuis Firebase (source de vérité) + localStorage
+        var _applyActivite = function(deletedAt){
           var tmp = document.createElement('div');
           tmp.innerHTML = data.activite;
           var kept = [];
@@ -725,9 +724,21 @@ function ecouterChangements(){
             var ts = parseInt(item.getAttribute('data-ts')||'9999999999999');
             if(ts > deletedAt) kept.push(item.outerHTML);
           });
-          al.innerHTML = kept.length ? kept.join('') : '<div style="text-align:center;color:#aaa;padding:40px 20px;font-size:14px;"><div style="font-size:32px;margin-bottom:10px;">📋</div>Aucune activité pour le moment.</div>';
+          var al2 = document.getElementById('activity-list');
+          if(al2) al2.innerHTML = kept.length ? kept.join('') : '<div style="text-align:center;color:#aaa;padding:40px 20px;font-size:14px;"><div style="font-size:32px;margin-bottom:10px;">📋</div>Aucune activité pour le moment.</div>';
+
+        };
+        if(currentUser && firebaseReady && db){
+          db.ref('dct_config/activite_deleted/'+currentUser.id).once('value', function(snap){
+            var fbDeletedAt = snap.val() || 0;
+            var localDeletedAt = parseInt(localStorage.getItem('dct_activite_deleted_'+currentUser.id)||'0');
+            var deletedAt = Math.max(fbDeletedAt, localDeletedAt);
+            if(deletedAt > localDeletedAt) localStorage.setItem('dct_activite_deleted_'+currentUser.id, deletedAt);
+            _applyActivite(deletedAt);
+          });
         } else {
-          al.innerHTML = data.activite;
+          var deletedAt = currentUser ? parseInt(localStorage.getItem('dct_activite_deleted_'+currentUser.id)||'0') : 0;
+          _applyActivite(deletedAt);
         }
       }
     }
@@ -908,10 +919,6 @@ function setNav(tab){
       localStorage.setItem('dct_notif_'+currentUser.id, '0');
       updateNotifBadge();
     }
-    // Si admin → charger aussi les connexions
-    if(currentUser && currentUser.admin){
-      afficherConnexionsAdmin();
-    }
   }
 }
 function openModal(id){var el=document.getElementById(id);if(el)el.classList.add('show');}
@@ -998,6 +1005,17 @@ function finalisLogin(collab){
     }
   }
   // Charger l'activité globale
+  // Charger le deletedAt depuis Firebase pour ce user
+  if(firebaseReady && db){
+    db.ref('dct_config/activite_deleted/'+collab.id).once('value', function(snap){
+      var fbDeletedAt = snap.val() || 0;
+      var localDeletedAt = parseInt(localStorage.getItem('dct_activite_deleted_'+collab.id)||'0');
+      var maxDeletedAt = Math.max(fbDeletedAt, localDeletedAt);
+      if(maxDeletedAt > localDeletedAt){
+        localStorage.setItem('dct_activite_deleted_'+collab.id, maxDeletedAt);
+      }
+    });
+  }
   try{
     var a = localStorage.getItem('dct_v3_activite');
     // Récupérer le timestamp de la dernière suppression de ce user
@@ -3147,10 +3165,21 @@ function addActivity(emoji,bg,text,time){
   sauvegarder();
 }
 function effacerActivite(){
+  var now = Date.now();
   var list=document.getElementById('activity-list');
   if(list)list.innerHTML='<div style="text-align:center;color:#aaa;padding:40px 20px;font-size:14px;"><div style="font-size:32px;margin-bottom:10px;">📋</div>Aucune activité pour le moment.</div>';
-  // Enregistrer le moment de suppression pour CE user seulement
-  try{localStorage.setItem('dct_activite_deleted_'+currentUser.id, Date.now());}catch(e){}
+  // Enregistrer le moment de suppression pour CE user — localStorage ET Firebase
+  try{localStorage.setItem('dct_activite_deleted_'+currentUser.id, now);}catch(e){}
+  if(firebaseReady && db){
+    db.ref('dct_config/activite_deleted/'+currentUser.id).set(now);
+  }
+  // Pour l'admin, sauvegarder aussi le timestamp d'effacement des connexions
+  if(currentUser && currentUser.admin){
+    try{localStorage.setItem('dct_connexions_deleted_AD', now);}catch(e){}
+    if(firebaseReady && db){
+      db.ref('dct_config/activite_deleted/AD_connexions').set(now);
+    }
+  }
   closeModal('modal-clear-activite');
 }
 
@@ -3478,48 +3507,59 @@ function afficherConnexionsAdmin(){
   if(!list) return;
   list.querySelectorAll('.connexion-item').forEach(function(el){ el.remove(); });
 
-  // Charger toutes les connexions depuis Firebase
-  db.ref('dct_connexions').orderByChild('ts').once('value', function(snap){
-    localStorage.setItem('dct_admin_connexions_seen', Date.now());
-    var data = snap.val();
-    if(!data) return;
-    var list2 = document.getElementById('activity-list');
-    if(!list2) return;
+  // Charger le deletedAt des connexions depuis Firebase
+  db.ref('dct_config/activite_deleted/AD_connexions').once('value', function(snapDel){
+    var fbDeletedAt = snapDel.val() || 0;
+    var localDeletedAt = parseInt(localStorage.getItem('dct_connexions_deleted_AD')||'0');
+    var deletedAt = Math.max(fbDeletedAt, localDeletedAt);
+    if(deletedAt > localDeletedAt) localStorage.setItem('dct_connexions_deleted_AD', deletedAt);
 
-    // Dédoublonner (même who + même minute)
-    var seen = {};
-    var connexions = Object.values(data).filter(function(conn){
-      var key = conn.who + '_' + Math.floor((conn.ts||0)/60000);
-      if(seen[key]) return false;
-      seen[key] = true;
-      return true;
-    });
+    // Charger toutes les connexions depuis Firebase
+    db.ref('dct_connexions').orderByChild('ts').once('value', function(snap){
+      localStorage.setItem('dct_admin_connexions_seen', Date.now());
+      var data = snap.val();
+      if(!data) return;
+      var list2 = document.getElementById('activity-list');
+      if(!list2) return;
 
-    // Insérer chaque connexion dans le fil chronologique
-    connexions.forEach(function(conn){
-      var ts = conn.ts || 0;
-      // Créer l'élément connexion
-      var item = document.createElement('div');
-      item.className = 'activity-item connexion-item';
-      item.setAttribute('data-ts', ts);
-      item.style.cssText = 'background:#f0f4ff;border-left:3px solid #1a237e;margin-bottom:6px;';
-      item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">🔑</div>'
-        + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong>'
-        + " s'est connecté(e)</div>"
-        + '<div class="activity-time">'+conn.date+'</div></div>';
+      // Dédoublonner (même who + même minute) ET filtrer selon deletedAt
+      var seen = {};
+      var connexions = Object.values(data).filter(function(conn){
+        var ts = conn.ts || 0;
+        if(deletedAt > 0 && ts <= deletedAt) return false; // Effacé
+        var key = conn.who + '_' + Math.floor(ts/60000);
+        if(seen[key]) return false;
+        seen[key] = true;
+        return true;
+      });
 
-      // Trouver la bonne position dans le fil (ordre chronologique - récent en haut)
-      var items = list2.querySelectorAll('.activity-item');
-      var inserted = false;
-      for(var i=0; i<items.length; i++){
-        var itemTs = parseInt(items[i].getAttribute('data-ts')||'0');
-        if(ts > itemTs){
-          list2.insertBefore(item, items[i]);
-          inserted = true;
-          break;
+      if(connexions.length === 0) return;
+
+      // Insérer chaque connexion dans le fil chronologique
+      connexions.forEach(function(conn){
+        var ts = conn.ts || 0;
+        var item = document.createElement('div');
+        item.className = 'activity-item connexion-item';
+        item.setAttribute('data-ts', ts);
+        item.style.cssText = 'background:#f0f4ff;border-left:3px solid #1a237e;margin-bottom:6px;';
+        item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">🔑</div>'
+          + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong>'
+          + " s'est connecté(e)</div>"
+          + '<div class="activity-time">'+conn.date+'</div></div>';
+
+        // Trouver la bonne position dans le fil (ordre chronologique - récent en haut)
+        var items = list2.querySelectorAll('.activity-item');
+        var inserted = false;
+        for(var i=0; i<items.length; i++){
+          var itemTs = parseInt(items[i].getAttribute('data-ts')||'0');
+          if(ts > itemTs){
+            list2.insertBefore(item, items[i]);
+            inserted = true;
+            break;
+          }
         }
-      }
-      if(!inserted) list2.appendChild(item);
+        if(!inserted) list2.appendChild(item);
+      });
     });
   });
 }
@@ -4143,6 +4183,11 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
+
+
 
 
 
