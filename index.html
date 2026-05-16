@@ -3473,7 +3473,7 @@ function exportCamionPDF(){
 
 function afficherConnexionsAdmin(){
   if(!db) return;
-  // Supprimer les anciens items connexion pour éviter les doublons
+  // Supprimer les anciens items connexion pour éviter doublons
   var list = document.getElementById('activity-list');
   if(!list) return;
   list.querySelectorAll('.connexion-item').forEach(function(el){ el.remove(); });
@@ -3486,38 +3486,40 @@ function afficherConnexionsAdmin(){
     var list2 = document.getElementById('activity-list');
     if(!list2) return;
 
-    // Trier par timestamp décroissant — plus récent en haut
-    var connexions = Object.values(data).sort(function(a,b){ return b.ts - a.ts; });
-
-    // Supprimer doublons (même who + même minute)
+    // Dédoublonner (même who + même minute)
     var seen = {};
-    connexions = connexions.filter(function(conn){
+    var connexions = Object.values(data).filter(function(conn){
       var key = conn.who + '_' + Math.floor((conn.ts||0)/60000);
       if(seen[key]) return false;
       seen[key] = true;
       return true;
     });
 
-    // Titre section
-    var titre = document.createElement('div');
-    titre.className = 'connexion-item';
-    titre.style.cssText = 'font-size:12px;font-weight:800;color:#1a237e;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px;';
-    titre.textContent = '🔑 Connexions collaborateurs';
-    list2.insertBefore(titre, list2.firstChild);
-
-    // Insérer après le titre dans l'ordre (récent en haut)
-    var insertAfter = titre;
+    // Insérer chaque connexion dans le fil chronologique
     connexions.forEach(function(conn){
+      var ts = conn.ts || 0;
+      // Créer l'élément connexion
       var item = document.createElement('div');
       item.className = 'activity-item connexion-item';
+      item.setAttribute('data-ts', ts);
       item.style.cssText = 'background:#f0f4ff;border-left:3px solid #1a237e;margin-bottom:6px;';
       item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">🔑</div>'
         + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong>'
         + " s'est connecté(e)</div>"
         + '<div class="activity-time">'+conn.date+'</div></div>';
-      // Insérer après le dernier élément inséré pour garder l'ordre
-      insertAfter.after(item);
-      insertAfter = item;
+
+      // Trouver la bonne position dans le fil (ordre chronologique - récent en haut)
+      var items = list2.querySelectorAll('.activity-item');
+      var inserted = false;
+      for(var i=0; i<items.length; i++){
+        var itemTs = parseInt(items[i].getAttribute('data-ts')||'0');
+        if(ts > itemTs){
+          list2.insertBefore(item, items[i]);
+          inserted = true;
+          break;
+        }
+      }
+      if(!inserted) list2.appendChild(item);
     });
   });
 }
@@ -4141,6 +4143,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
