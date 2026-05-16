@@ -750,12 +750,18 @@ function ecouterChangements(){
 
 function sauvegarderFirebase(){
   if(!db || !firebaseReady) return;
+  // GUARD : ne jamais écraser Firebase avec des données vides
+  // Si collectes est vide, Firebase a peut-être des données qu'on n'a pas encore chargées
+  if(!collectes || collectes.length === 0){
+    console.warn('[SAVE] collectes vide - écriture Firebase annulée pour protéger les données');
+    return;
+  }
   clearTimeout(syncTimeout);
   syncTimeout = setTimeout(function(){
     window._lastWriteTime = Date.now();
     var al = document.getElementById('activity-list');
     var activiteHtml = al ? al.innerHTML : '';
-    db.ref('dct').set({
+    db.ref('dct').update({
       collectes: collectes,
       clients: clientsParCollecte,
       dispatch: dispatchParCollecte,
@@ -4114,6 +4120,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
