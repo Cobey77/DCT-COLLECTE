@@ -654,7 +654,7 @@ function initFirebase(){
       var data = snap.val();
       if(!data || !data.texte){ zone.style.display='none'; return; }
       var colors = {
-        info:{bg:'#e8f5e9',border:'#009A44',color:'#1b5e20',icon:'✅'},
+        info:{bg:'#e3f8f5',border:'#00897b',color:'#004d40',icon:'✅'},
         warning:{bg:'#fff8e1',border:'#f57c00',color:'#e65100',icon:'⚠️'},
         error:{bg:'#fde0e0',border:'#c0392b',color:'#b71c1c',icon:'🔴'}
       };
@@ -3467,27 +3467,30 @@ function exportCamionPDF(){
 
 function afficherConnexionsAdmin(){
   if(!db) return;
-  // Ne charger que les connexions depuis la dernière visite
-  var lastSeen = parseInt(localStorage.getItem('dct_admin_connexions_seen') || '0');
-  db.ref('dct_connexions').orderByChild('ts').startAt(lastSeen + 1).once('value', function(snap){
-    var data = snap.val();
-    // Mettre à jour le timestamp "vu" maintenant
+  // Charger toutes les connexions
+  db.ref('dct_connexions').orderByChild('ts').once('value', function(snap){
     localStorage.setItem('dct_admin_connexions_seen', Date.now());
+    var data = snap.val();
     if(!data) return;
     var list = document.getElementById('activity-list');
     if(!list) return;
+    // Trier par timestamp décroissant — plus récent en haut
     var connexions = Object.values(data).sort(function(a,b){ return b.ts - a.ts; });
+    // Ajouter un titre section
+    var titre = document.createElement('div');
+    titre.style.cssText = 'font-size:12px;font-weight:800;color:#1a237e;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px;';
+    titre.textContent = '🔑 Connexions collaborateurs';
+    list.insertBefore(titre, list.firstChild);
+    // Insérer après le titre (appendChild pour respecter l'ordre du sort)
     connexions.forEach(function(conn){
       var item = document.createElement('div');
       item.className = 'activity-item';
-      item.style.background = '#f0f4ff';
-      item.style.borderLeft = '3px solid #1a237e';
-      item.style.marginBottom = '6px';
+      item.style.cssText = 'background:#f0f4ff;border-left:3px solid #1a237e;margin-bottom:6px;';
       item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">🔑</div>'
         + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong>'
         + " s'est connecté(e)</div>"
         + '<div class="activity-time">'+conn.date+'</div></div>';
-      list.insertBefore(item, list.firstChild);
+      list.appendChild(item);
     });
   });
 }
@@ -3507,7 +3510,7 @@ function chargerMessageAdmin(){
     var data = snap.val();
     if(!data || !data.texte){ zone.style.display='none'; return; }
     var colors = {
-      info:{bg:'#e8f5e9',border:'#009A44',color:'#1b5e20',icon:'✅'},
+      info:{bg:'#e3f8f5',border:'#00897b',color:'#004d40',icon:'✅'},
       warning:{bg:'#fff8e1',border:'#f57c00',color:'#e65100',icon:'⚠️'},
       error:{bg:'#fde0e0',border:'#c0392b',color:'#b71c1c',icon:'🔴'}
     };
@@ -3550,7 +3553,7 @@ function _renderMessageForm(sec, msgActuel, typeActuel){
   // Aperçu message actuel
   if(msgActuel){
     var apercu = document.createElement('div');
-    var colors = {info:{bg:'#e8f5e9',border:'#009A44',color:'#1b5e20',icon:'✅'},
+    var colors = {info:{bg:'#e3f8f5',border:'#00897b',color:'#004d40',icon:'✅'},
                   warning:{bg:'#fff8e1',border:'#f57c00',color:'#e65100',icon:'⚠️'},
                   error:{bg:'#fde0e0',border:'#c0392b',color:'#b71c1c',icon:'🔴'}};
     var c = colors[typeActuel] || colors.info;
@@ -4111,6 +4114,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
