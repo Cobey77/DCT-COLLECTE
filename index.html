@@ -643,6 +643,8 @@ function initFirebase(){
     console.log("Firebase OK");
     // Charger le message admin dès que Firebase est prêt
     chargerMessageAdmin();
+    // Migrer les données de l'ancien format si nécessaire
+    _migrerDonneesAncienFormat();
     // Charger la config (collabs, PIN)
     chargerConfigFirebase();
     // Écouter le message admin en temps réel
@@ -4050,6 +4052,54 @@ function chargerConfigFirebase(){
 
 // ===== FIN PANNEAU ADMINISTRATEUR =====
 
+
+// Migration données ancien format → nouveau format dct/*
+function _migrerDonneesAncienFormat(){
+  if(!db || !firebaseReady) return;
+  // Vérifier si des données existent sous l'ancien chemin "collectes"
+  db.ref('collectes').once('value', function(snap){
+    var oldData = snap.val();
+    if(!oldData) return; // Rien à migrer
+    console.log('[MIGRATION] Données trouvées sous ancien chemin, migration...');
+    // Lire les autres données sous anciens chemins
+    db.ref('clients').once('value', function(snapCl){
+      var oldClients = snapCl.val() || {};
+      db.ref('dispatch').once('value', function(snapD){
+        var oldDispatch = snapD.val() || {};
+        // Convertir collectes en tableau si c'est un objet
+        var cols = Array.isArray(oldData) ? oldData : Object.values(oldData);
+        // Écrire sous le nouveau chemin "dct"
+        db.ref('dct').once('value', function(snapDct){
+          var existingDct = snapDct.val();
+          // Ne migrer que si dct est vide ou n'a pas de collectes
+          if(existingDct && existingDct.collectes && existingDct.collectes.length > 0){
+            console.log('[MIGRATION] dct/ déjà rempli, pas de migration nécessaire');
+            return;
+          }
+          db.ref('dct').update({
+            collectes: cols,
+            clients: oldClients,
+            dispatch: oldDispatch
+          }, function(err){
+            if(!err){
+              console.log('[MIGRATION] Migration réussie !');
+              showToastNew('✅ Données récupérées et migrées !');
+              // Supprimer les anciens chemins
+              db.ref('collectes').remove();
+              db.ref('clients').remove();
+              db.ref('dispatch').remove();
+              // Recharger depuis Firebase
+              location.reload();
+            } else {
+              console.error('[MIGRATION] Erreur:', err);
+            }
+          });
+        });
+      });
+    });
+  });
+}
+
 // INIT
 charger();
 buildLogin();
@@ -4061,6 +4111,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
