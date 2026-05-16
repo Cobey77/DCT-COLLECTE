@@ -771,7 +771,7 @@ function sauvegarderFirebase(){
   syncTimeout = setTimeout(function(){
     window._lastWriteTime = Date.now();
     var al = document.getElementById('activity-list');
-    var activiteHtml = al ? al.innerHTML : '';
+    var activiteHtml = al ? al.innerHTML : (localStorage.getItem('dct_v3_activite') || '');
     db.ref('dct').update({
       collectes: collectes,
       clients: clientsParCollecte,
@@ -784,8 +784,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.0';
-var APP_UPDATE = '16/05/2026 à 00:11';
+var APP_VERSION = 'v1.4.1';
+var APP_UPDATE = '16/05/2026 à 12:09';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1528,6 +1528,7 @@ var _mapSelection = [];
 var _mapInstance = null;
 var _mapMarkers = {};
 var _mapPolyline = null; // Ligne de trajet
+var _mapHistorique = []; // Historique Ctrl+Z
 
 function ouvrirCarteDispatch(){
   if(typeof L === 'undefined'){
@@ -2393,11 +2394,15 @@ function _retirerClientDuCamion(id, truckKey){
   // Retirer le client du dispatch
   if(!dispatchParCollecte[currentCollecteId]) return;
   var dispatch = dispatchParCollecte[currentCollecteId];
+  var trks = getTrucks();
+  var truckName = trks[truckKey] ? trks[truckKey].name : truckKey;
+  var clientName = (getClients()[id]||{}).name || id;
   if(dispatch.assigned) dispatch.assigned[id] = null;
   if(dispatch.trucks && dispatch.trucks[truckKey]){
     var truck = dispatch.trucks[truckKey];
     truck.clients = truck.clients.filter(function(cid){ return cid !== id; });
   }
+  addActivity('🔄',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a retiré <strong>'+clientName+'</strong> de <strong>'+truckName+'</strong>',"À l'instant");
   // Recalculer et redessiner le tracé du camion
   _redessinerTraceCamion(truckKey);
   sauvegarder();
@@ -2617,6 +2622,7 @@ function _resetCarteSelection(){
 }
 
 function validerCarteSelection(){
+  try {
   if(_mapSelection.length === 0){
     showToastNew('⚠️ Sélectionnez au moins un client sur la carte.');
     return;
@@ -2664,6 +2670,9 @@ function validerCarteSelection(){
 
   var trks = getTrucks();
   var truckName = trks[truckKey] ? trks[truckKey].name : truckKey;
+  // Notification globale pour l'affectation
+  var clientNames = _mapSelection.map(function(s){ return (getClients()[s.id]||{}).name || s.data.name || ''; }).join(', ');
+  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a affecté <strong>'+clientNames+'</strong> → <strong>'+truckName+'</strong>',"À l'instant");
   showToastNew('✅ '+_mapSelection.length+' client(s) affecté(s) à '+truckName+' !');
 
   // Tracer la ligne permanente avec flèches pour ce camion
@@ -2730,6 +2739,10 @@ function validerCarteSelection(){
     truckOptions += '<option value="'+k+'">'+trks[k].name+'</option>';
   });
   if(sel) sel.innerHTML = truckOptions;
+  } catch(err) {
+    console.error('[VALIDER CARTE] Erreur:', err);
+    showToastNew('❌ Erreur: ' + err.message);
+  }
 }
 
 function _filtrerCarte(truckKey){
@@ -2809,11 +2822,13 @@ function demanderSupprimerCamion(k){
 function confirmerSupprimerCamion(){
   if(!curSupprimerCamion)return;
   var trks=getTrucks();var tk=trks[curSupprimerCamion];
+  var nomCamion = tk ? tk.name : curSupprimerCamion;
   if(tk){
     var asgn=getAssigned();
     tk.clients.forEach(function(id){if(asgn[id]===curSupprimerCamion)asgn[id]=null;});
     delete trks[curSupprimerCamion];
   }
+  addActivity('🗑️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a supprimé <strong>'+nomCamion+'</strong>',"À l'instant");
   curSupprimerCamion=null;
   closeModal('modal-del-camion');
   sauvegarder();renderDispatchTab();
@@ -2843,11 +2858,13 @@ function buildAffectOptions(){
 }
 function retirerClient(){
   var asgn=getAssigned(),trks=getTrucks(),old=asgn[curAffectId];
+  var truckName = old && trks[old] ? trks[old].name : '';
   if(old&&trks[old]){
     trks[old].clients=(trks[old].clients||[]).filter(function(i){return i!==curAffectId;});
     if(trks[old].hours)delete trks[old].hours[curAffectId];
   }
   asgn[curAffectId]=null;
+  addActivity('🔄',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a retiré <strong>'+curAffectName+'</strong> de <strong>'+truckName+'</strong>',"À l'instant");
   var ar=document.getElementById('affect-retirer');if(ar)ar.style.display='none';
   var at=document.getElementById('affect-title');if(at)at.textContent='Affecter '+curAffectName+' à…';
   buildAffectOptions();sauvegarder();renderDispatchTab();
@@ -3128,18 +3145,67 @@ function creerCollecte(){
 }
 
 // ACTIVITÉ
+
+function _reordonnerActivite(list){
+  if(!list) list = document.getElementById('activity-list');
+  if(!list) return;
+  var items = Array.from(list.querySelectorAll('.activity-item'));
+  if(items.length < 2) return;
+  // Trier par data-ts décroissant (récent en haut)
+  items.sort(function(a, b){
+    var tsA = parseInt(a.getAttribute('data-ts')||'0');
+    var tsB = parseInt(b.getAttribute('data-ts')||'0');
+    return tsB - tsA;
+  });
+  // Réinsérer dans le bon ordre
+  items.forEach(function(item){ list.appendChild(item); });
+}
+
 function addActivity(emoji,bg,text,time){
   if(currentUser && currentUser.admin) return; // Admin invisible
-  var list=document.getElementById('activity-list');if(!list)return;
-  var empty=list.querySelector('div[style*="text-align:center"]');if(empty)empty.remove();
+  var list=document.getElementById('activity-list');
   var now=new Date();
   var dateStr=now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
   var heureStr=now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   var timeLabel=dateStr+' à '+heureStr;
+  var ts = Date.now();
+
+  // Si on n'est pas sur l'écran activité, créer l'item en mémoire et sauvegarder
+  if(!list){
+    // Créer un div temporaire pour sauvegarder via sauvegarder()
+    var tmpList = document.createElement('div');
+    tmpList.id = 'activity-list-tmp';
+    // Récupérer l'activité existante depuis localStorage
+    var existing = localStorage.getItem('dct_v3_activite') || '';
+    tmpList.innerHTML = existing;
+    var item = document.createElement('div');
+    item.className = 'activity-item';
+    item.setAttribute('data-ts', ts);
+    item.innerHTML = '<div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div>';
+    tmpList.insertBefore(item, tmpList.firstChild);
+    localStorage.setItem('dct_v3_activite', tmpList.innerHTML);
+    // Sync Firebase
+    sauvegarderFirebase();
+    // Notifier les autres collaborateurs
+    if(firebaseReady && db){
+      var notifRef = db.ref('dct_notifs');
+      notifRef.transaction(function(current){
+        var data = current || {};
+        COLLABS.forEach(function(co){
+          if(co.name !== currentUser.name && !co.admin) data[co.id] = (data[co.id]||0) + 1;
+        });
+        return data;
+      });
+    }
+    return;
+  }
+  var empty=list.querySelector('div[style*="text-align:center"]');if(empty)empty.remove();
   var item=document.createElement('div');item.className='activity-item';
-  item.setAttribute('data-ts', Date.now());
+  item.setAttribute('data-ts', ts);
   item.innerHTML='<div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div>';
   list.insertBefore(item,list.firstChild);
+  // Réordonner le fil par timestamp décroissant
+  _reordonnerActivite(list);
   // Incrémenter le compteur global dans Firebase
   if(firebaseReady && db){
     var notifRef = db.ref('dct_notifs');
@@ -3560,6 +3626,8 @@ function afficherConnexionsAdmin(){
         }
         if(!inserted) list2.appendChild(item);
       });
+      // Réordonner tout le fil après insertion des connexions
+      _reordonnerActivite(list2);
     });
   });
 }
@@ -4183,6 +4251,16 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
+
+
+
+
+
+
+
 
 
 
