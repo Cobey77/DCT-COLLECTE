@@ -3473,30 +3473,51 @@ function exportCamionPDF(){
 
 function afficherConnexionsAdmin(){
   if(!db) return;
-  // Charger toutes les connexions
+  // Supprimer les anciens items connexion pour éviter les doublons
+  var list = document.getElementById('activity-list');
+  if(!list) return;
+  list.querySelectorAll('.connexion-item').forEach(function(el){ el.remove(); });
+
+  // Charger toutes les connexions depuis Firebase
   db.ref('dct_connexions').orderByChild('ts').once('value', function(snap){
     localStorage.setItem('dct_admin_connexions_seen', Date.now());
     var data = snap.val();
     if(!data) return;
-    var list = document.getElementById('activity-list');
-    if(!list) return;
+    var list2 = document.getElementById('activity-list');
+    if(!list2) return;
+
     // Trier par timestamp décroissant — plus récent en haut
     var connexions = Object.values(data).sort(function(a,b){ return b.ts - a.ts; });
-    // Ajouter un titre section
+
+    // Supprimer doublons (même who + même minute)
+    var seen = {};
+    connexions = connexions.filter(function(conn){
+      var key = conn.who + '_' + Math.floor((conn.ts||0)/60000);
+      if(seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+
+    // Titre section
     var titre = document.createElement('div');
+    titre.className = 'connexion-item';
     titre.style.cssText = 'font-size:12px;font-weight:800;color:#1a237e;margin:12px 0 6px;text-transform:uppercase;letter-spacing:0.5px;';
     titre.textContent = '🔑 Connexions collaborateurs';
-    list.insertBefore(titre, list.firstChild);
-    // Insérer après le titre (appendChild pour respecter l'ordre du sort)
+    list2.insertBefore(titre, list2.firstChild);
+
+    // Insérer après le titre dans l'ordre (récent en haut)
+    var insertAfter = titre;
     connexions.forEach(function(conn){
       var item = document.createElement('div');
-      item.className = 'activity-item';
+      item.className = 'activity-item connexion-item';
       item.style.cssText = 'background:#f0f4ff;border-left:3px solid #1a237e;margin-bottom:6px;';
       item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">🔑</div>'
         + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong>'
         + " s'est connecté(e)</div>"
         + '<div class="activity-time">'+conn.date+'</div></div>';
-      list.appendChild(item);
+      // Insérer après le dernier élément inséré pour garder l'ordre
+      insertAfter.after(item);
+      insertAfter = item;
     });
   });
 }
@@ -4120,6 +4141,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
