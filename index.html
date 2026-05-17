@@ -784,8 +784,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.1';
-var APP_UPDATE = '16/05/2026 à 12:09';
+var APP_VERSION = 'v1.4.2';
+var APP_UPDATE = '17/05/2026 à 21:23';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1528,6 +1528,7 @@ var _mapSelection = [];
 var _mapInstance = null;
 var _mapMarkers = {};
 var _mapPolyline = null; // Ligne de trajet
+var _mapPolylines = {}; // Tracés permanents par camion
 var _mapHistorique = []; // Historique Ctrl+Z
 
 function ouvrirCarteDispatch(){
@@ -3103,6 +3104,11 @@ function toggleExcep(){
   if(sg){sg.style.opacity=excepOn?'0.3':'1';sg.style.pointerEvents=excepOn?'none':'auto';}
 }
 function creerCollecte(){
+  // Guard : attendre que Firebase soit chargé avant de créer une collecte
+  if(!firebaseReady){
+    showToastNew('⏳ Chargement en cours, réessaie dans quelques secondes...');
+    return;
+  }
   var sel=document.querySelector('.sunday-chip.sel');
   var dateLabel;
   if(excepOn){
@@ -4251,6 +4257,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
