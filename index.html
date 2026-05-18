@@ -641,10 +641,6 @@ function initFirebase(){
     db = firebase.database();
     firebaseReady = true;
     console.log("Firebase OK");
-    // Débloquer les profils sur l'écran de connexion
-    if(document.getElementById('s-login') && document.getElementById('s-login').classList.contains('active')){
-      buildLogin();
-    }
     // Charger le message admin dès que Firebase est prêt
     chargerMessageAdmin();
     // Migrer les données de l'ancien format si nécessaire
@@ -788,8 +784,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.3';
-var APP_UPDATE = '18/05/2026 à 08:34';
+var APP_VERSION = 'v1.4.4';
+var APP_UPDATE = '18/05/2026 à 08:42';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -935,14 +931,8 @@ function buildLogin(){
   var nonAdmins = COLLABS.filter(function(c){ return !c.admin; });
   var admins = COLLABS.filter(function(c){ return c.admin; });
   var ordered = nonAdmins.concat(admins);
-  var fbPret = firebaseReady;
   ordered.forEach(function(c){
-    if(!c.admin && !fbPret){
-      // Firebase pas encore prêt → profil grisé non cliquable
-      html+='<div class="login-card" style="border-left:4px solid '+c.color+';opacity:0.5;pointer-events:none;"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div><div class="login-role" style="color:#e65100;">⏳ Chargement...</div></div></div>';
-    } else {
-      html+='<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div>'+(c.admin?'':'<div class="login-role">Collaborateur</div>')+'</div><svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></div>';
-    }
+    html+='<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div>'+(c.admin?'':'<div class="login-role">Collaborateur</div>')+'</div><svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></div>';
   });
   var lc=document.getElementById('login-cards');
   if(lc) lc.innerHTML=html;
@@ -4462,22 +4452,9 @@ setTimeout(function(){
 
 
 
+
 </script>
-<div id="modal-collab-pin" class="modal"><div class="modal-sheet" style="max-width:340px;margin:auto;">
-  <div style="text-align:center;padding:24px 20px 0;">
-    <div id="collab-pin-avatar" class="av" style="width:56px;height:56px;font-size:16px;margin:0 auto 12px;"></div>
-    <div id="collab-pin-titre" style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:6px;"></div>
-    <div id="collab-pin-sous-titre" style="font-size:13px;color:#888;margin-bottom:16px;"></div>
-    <input type="hidden" id="collab-pin-id">
-    <input type="hidden" id="collab-pin-name">
-    <input id="collab-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
-      style="width:100%;padding:14px;border:2.5px solid #0d47a1;border-radius:10px;font-size:32px;font-family:var(--font);color:#111;text-align:center;letter-spacing:12px;margin-bottom:10px;box-sizing:border-box;"
-      onkeydown="if(event.key==='Enter') document.getElementById('collab-pin-btn').click()">
-    <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:13px;font-weight:700;margin-bottom:10px;"></div>
-    <button id="collab-pin-btn" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:10px;"></button>
-    <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:10px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
-  </div>
-</div></div>
+
 
 <div id="modal-collab-pin" class="modal"><div class="modal-sheet" style="max-width:340px;margin:auto;">
   <div style="text-align:center;padding:24px 20px 0;">
