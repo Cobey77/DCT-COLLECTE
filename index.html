@@ -784,8 +784,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.4';
-var APP_UPDATE = '18/05/2026 à 08:42';
+var APP_VERSION = 'v1.4.5';
+var APP_UPDATE = '18/05/2026 à 10:49';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -968,14 +968,18 @@ function login(id){
     openModal('modal-admin-pin');
     return;
   }
+  // Vérifier si Firebase est prêt
+  if(!firebaseReady || !db){
+    // Firebase pas encore prêt → ouvrir directement en mode création PIN
+    _ouvrirModalPinCollab(collab, false, true);
+    return;
+  }
   // Vérifier si le profil est bloqué
-
   db.ref('dct_config/pins_blocked/'+id).once('value', function(snap){
     if(snap.val()){
-      // Profil bloqué
       _ouvrirModalPinCollab(collab, true);
     } else {
-      // Vérifier si le profil a déjà un PIN
+      // Vérifier si le profil a déjà un PIN dans Firebase
       db.ref('dct_config/pins/'+id).once('value', function(snapPin){
         var hasPin = !!snapPin.val();
         _ouvrirModalPinCollab(collab, false, !hasPin);
@@ -984,61 +988,69 @@ function login(id){
   });
 }
 
+// Variable globale pour l'action PIN en cours
+var _pinAction = 'login'; // 'create' ou 'login'
+
 function _ouvrirModalPinCollab(collab, bloque, isFirstTime){
   var modal = document.getElementById('modal-collab-pin');
-  if(!modal) return;
-  // Réinitialiser
-  document.getElementById('collab-pin-input').value = '';
-  document.getElementById('collab-pin-error').style.display = 'none';
+  if(!modal){ console.error('modal-collab-pin introuvable'); return; }
+  // Reset
+  var inp = document.getElementById('collab-pin-input');
+  var err = document.getElementById('collab-pin-error');
+  if(inp) inp.value = '';
+  if(err){ err.style.display = 'none'; err.textContent = ''; }
   document.getElementById('collab-pin-id').value = collab.id;
   document.getElementById('collab-pin-name').value = collab.name;
-  // Titre selon contexte
-  var titre = document.getElementById('collab-pin-titre');
-  var sousTitre = document.getElementById('collab-pin-sous-titre');
-  var btnValider = document.getElementById('collab-pin-btn');
-  if(bloque){
-    titre.textContent = '🔒 Profil bloqué';
-    sousTitre.textContent = 'Trop de tentatives échouées. Contactez l\'administrateur.';
-    document.getElementById('collab-pin-input').style.display = 'none';
-    btnValider.style.display = 'none';
-  } else if(isFirstTime){
-    titre.textContent = '🔐 Créer votre PIN';
-    sousTitre.textContent = 'Première connexion — choisissez un code PIN à 4 chiffres.';
-    document.getElementById('collab-pin-input').style.display = 'block';
-    btnValider.style.display = 'block';
-    btnValider.textContent = '✅ Créer mon PIN';
-    btnValider.onclick = function(){ _creerPinCollab(); };
-  } else {
-    titre.textContent = '🔐 '+collab.name;
-    sousTitre.textContent = 'Entrez votre code PIN à 4 chiffres.';
-    document.getElementById('collab-pin-input').style.display = 'block';
-    btnValider.style.display = 'block';
-    btnValider.textContent = '→ Connexion';
-    btnValider.onclick = function(){ _validerPinCollab(); };
-  }
-  // Avatar couleur
+  // Avatar
   var av = document.getElementById('collab-pin-avatar');
-  if(av){ av.textContent = collab.id; av.style.background = collab.bg; av.style.color = collab.color; av.style.border = '2px solid '+collab.color; }
+  if(av){ av.textContent=collab.id; av.style.background=collab.bg; av.style.color=collab.color; av.style.border='2px solid '+collab.color; }
+  var titre = document.getElementById('collab-pin-titre');
+  var sous = document.getElementById('collab-pin-sous-titre');
+  var btn = document.getElementById('collab-pin-btn');
+  if(bloque){
+    if(titre) titre.textContent = '🔒 Profil bloqué';
+    if(sous) sous.textContent = "Trop de tentatives. Contactez l'administrateur.";
+    if(inp) inp.style.display = 'none';
+    if(btn) btn.style.display = 'none';
+    _pinAction = 'blocked';
+  } else if(isFirstTime){
+    if(titre) titre.textContent = '🔐 Créer votre PIN';
+    if(sous) sous.textContent = 'Première connexion — choisissez un PIN à 4 chiffres.';
+    if(inp) inp.style.display = 'block';
+    if(btn){ btn.style.display = 'block'; btn.textContent = '✅ Créer mon PIN'; }
+    _pinAction = 'create';
+  } else {
+    if(titre) titre.textContent = '🔐 ' + collab.name;
+    if(sous) sous.textContent = 'Entrez votre code PIN à 4 chiffres.';
+    if(inp) inp.style.display = 'block';
+    if(btn){ btn.style.display = 'block'; btn.textContent = '→ Connexion'; }
+    _pinAction = 'login';
+  }
   openModal('modal-collab-pin');
-  setTimeout(function(){ var inp = document.getElementById('collab-pin-input'); if(inp && !bloque) inp.focus(); }, 300);
+  setTimeout(function(){ if(inp && !bloque) inp.focus(); }, 300);
+}
+
+function collab_pin_action(){
+  if(_pinAction === 'create') _creerPinCollab();
+  else if(_pinAction === 'login') _validerPinCollab();
 }
 
 function _creerPinCollab(){
-  var pin = (document.getElementById('collab-pin-input')||{}).value;
-  var id = (document.getElementById('collab-pin-id')||{}).value;
-  var name = (document.getElementById('collab-pin-name')||{}).value;
-  if(!pin || pin.length !== 4 || !/^[0-9]{4}$/.test(pin)){
-    var err = document.getElementById('collab-pin-error');
+  var pin = (document.getElementById('collab-pin-input')||{}).value||'';
+  var id = (document.getElementById('collab-pin-id')||{}).value||'';
+  var err = document.getElementById('collab-pin-error');
+  if(pin.length !== 4 || !/^[0-9]{4}$/.test(pin)){
     if(err){ err.textContent = '⚠️ Le PIN doit contenir exactement 4 chiffres.'; err.style.display = 'block'; }
     return;
   }
-  db.ref('dct_config/pins/'+id).set(pin, function(err){
-    if(!err){
-      closeModal('modal-collab-pin');
+  if(!firebaseReady || !db){ showToastNew('❌ Connexion Firebase non disponible.'); return; }
+  db.ref('dct_config/pins/'+id).set(pin, function(e){
+    if(!e){
       localStorage.setItem('dct_pin_attempts_'+id, '0');
-      var collab = COLLABS.find(function(c){ return c.id === id; });
+      closeModal('modal-collab-pin');
+      var collab = COLLABS.find(function(c){ return c.id===id; });
       if(collab) finalisLogin(collab);
-      showToastNew('✅ PIN créé avec succès !');
+      showToastNew('✅ PIN créé !');
     } else {
       showToastNew('❌ Erreur création PIN.');
     }
@@ -1046,38 +1058,42 @@ function _creerPinCollab(){
 }
 
 function _validerPinCollab(){
-  var pin = (document.getElementById('collab-pin-input')||{}).value;
-  var id = (document.getElementById('collab-pin-id')||{}).value;
+  var pin = (document.getElementById('collab-pin-input')||{}).value||'';
+  var id = (document.getElementById('collab-pin-id')||{}).value||'';
   var err = document.getElementById('collab-pin-error');
-  if(!pin || pin.length !== 4){
-    if(err){ err.textContent = '⚠️ Entrez votre code PIN à 4 chiffres.'; err.style.display = 'block'; }
+  if(pin.length !== 4){
+    if(err){ err.textContent = '⚠️ Entrez votre PIN à 4 chiffres.'; err.style.display = 'block'; }
     return;
   }
+  if(!firebaseReady || !db){ showToastNew('❌ Connexion Firebase non disponible.'); return; }
   db.ref('dct_config/pins/'+id).once('value', function(snap){
-    var storedPin = snap.val();
-    if(pin === storedPin){
-      // PIN correct
+    var stored = snap.val();
+    if(!stored){
+      // Pas encore de PIN → mode création
+      _pinAction = 'create';
+      var err2 = document.getElementById('collab-pin-error');
+      if(err2){ err2.textContent = '⚠️ Aucun PIN créé — choisissez un PIN.'; err2.style.display = 'block'; }
+      var btn = document.getElementById('collab-pin-btn');
+      if(btn) btn.textContent = '✅ Créer mon PIN';
+      return;
+    }
+    if(pin === stored){
       localStorage.setItem('dct_pin_attempts_'+id, '0');
       closeModal('modal-collab-pin');
-      var collab = COLLABS.find(function(c){ return c.id === id; });
+      var collab = COLLABS.find(function(c){ return c.id===id; });
       if(collab) finalisLogin(collab);
     } else {
-      // PIN incorrect
       var attempts = parseInt(localStorage.getItem('dct_pin_attempts_'+id)||'0') + 1;
       localStorage.setItem('dct_pin_attempts_'+id, attempts);
       var restants = 5 - attempts;
       if(attempts >= 5){
-        // Bloquer le profil dans Firebase
         db.ref('dct_config/pins_blocked/'+id).set(true);
-        closeModal('modal-collab-pin');
-        var collab2 = COLLABS.find(function(c){ return c.id === id; });
+        var collab2 = COLLABS.find(function(c){ return c.id===id; });
         if(collab2) _ouvrirModalPinCollab(collab2, true);
       } else {
-        if(err){
-          err.textContent = '❌ PIN incorrect — '+restants+' essai'+(restants>1?'s':'')+' restant'+(restants>1?'s':'')+'.';
-          err.style.display = 'block';
-        }
-        document.getElementById('collab-pin-input').value = '';
+        if(err){ err.textContent = '❌ PIN incorrect — '+restants+' essai'+(restants>1?'s':'')+' restant'+(restants>1?'s':'')+'.'; err.style.display = 'block'; }
+        var inp = document.getElementById('collab-pin-input');
+        if(inp) inp.value = '';
       }
     }
   });
@@ -4453,23 +4469,26 @@ setTimeout(function(){
 
 
 
+
+
 </script>
 
 
-<div id="modal-collab-pin" class="modal"><div class="modal-sheet" style="max-width:340px;margin:auto;">
-  <div style="text-align:center;padding:24px 20px 0;">
-    <div id="collab-pin-avatar" class="av" style="width:56px;height:56px;font-size:16px;margin:0 auto 12px;"></div>
-    <div id="collab-pin-titre" style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:6px;"></div>
-    <div id="collab-pin-sous-titre" style="font-size:13px;color:#888;margin-bottom:16px;"></div>
-    <input type="hidden" id="collab-pin-id">
-    <input type="hidden" id="collab-pin-name">
-    <input id="collab-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
-      style="width:100%;padding:14px;border:2.5px solid #0d47a1;border-radius:10px;font-size:32px;font-family:var(--font);color:#111;text-align:center;letter-spacing:12px;margin-bottom:10px;box-sizing:border-box;"
-      onkeydown="if(event.key==='Enter') document.getElementById('collab-pin-btn').click()">
-    <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:13px;font-weight:700;margin-bottom:10px;"></div>
-    <button id="collab-pin-btn" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:10px;"></button>
-    <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:10px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
-  </div>
-</div></div>
+<div id="modal-collab-pin" class="modal">
+<div class="modal-sheet" style="max-width:320px;margin:auto;">
+<div style="padding:24px 20px;text-align:center;">
+  <div id="collab-pin-avatar" class="av" style="width:56px;height:56px;font-size:16px;margin:0 auto 12px;"></div>
+  <div id="collab-pin-titre" style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:6px;"></div>
+  <div id="collab-pin-sous-titre" style="font-size:12px;color:#888;margin-bottom:16px;"></div>
+  <input type="hidden" id="collab-pin-id">
+  <input type="hidden" id="collab-pin-name">
+  <input id="collab-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+    style="width:100%;padding:14px;border:2.5px solid #0d47a1;border-radius:10px;font-size:32px;color:#111;text-align:center;letter-spacing:12px;margin-bottom:10px;box-sizing:border-box;font-family:var(--font);">
+  <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:12px;font-weight:700;margin-bottom:10px;padding:8px;background:#fde0e0;border-radius:8px;"></div>
+  <button id="collab-pin-btn" onclick="collab_pin_action()" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;"></button>
+  <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:11px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
+</div>
+</div>
+</div>
 </body>
 </html>
