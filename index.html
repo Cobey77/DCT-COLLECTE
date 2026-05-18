@@ -784,8 +784,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.6';
-var APP_UPDATE = '18/05/2026 à 11:05';
+var APP_VERSION = 'v1.4.7';
+var APP_UPDATE = '18/05/2026 à 11:10';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1049,7 +1049,23 @@ function _creerPinCollab(){
       localStorage.setItem('dct_pin_attempts_'+id, '0');
       closeModal('modal-collab-pin');
       var collab = COLLABS.find(function(c){ return c.id===id; });
-      if(collab) finalisLogin(collab);
+      if(collab){
+        // Notifier uniquement l'admin via dct_connexions
+        if(firebaseReady && db){
+          var now2 = new Date();
+          db.ref('dct_connexions').push({
+            who: collab.name,
+            id: collab.id,
+            bg: collab.bg,
+            color: collab.color,
+            date: now2.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+now2.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+            ts: Date.now(),
+            type: 'pin_create',
+            label: '🔐 a créé son code PIN'
+          });
+        }
+        finalisLogin(collab);
+      }
       showToastNew('✅ PIN créé !');
     } else {
       showToastNew('❌ Erreur création PIN.');
@@ -3742,9 +3758,9 @@ function afficherConnexionsAdmin(){
         item.className = 'activity-item connexion-item';
         item.setAttribute('data-ts', ts);
         item.style.cssText = 'background:#f0f4ff;border-left:3px solid #1a237e;margin-bottom:6px;';
-        item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">🔑</div>'
-          + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong>'
-          + " s'est connecté(e)</div>"
+        var labelText = conn.type === 'pin_create' ? (conn.label||'🔐 a créé son code PIN') : "s'est connecté(e)";
+        item.innerHTML = '<div class="activity-dot" style="background:#1a237e;">'+(conn.type==='pin_create'?'🔐':'🔑')+'</div>'
+          + '<div><div class="activity-text"><strong style="color:'+conn.color+'">'+conn.who+'</strong> '+labelText+'</div>'
           + '<div class="activity-time">'+conn.date+'</div></div>';
 
         // Trouver la bonne position dans le fil (ordre chronologique - récent en haut)
@@ -3905,6 +3921,63 @@ function supprimerMessage(){
   });
 }
 
+
+
+function _confirmerResetPin(cid, cname){
+  // Créer modal de confirmation
+  var modal = document.getElementById('modal-reset-pin');
+  if(modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'modal-reset-pin';
+  modal.className = 'modal-overlay';
+  modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+
+  var box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:16px;padding:24px;width:100%;max-width:320px;text-align:center;';
+
+  var emoji = document.createElement('div');
+  emoji.style.cssText = 'font-size:36px;margin-bottom:12px;';
+  emoji.textContent = '🔑';
+  box.appendChild(emoji);
+
+  var msg1 = document.createElement('div');
+  msg1.style.cssText = 'font-size:16px;font-weight:800;color:#1a1a2e;margin-bottom:8px;';
+  msg1.textContent = 'Réinitialiser le PIN de '+cname+' ?';
+  box.appendChild(msg1);
+
+  var msg2 = document.createElement('div');
+  msg2.style.cssText = 'font-size:13px;color:#888;margin-bottom:20px;line-height:1.4;';
+  msg2.textContent = cname+' devra créer un nouveau PIN à sa prochaine connexion.';
+  box.appendChild(msg2);
+
+  var btns = document.createElement('div');
+  btns.style.cssText = 'display:flex;gap:8px;';
+
+  var btnAnn = document.createElement('button');
+  btnAnn.textContent = 'Annuler';
+  btnAnn.style.cssText = 'flex:1;padding:12px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);';
+  btnAnn.onclick = function(){ modal.remove(); };
+  btns.appendChild(btnAnn);
+
+  var btnConf = document.createElement('button');
+  btnConf.textContent = '✅ Confirmer';
+  btnConf.style.cssText = 'flex:1;padding:12px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);';
+  btnConf.onclick = function(){
+    if(firebaseReady && db){
+      db.ref('dct_config/pins/'+cid).remove();
+      db.ref('dct_config/pins_blocked/'+cid).remove();
+      localStorage.removeItem('dct_pin_attempts_'+cid);
+      showToastNew('✅ PIN de '+cname+' réinitialisé !');
+    }
+    modal.remove();
+  };
+  btns.appendChild(btnConf);
+
+  box.appendChild(btns);
+  modal.appendChild(box);
+  modal.onclick = function(e){ if(e.target===modal) modal.remove(); };
+  document.body.appendChild(modal);
+}
 
 // ─── GESTION ORDRE ET MODIFICATION COLLABS ───
 
@@ -4138,12 +4211,7 @@ function renderAdminEquipe(){
     btnPin.title = 'Réinitialiser PIN';
     btnPin.style.cssText = 'padding:6px 10px;background:#e8eaf6;color:#283593;border:1.5px solid #283593;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font);';
     (function(cid,cname){ btnPin.onclick = function(){
-      if(firebaseReady && db){
-        db.ref('dct_config/pins/'+cid).remove();
-        db.ref('dct_config/pins_blocked/'+cid).remove();
-        localStorage.removeItem('dct_pin_attempts_'+cid);
-        showToastNew('✅ PIN de '+cname+' réinitialisé !');
-      }
+      _confirmerResetPin(cid, cname);
     }; })(c.id, c.name);
     row.appendChild(btnPin);
 
@@ -4399,6 +4467,9 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
 
 
 
