@@ -641,6 +641,10 @@ function initFirebase(){
     db = firebase.database();
     firebaseReady = true;
     console.log("Firebase OK");
+    // Débloquer les profils sur l'écran de connexion
+    if(document.getElementById('s-login') && document.getElementById('s-login').classList.contains('active')){
+      buildLogin();
+    }
     // Charger le message admin dès que Firebase est prêt
     chargerMessageAdmin();
     // Migrer les données de l'ancien format si nécessaire
@@ -931,8 +935,14 @@ function buildLogin(){
   var nonAdmins = COLLABS.filter(function(c){ return !c.admin; });
   var admins = COLLABS.filter(function(c){ return c.admin; });
   var ordered = nonAdmins.concat(admins);
+  var fbPret = firebaseReady;
   ordered.forEach(function(c){
-    html+='<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div>'+(c.admin?'':'<div class="login-role">Collaborateur</div>')+'</div><svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></div>';
+    if(!c.admin && !fbPret){
+      // Firebase pas encore prêt → profil grisé non cliquable
+      html+='<div class="login-card" style="border-left:4px solid '+c.color+';opacity:0.5;pointer-events:none;"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div><div class="login-role" style="color:#e65100;">⏳ Chargement...</div></div></div>';
+    } else {
+      html+='<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div>'+(c.admin?'':'<div class="login-role">Collaborateur</div>')+'</div><svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></div>';
+    }
   });
   var lc=document.getElementById('login-cards');
   if(lc) lc.innerHTML=html;
@@ -962,14 +972,125 @@ function updateNotifBadge(){
 function login(id){
   var collab = COLLABS.find(function(c){return c.id===id;})||COLLABS[0];
   if(collab.admin){
-    // Ouvrir la modale PIN
     document.getElementById('admin-pin-input').value = '';
     document.getElementById('admin-pin-error').style.display = 'none';
     document.getElementById('admin-pin-id').value = id;
     openModal('modal-admin-pin');
     return;
   }
-  finalisLogin(collab);
+  // Vérifier si le profil est bloqué
+
+  db.ref('dct_config/pins_blocked/'+id).once('value', function(snap){
+    if(snap.val()){
+      // Profil bloqué
+      _ouvrirModalPinCollab(collab, true);
+    } else {
+      // Vérifier si le profil a déjà un PIN
+      db.ref('dct_config/pins/'+id).once('value', function(snapPin){
+        var hasPin = !!snapPin.val();
+        _ouvrirModalPinCollab(collab, false, !hasPin);
+      });
+    }
+  });
+}
+
+function _ouvrirModalPinCollab(collab, bloque, isFirstTime){
+  var modal = document.getElementById('modal-collab-pin');
+  if(!modal) return;
+  // Réinitialiser
+  document.getElementById('collab-pin-input').value = '';
+  document.getElementById('collab-pin-error').style.display = 'none';
+  document.getElementById('collab-pin-id').value = collab.id;
+  document.getElementById('collab-pin-name').value = collab.name;
+  // Titre selon contexte
+  var titre = document.getElementById('collab-pin-titre');
+  var sousTitre = document.getElementById('collab-pin-sous-titre');
+  var btnValider = document.getElementById('collab-pin-btn');
+  if(bloque){
+    titre.textContent = '🔒 Profil bloqué';
+    sousTitre.textContent = 'Trop de tentatives échouées. Contactez l\'administrateur.';
+    document.getElementById('collab-pin-input').style.display = 'none';
+    btnValider.style.display = 'none';
+  } else if(isFirstTime){
+    titre.textContent = '🔐 Créer votre PIN';
+    sousTitre.textContent = 'Première connexion — choisissez un code PIN à 4 chiffres.';
+    document.getElementById('collab-pin-input').style.display = 'block';
+    btnValider.style.display = 'block';
+    btnValider.textContent = '✅ Créer mon PIN';
+    btnValider.onclick = function(){ _creerPinCollab(); };
+  } else {
+    titre.textContent = '🔐 '+collab.name;
+    sousTitre.textContent = 'Entrez votre code PIN à 4 chiffres.';
+    document.getElementById('collab-pin-input').style.display = 'block';
+    btnValider.style.display = 'block';
+    btnValider.textContent = '→ Connexion';
+    btnValider.onclick = function(){ _validerPinCollab(); };
+  }
+  // Avatar couleur
+  var av = document.getElementById('collab-pin-avatar');
+  if(av){ av.textContent = collab.id; av.style.background = collab.bg; av.style.color = collab.color; av.style.border = '2px solid '+collab.color; }
+  openModal('modal-collab-pin');
+  setTimeout(function(){ var inp = document.getElementById('collab-pin-input'); if(inp && !bloque) inp.focus(); }, 300);
+}
+
+function _creerPinCollab(){
+  var pin = (document.getElementById('collab-pin-input')||{}).value;
+  var id = (document.getElementById('collab-pin-id')||{}).value;
+  var name = (document.getElementById('collab-pin-name')||{}).value;
+  if(!pin || pin.length !== 4 || !/^[0-9]{4}$/.test(pin)){
+    var err = document.getElementById('collab-pin-error');
+    if(err){ err.textContent = '⚠️ Le PIN doit contenir exactement 4 chiffres.'; err.style.display = 'block'; }
+    return;
+  }
+  db.ref('dct_config/pins/'+id).set(pin, function(err){
+    if(!err){
+      closeModal('modal-collab-pin');
+      localStorage.setItem('dct_pin_attempts_'+id, '0');
+      var collab = COLLABS.find(function(c){ return c.id === id; });
+      if(collab) finalisLogin(collab);
+      showToastNew('✅ PIN créé avec succès !');
+    } else {
+      showToastNew('❌ Erreur création PIN.');
+    }
+  });
+}
+
+function _validerPinCollab(){
+  var pin = (document.getElementById('collab-pin-input')||{}).value;
+  var id = (document.getElementById('collab-pin-id')||{}).value;
+  var err = document.getElementById('collab-pin-error');
+  if(!pin || pin.length !== 4){
+    if(err){ err.textContent = '⚠️ Entrez votre code PIN à 4 chiffres.'; err.style.display = 'block'; }
+    return;
+  }
+  db.ref('dct_config/pins/'+id).once('value', function(snap){
+    var storedPin = snap.val();
+    if(pin === storedPin){
+      // PIN correct
+      localStorage.setItem('dct_pin_attempts_'+id, '0');
+      closeModal('modal-collab-pin');
+      var collab = COLLABS.find(function(c){ return c.id === id; });
+      if(collab) finalisLogin(collab);
+    } else {
+      // PIN incorrect
+      var attempts = parseInt(localStorage.getItem('dct_pin_attempts_'+id)||'0') + 1;
+      localStorage.setItem('dct_pin_attempts_'+id, attempts);
+      var restants = 5 - attempts;
+      if(attempts >= 5){
+        // Bloquer le profil dans Firebase
+        db.ref('dct_config/pins_blocked/'+id).set(true);
+        closeModal('modal-collab-pin');
+        var collab2 = COLLABS.find(function(c){ return c.id === id; });
+        if(collab2) _ouvrirModalPinCollab(collab2, true);
+      } else {
+        if(err){
+          err.textContent = '❌ PIN incorrect — '+restants+' essai'+(restants>1?'s':'')+' restant'+(restants>1?'s':'')+'.';
+          err.style.display = 'block';
+        }
+        document.getElementById('collab-pin-input').value = '';
+      }
+    }
+  });
 }
 
 function validerPinAdmin(){
@@ -3524,7 +3645,8 @@ function genererPDF(titre,contenu){
     +'<div class="no-print" style="margin-top:24px;padding:16px;background:#f0f0f0;border-radius:10px;text-align:center;">'
     +'<p style="font-size:13px;color:#555;margin-bottom:12px;">Sur iPhone : Partager → Imprimer → Pincer → Partager → Enregistrer en PDF</p>'
     +'<button onclick="window.print()" style="background:#009A44;color:white;border:none;padding:14px 24px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;width:100%;">🖨️ Imprimer</button>'
-    +'</div></body></html>';
+
+    +'</div></div>'
   var blob=new Blob([html],{type:'text/html;charset=utf-8'});
   var url=URL.createObjectURL(blob);
   var isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
@@ -4005,6 +4127,20 @@ function renderAdminEquipe(){
     (function(ri){ btnEdit.onclick = function(){ _ouvrirModifierCollab(ri); }; })(realIdx);
     row.appendChild(btnEdit);
 
+    var btnPin = document.createElement('button');
+    btnPin.textContent = '🔑';
+    btnPin.title = 'Réinitialiser PIN';
+    btnPin.style.cssText = 'padding:6px 10px;background:#e8eaf6;color:#283593;border:1.5px solid #283593;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font);';
+    (function(cid,cname){ btnPin.onclick = function(){
+      if(firebaseReady && db){
+        db.ref('dct_config/pins/'+cid).remove();
+        db.ref('dct_config/pins_blocked/'+cid).remove();
+        localStorage.removeItem('dct_pin_attempts_'+cid);
+        showToastNew('✅ PIN de '+cname+' réinitialisé !');
+      }
+    }; })(c.id, c.name);
+    row.appendChild(btnPin);
+
     var btnDel = document.createElement('button');
     btnDel.textContent = '🗑️';
     btnDel.style.cssText = 'padding:6px 10px;background:#fde0e0;color:#c0392b;border:1.5px solid #c0392b;border-radius:8px;font-size:13px;cursor:pointer;font-family:var(--font);';
@@ -4317,6 +4453,46 @@ setTimeout(function(){
 
 
 
+
+
+
+
+
+
+
+
+
 </script>
+<div id="modal-collab-pin" class="modal"><div class="modal-sheet" style="max-width:340px;margin:auto;">
+  <div style="text-align:center;padding:24px 20px 0;">
+    <div id="collab-pin-avatar" class="av" style="width:56px;height:56px;font-size:16px;margin:0 auto 12px;"></div>
+    <div id="collab-pin-titre" style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:6px;"></div>
+    <div id="collab-pin-sous-titre" style="font-size:13px;color:#888;margin-bottom:16px;"></div>
+    <input type="hidden" id="collab-pin-id">
+    <input type="hidden" id="collab-pin-name">
+    <input id="collab-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+      style="width:100%;padding:14px;border:2.5px solid #0d47a1;border-radius:10px;font-size:32px;font-family:var(--font);color:#111;text-align:center;letter-spacing:12px;margin-bottom:10px;box-sizing:border-box;"
+      onkeydown="if(event.key==='Enter') document.getElementById('collab-pin-btn').click()">
+    <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:13px;font-weight:700;margin-bottom:10px;"></div>
+    <button id="collab-pin-btn" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:10px;"></button>
+    <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:10px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
+  </div>
+</div></div>
+
+<div id="modal-collab-pin" class="modal"><div class="modal-sheet" style="max-width:340px;margin:auto;">
+  <div style="text-align:center;padding:24px 20px 0;">
+    <div id="collab-pin-avatar" class="av" style="width:56px;height:56px;font-size:16px;margin:0 auto 12px;"></div>
+    <div id="collab-pin-titre" style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:6px;"></div>
+    <div id="collab-pin-sous-titre" style="font-size:13px;color:#888;margin-bottom:16px;"></div>
+    <input type="hidden" id="collab-pin-id">
+    <input type="hidden" id="collab-pin-name">
+    <input id="collab-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+      style="width:100%;padding:14px;border:2.5px solid #0d47a1;border-radius:10px;font-size:32px;font-family:var(--font);color:#111;text-align:center;letter-spacing:12px;margin-bottom:10px;box-sizing:border-box;"
+      onkeydown="if(event.key==='Enter') document.getElementById('collab-pin-btn').click()">
+    <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:13px;font-weight:700;margin-bottom:10px;"></div>
+    <button id="collab-pin-btn" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:10px;"></button>
+    <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:10px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
+  </div>
+</div></div>
 </body>
 </html>
