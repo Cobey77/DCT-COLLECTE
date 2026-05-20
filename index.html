@@ -474,7 +474,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div class="suggestions" id="suggestions"></div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="f-tel" placeholder="06 00 00 00 00" type="tel" oninput="_showSuggestionsCombo()"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="f-adresse" placeholder="12 rue Pasteur"></div>
-    <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="f-infos" placeholder="Appt 3B · Bât C · Digicode 1234..."></div>
+    <div class="fg"><label class="fl">Complément d'adresse</label><input class="fi" id="f-complement" placeholder="Appt 3B · Bât C · Digicode 1234..."></div>
     <div class="form-row">
       <div class="fg"><label class="fl">Code postal</label><input class="fi" id="f-cp" placeholder="93300" maxlength="5"></div>
       <div class="fg"><label class="fl">Ville</label><input class="fi" id="f-ville" placeholder="Aubervilliers"></div>
@@ -508,7 +508,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     </div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="e-tel" type="tel"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="e-adresse"></div>
-    <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="e-infos" placeholder="Appt · Bât · Digicode..."></div>
+    <div class="fg"><label class="fl">Complément d'adresse</label><input class="fi" id="e-complement" placeholder="Appt 3B · Bât C · Digicode..."></div>
     <div class="form-row">
       <div class="fg"><label class="fl">Code postal</label><input class="fi" id="e-cp"></div>
       <div class="fg"><label class="fl">Ville</label><input class="fi" id="e-ville"></div>
@@ -645,8 +645,6 @@ function initFirebase(){
     chargerMessageAdmin();
     // Migrer les données de l'ancien format si nécessaire
     _migrerDonneesAncienFormat();
-    // Migrer les infos clients vers dct_infos/
-    _migrerInfosClients();
     // Charger la config (collabs, PIN)
     chargerConfigFirebase();
     // Écouter le message admin en temps réel
@@ -812,18 +810,9 @@ function sauvegarderFirebase(){
     var al = document.getElementById('activity-list');
     var activiteHtml = al ? al.innerHTML : (localStorage.getItem('dct_v3_activite') || '');
 
-    // Nettoyer le champ infos de clientsParCollecte avant envoi
-    // (infos est stocké séparément dans dct_infos/)
-    var clientsSansInfos = JSON.parse(JSON.stringify(clientsParCollecte));
-    Object.keys(clientsSansInfos).forEach(function(colId){
-      var clients = clientsSansInfos[colId];
-      if(clients) Object.keys(clients).forEach(function(cId){
-        if(clients[cId]) delete clients[cId].infos;
-      });
-    });
     db.ref('dct').update({
       collectes: collectes,
-      clients: clientsSansInfos,
+      clients: clientsParCollecte,
       dispatch: dispatchParCollecte,
       contacts: window.dctContacts || {},
       activite: activiteHtml
@@ -833,57 +822,11 @@ function sauvegarderFirebase(){
 
 
 
-function _migrerInfosClients(){
-  // Migrer les infos clients de dct/clients vers dct_infos/
-  if(!db || !firebaseReady) return;
-  db.ref('dct/clients').once('value', function(snap){
-    var data = snap.val();
-    if(!data) return;
-    Object.keys(data).forEach(function(colId){
-      var clients = data[colId];
-      if(!clients) return;
-      Object.keys(clients).forEach(function(cId){
-        var c = clients[cId];
-        if(c && c.infos){
-          // Migrer vers dct_infos/
-          db.ref('dct_infos/'+cId).once('value', function(snapInfos){
-            if(!snapInfos.val()){
-              // Pas encore migré → migrer
-              db.ref('dct_infos/'+cId).set(c.infos);
-            }
-          });
-          // Supprimer infos de dct/clients/
-          db.ref('dct/clients/'+colId+'/'+cId+'/infos').remove();
-        }
-      });
-    });
-  });
-}
-
-// ===== INFOS CLIENT SÉPARÉES =====
-
-function _lireInfosClient(clientId, callback){
-  if(!firebaseReady || !db){ callback(''); return; }
-  db.ref('dct_infos/'+clientId).once('value', function(snap){
-    callback(snap.val() || '');
-  });
-}
-
-function _sauvegarderInfosClient(clientId, infos){
-  if(!firebaseReady || !db) return;
-  if(infos){
-    db.ref('dct_infos/'+clientId).set(infos);
-  } else {
-    db.ref('dct_infos/'+clientId).remove();
-  }
-}
-
-// ===== FIN INFOS CLIENT =====
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.11';
-var APP_UPDATE = '20/05/2026 à 20:10';
+var APP_VERSION = 'v1.4.12';
+var APP_UPDATE = '20/05/2026 à 20:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1484,7 +1427,7 @@ function saveClientConfirme(){
   var cp=(document.getElementById('f-cp')||{}).value.trim()||'';
   var tel=(document.getElementById('f-tel')||{}).value.trim()||'';
   var adresse=(document.getElementById('f-adresse')||{}).value.trim()||'';
-  var infos=(document.getElementById('f-infos')||{}).value.trim()||'';
+  var complement=(document.getElementById('f-complement')||{}).value.trim()||'';
   var ville=(document.getElementById('f-ville')||{}).value||'';
   var colis=(document.getElementById('f-colis')||{}).value||'';
   var prix=parseFloat((document.getElementById('f-prix')||{}).value)||0;
@@ -1494,7 +1437,7 @@ function saveClientConfirme(){
   if(!clientsParCollecte[currentCollecteId])clientsParCollecte[currentCollecteId]={};
   clientsParCollecte[currentCollecteId][id]={name:prenom+' '+nom,prenom:prenom,nom:nom,tel:tel.trim(),adresse:adresse.trim(),ville:ville.trim(),cp:cp,dept:dept,colis:colis.trim(),prix:prix,bg:collab.bg,color:collab.color,by:currentUser.name};
   // Infos sauvegardées séparément dans Firebase
-  if(infos) _sauvegarderInfosClient(id, infos);
+  
   if(!dispatchParCollecte[currentCollecteId])dispatchParCollecte[currentCollecteId]={trucks:{},assigned:{}};
   dispatchParCollecte[currentCollecteId].assigned[id]=null;
   if(!window.dctContacts)window.dctContacts={};
@@ -2307,12 +2250,12 @@ function openClientFiche(id,retour){
   // Copie profonde des données du client pour éviter toute référence partagée
   var clientData = JSON.parse(JSON.stringify(c));
   // Vider TOUS les champs d'abord
-  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-adresse','e-complement','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     el.value = '';
   });
   // Remplir avec la copie locale (sans e-infos qui vient de Firebase séparé)
-  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-adresse','e-complement','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     var key=fid.replace('e-','');
     el.value = (clientData[key] !== undefined && clientData[key] !== null) ? String(clientData[key]) : '';
@@ -2321,18 +2264,11 @@ function openClientFiche(id,retour){
   var locked=isLocked();
   var lb=document.getElementById('client-locked-banner');if(lb)lb.style.display=locked?'flex':'none';
   var ca=document.getElementById('client-actions');if(ca)ca.style.display=locked?'none':'block';
-  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-adresse','e-complement','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     el.disabled=locked;el.style.background=locked?'#f5f5f5':'';el.style.color=locked?'#999':'';
   });
-  // Vider e-infos immédiatement (sera rempli async depuis dct_infos/)
-  var eInfos = document.getElementById('e-infos');
-  if(eInfos) eInfos.value = '';
-  // Charger les infos depuis Firebase (stockage séparé)
-  _lireInfosClient(id, function(infos){
-    var el = document.getElementById('e-infos');
-    if(el) el.value = infos || '';
-  });
+
   goTo('s-client');
 }
 function saveClientEdit(){
@@ -2346,13 +2282,11 @@ function saveClientEdit(){
 
   // Lire les valeurs des champs
   var newData = {};
-  ['prenom','nom','tel','adresse','ville','cp','colis'].forEach(function(k){
+  ['prenom','nom','tel','adresse','complement','ville','cp','colis'].forEach(function(k){
     var el = document.getElementById('e-'+k);
     newData[k] = el ? el.value.trim() : (clientsParCollecte[colId][id][k]||'');
   });
-  // Infos sauvegardées séparément dans Firebase
-  var infosEl = document.getElementById('e-infos');
-  if(infosEl) _sauvegarderInfosClient(id, infosEl.value.trim());
+
   var ep = document.getElementById('e-prix');
   newData.prix = ep ? (parseFloat(ep.value)||0) : (clientsParCollecte[colId][id].prix||0);
   newData.name = (newData.prenom||'')+' '+(newData.nom||'');
@@ -4680,6 +4614,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
