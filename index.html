@@ -645,6 +645,8 @@ function initFirebase(){
     chargerMessageAdmin();
     // Migrer les données de l'ancien format si nécessaire
     _migrerDonneesAncienFormat();
+    // Migrer les infos clients vers dct_infos/
+    _migrerInfosClients();
     // Charger la config (collabs, PIN)
     chargerConfigFirebase();
     // Écouter le message admin en temps réel
@@ -810,9 +812,18 @@ function sauvegarderFirebase(){
     var al = document.getElementById('activity-list');
     var activiteHtml = al ? al.innerHTML : (localStorage.getItem('dct_v3_activite') || '');
 
+    // Nettoyer le champ infos de clientsParCollecte avant envoi
+    // (infos est stocké séparément dans dct_infos/)
+    var clientsSansInfos = JSON.parse(JSON.stringify(clientsParCollecte));
+    Object.keys(clientsSansInfos).forEach(function(colId){
+      var clients = clientsSansInfos[colId];
+      if(clients) Object.keys(clients).forEach(function(cId){
+        if(clients[cId]) delete clients[cId].infos;
+      });
+    });
     db.ref('dct').update({
       collectes: collectes,
-      clients: clientsParCollecte,
+      clients: clientsSansInfos,
       dispatch: dispatchParCollecte,
       contacts: window.dctContacts || {},
       activite: activiteHtml
@@ -820,6 +831,34 @@ function sauvegarderFirebase(){
   }, 800); // Debounce 800ms pour grouper les écritures
 }
 
+
+
+function _migrerInfosClients(){
+  // Migrer les infos clients de dct/clients vers dct_infos/
+  if(!db || !firebaseReady) return;
+  db.ref('dct/clients').once('value', function(snap){
+    var data = snap.val();
+    if(!data) return;
+    Object.keys(data).forEach(function(colId){
+      var clients = data[colId];
+      if(!clients) return;
+      Object.keys(clients).forEach(function(cId){
+        var c = clients[cId];
+        if(c && c.infos){
+          // Migrer vers dct_infos/
+          db.ref('dct_infos/'+cId).once('value', function(snapInfos){
+            if(!snapInfos.val()){
+              // Pas encore migré → migrer
+              db.ref('dct_infos/'+cId).set(c.infos);
+            }
+          });
+          // Supprimer infos de dct/clients/
+          db.ref('dct/clients/'+colId+'/'+cId+'/infos').remove();
+        }
+      });
+    });
+  });
+}
 
 // ===== INFOS CLIENT SÉPARÉES =====
 
@@ -2286,10 +2325,13 @@ function openClientFiche(id,retour){
     var el=document.getElementById(fid);if(!el)return;
     el.disabled=locked;el.style.background=locked?'#f5f5f5':'';el.style.color=locked?'#999':'';
   });
+  // Vider e-infos immédiatement (sera rempli async depuis dct_infos/)
+  var eInfos = document.getElementById('e-infos');
+  if(eInfos) eInfos.value = '';
   // Charger les infos depuis Firebase (stockage séparé)
   _lireInfosClient(id, function(infos){
     var el = document.getElementById('e-infos');
-    if(el) el.value = infos;
+    if(el) el.value = infos || '';
   });
   goTo('s-client');
 }
@@ -4638,6 +4680,9 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
 
 
 
