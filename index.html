@@ -468,11 +468,11 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       📅 <span id="add-collecte-label">Collecte en cours</span> · Ajouté par <strong id="add-by" style="margin-left:4px;">Issyaka</strong>
     </div>
     <div class="form-row">
-      <div class="fg"><label class="fl">Prénom</label><input class="fi" id="f-prenom" placeholder="Fatou" oninput="showSuggestions(this.value)"></div>
-      <div class="fg"><label class="fl">Nom</label><input class="fi" id="f-nom" placeholder="Diallo"></div>
+      <div class="fg"><label class="fl">Prénom</label><input class="fi" id="f-prenom" placeholder="Fatou" oninput="_showSuggestionsCombo()"></div>
+      <div class="fg"><label class="fl">Nom</label><input class="fi" id="f-nom" placeholder="Diallo" oninput="_showSuggestionsCombo()"></div>
     </div>
     <div class="suggestions" id="suggestions"></div>
-    <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="f-tel" placeholder="06 00 00 00 00" type="tel" oninput="showSuggestions(this.value)"></div>
+    <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="f-tel" placeholder="06 00 00 00 00" type="tel" oninput="_showSuggestionsCombo()"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="f-adresse" placeholder="12 rue Pasteur"></div>
     <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="f-infos" placeholder="Appt 3B · Bât C · Digicode 1234..."></div>
     <div class="form-row">
@@ -672,6 +672,43 @@ function initFirebase(){
 
 function ecouterChangements(){
   if(!db) return;
+  // Charger UNE FOIS au démarrage pour initialiser les données
+  db.ref('dct').once('value', function(snapshotInit){
+    var dataInit = snapshotInit.val();
+    if(dataInit){
+      // Firebase = source de vérité → remplace localStorage
+      if(dataInit.collectes){
+        var cols = Array.isArray(dataInit.collectes) ? dataInit.collectes : Object.values(dataInit.collectes);
+        collectes = cols.filter(Boolean);
+        localStorage.setItem('dct_v3_collectes', JSON.stringify(collectes));
+      }
+      if(dataInit.clients){
+        // Copie profonde pour éviter les références partagées entre clients
+        var clientsCopy = JSON.parse(JSON.stringify(dataInit.clients));
+        Object.assign(clientsParCollecte, clientsCopy);
+        localStorage.setItem('dct_v3_clients', JSON.stringify(clientsParCollecte));
+      }
+      if(dataInit.dispatch){
+        Object.keys(dataInit.dispatch).forEach(function(colId){
+          var d = dataInit.dispatch[colId];
+          if(!d) return;
+          if(!d.trucks) d.trucks = {};
+          if(!d.assigned) d.assigned = {};
+          dispatchParCollecte[colId] = d;
+        });
+        localStorage.setItem('dct_v3_dispatch', JSON.stringify(dispatchParCollecte));
+      }
+      if(collectes.length){
+        var enc = collectes.find(function(x){ return x.statut === 'en_cours'; });
+        currentCollecteId = (enc || collectes[0]).id;
+      }
+    }
+    // Cacher l'écran de chargement → app prête
+    _cacherEcranChargement();
+    buildLogin();
+    try{ renderCollectesList(); }catch(e){}
+  });
+
   db.ref('dct').on('value', function(snapshot){
     // Ne JAMAIS traiter si on est sur l'écran login
     var activeNow = document.querySelector('.screen.active');
@@ -687,7 +724,7 @@ function ecouterChangements(){
       collectes = cols.filter(Boolean);
     }
     if(data.clients && typeof data.clients==='object'){
-      Object.assign(clientsParCollecte, data.clients);
+      Object.assign(clientsParCollecte, JSON.parse(JSON.stringify(data.clients)));
     }
     if(data.dispatch && typeof data.dispatch==='object'){
       Object.keys(data.dispatch).forEach(function(colId){
@@ -784,8 +821,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.7';
-var APP_UPDATE = '18/05/2026 à 11:10';
+var APP_VERSION = 'v1.4.8';
+var APP_UPDATE = '20/05/2026 à 17:55';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2204,10 +2241,16 @@ function openClientFiche(id,retour){
   if(av){av.textContent=init;av.style.background=c.bg;av.style.color=c.color;av.style.border='2px solid '+c.color;av.style.width='50px';av.style.height='50px';av.style.fontSize='15px';}
   var an=document.getElementById('client-av-name');if(an)an.textContent=c.name;
   var aby=document.getElementById('client-av-by');if(aby){aby.textContent='Ajouté par '+c.by;aby.style.color=c.color;}
+  // Vider TOUS les champs d'abord pour éviter que les valeurs précédentes persistent
+  ['e-prenom','e-nom','e-tel','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+    var el=document.getElementById(fid);if(!el)return;
+    el.value = '';
+  });
+  // Puis remplir avec les données du client
   ['e-prenom','e-nom','e-tel','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     var key=fid.replace('e-','');
-    el.value=c[key]||'';
+    el.value = (c[key] !== undefined && c[key] !== null) ? c[key] : '';
   });
   var ds=document.getElementById('delete-sub');if(ds)ds.textContent='Supprimer '+c.name+' ?';
   var locked=isLocked();
@@ -2272,6 +2315,54 @@ function getAllContacts(){
   });
   return Object.values(contacts);
 }
+function _showSuggestionsCombo(){
+  var prenom = (document.getElementById('f-prenom')||{}).value||'';
+  var nom = (document.getElementById('f-nom')||{}).value||'';
+  var tel = (document.getElementById('f-tel')||{}).value||'';
+  // Si téléphone → filtrer sur téléphone en priorité
+  if(tel.replace(/ /g,'').length >= 2){
+    showSuggestions(tel);
+    return;
+  }
+  // Si prénom ET nom → filtrer sur les deux
+  if(prenom && nom){
+    showSuggestionsCombo(prenom, nom);
+  } else {
+    var combo = (prenom+' '+nom).trim();
+    showSuggestions(combo || prenom || nom);
+  }
+}
+
+function showSuggestionsCombo(prenom, nom){
+  var sug = document.getElementById('suggestions');
+  if(!sug) return;
+  var pLow = prenom.toLowerCase();
+  var nLow = nom.toLowerCase();
+  var suggestions = getAllContacts().filter(function(c){
+    var cPrenom = (c.prenom||'').toLowerCase();
+    var cNom = (c.nom||'').toLowerCase();
+    // Doit matcher à la fois le prénom ET le nom
+    return cPrenom.indexOf(pLow) === 0 && cNom.indexOf(nLow) === 0;
+  });
+  var seen = {};
+  suggestions = suggestions.filter(function(c){
+    var k = (c.name||'')+'_'+(c.tel||'');
+    if(seen[k]) return false;
+    seen[k] = true;
+    return true;
+  });
+  if(!suggestions.length){ sug.classList.remove('show'); return; }
+  sug.innerHTML = '';
+  suggestions.slice(0,5).forEach(function(c){
+    var item = document.createElement('div');
+    item.className = 'sug-item';
+    item.innerHTML = '<div class="sug-name">'+(c.name||'')+'</div><div class="sug-sub">'+(c.ville||'')+' · '+(c.tel||'')+'</div>';
+    (function(cc){ item.onclick = function(){ fillClientFromSug(cc); }; })(c);
+    sug.appendChild(item);
+  });
+  sug.classList.add('show');
+}
+
 function showSuggestions(v){
   var sug=document.getElementById('suggestions');if(!sug)return;
   if(v.length<2){sug.classList.remove('show');return;}
@@ -4409,6 +4500,31 @@ function chargerConfigFirebase(){
 // ===== FIN PANNEAU ADMINISTRATEUR =====
 
 
+
+// Gestion écran de chargement
+var _loadingTimeout = null;
+
+function _cacherEcranChargement(){
+  var screen = document.getElementById('loading-screen');
+  if(screen){
+    screen.style.transition = 'opacity 0.4s';
+    screen.style.opacity = '0';
+    setTimeout(function(){ screen.style.display = 'none'; }, 400);
+  }
+  if(_loadingTimeout) clearTimeout(_loadingTimeout);
+}
+
+function _demarrerTimeoutChargement(){
+  _loadingTimeout = setTimeout(function(){
+    var msg = document.getElementById('loading-msg');
+    var spinner = document.getElementById('loading-spinner');
+    var retry = document.getElementById('loading-retry');
+    if(msg) msg.textContent = '⚠️ Connexion lente — vérifiez votre réseau';
+    if(spinner) spinner.style.display = 'none';
+    if(retry) retry.style.display = 'block';
+  }, 15000);
+}
+
 // Migration données ancien format → nouveau format dct/*
 function _migrerDonneesAncienFormat(){
   if(!db || !firebaseReady) return;
@@ -4457,16 +4573,20 @@ function _migrerDonneesAncienFormat(){
 }
 
 // INIT
+_demarrerTimeoutChargement();
 charger();
-buildLogin();
 try{ buildSundays(); }catch(e){}
-try{ renderCollectesList(); }catch(e){}
-// Initialiser Firebase après un délai pour ne pas bloquer l'affichage des profils
+// Initialiser Firebase — les données seront chargées avant d'afficher les profils
 setTimeout(function(){
   if(typeof firebase !== 'undefined'){
     initFirebase();
   }
 }, 2000);
+
+
+
+
+
 
 
 
@@ -4562,5 +4682,18 @@ setTimeout(function(){
 </div>
 </div>
 </div>
+
+<div id="loading-screen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--font);">
+  <div id="loading-content">
+    <div style="font-size:48px;margin-bottom:16px;text-align:center;">🚛</div>
+    <div style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:8px;text-align:center;">Dakar City Transport</div>
+    <div id="loading-msg" style="font-size:13px;color:#888;margin-bottom:24px;text-align:center;">Chargement des données...</div>
+    <div id="loading-spinner" style="width:40px;height:40px;border:4px solid #e0e0e0;border-top:4px solid #0d47a1;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div>
+    <button id="loading-retry" onclick="window.location.reload()" style="display:none;margin-top:20px;padding:12px 24px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">🔄 Réessayer</button>
+  </div>
+</div>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
 </body>
 </html>
