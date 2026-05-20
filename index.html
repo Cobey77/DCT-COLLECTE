@@ -809,12 +809,24 @@ function sauvegarderFirebase(){
     window._lastWriteTime = Date.now();
     var al = document.getElementById('activity-list');
     var activiteHtml = al ? al.innerHTML : (localStorage.getItem('dct_v3_activite') || '');
-    // Debug : vérifier les infos de chaque client avant envoi Firebase
+    // Debug : vérifier les références entre clients
     if(clientsParCollecte){
       Object.keys(clientsParCollecte).forEach(function(colId){
         var clients = clientsParCollecte[colId];
-        if(clients) Object.keys(clients).forEach(function(cId){
-          console.log('[SAVE CLIENT]', cId, 'infos:', (clients[cId]||{}).infos);
+        if(!clients) return;
+        var ids = Object.keys(clients);
+        if(ids.length > 1){
+          // Vérifier si deux clients pointent vers le même objet
+          for(var i=0; i<ids.length-1; i++){
+            for(var j=i+1; j<ids.length; j++){
+              if(clients[ids[i]] === clients[ids[j]]){
+                console.error('[BUG REFERENCE] '+ids[i]+' et '+ids[j]+' sont le MEME objet!');
+              }
+            }
+          }
+        }
+        ids.forEach(function(cId){
+          console.log('[SAVE CLIENT]', cId, 'infos:', (clients[cId]||{}).infos, '| ref:', JSON.stringify(clients[cId]).substring(0,50));
         });
       });
     }
@@ -830,8 +842,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.9';
-var APP_UPDATE = '20/05/2026 à 19:30';
+var APP_VERSION = 'v1.4.10';
+var APP_UPDATE = '20/05/2026 à 19:55';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4615,6 +4627,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
