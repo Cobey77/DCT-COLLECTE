@@ -809,6 +809,15 @@ function sauvegarderFirebase(){
     window._lastWriteTime = Date.now();
     var al = document.getElementById('activity-list');
     var activiteHtml = al ? al.innerHTML : (localStorage.getItem('dct_v3_activite') || '');
+    // Debug : vérifier les infos de chaque client avant envoi Firebase
+    if(clientsParCollecte){
+      Object.keys(clientsParCollecte).forEach(function(colId){
+        var clients = clientsParCollecte[colId];
+        if(clients) Object.keys(clients).forEach(function(cId){
+          console.log('[SAVE CLIENT]', cId, 'infos:', (clients[cId]||{}).infos);
+        });
+      });
+    }
     db.ref('dct').update({
       collectes: collectes,
       clients: clientsParCollecte,
@@ -821,8 +830,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.8';
-var APP_UPDATE = '20/05/2026 à 17:55';
+var APP_VERSION = 'v1.4.9';
+var APP_UPDATE = '20/05/2026 à 19:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2241,16 +2250,18 @@ function openClientFiche(id,retour){
   if(av){av.textContent=init;av.style.background=c.bg;av.style.color=c.color;av.style.border='2px solid '+c.color;av.style.width='50px';av.style.height='50px';av.style.fontSize='15px';}
   var an=document.getElementById('client-av-name');if(an)an.textContent=c.name;
   var aby=document.getElementById('client-av-by');if(aby){aby.textContent='Ajouté par '+c.by;aby.style.color=c.color;}
-  // Vider TOUS les champs d'abord pour éviter que les valeurs précédentes persistent
+  // Copie profonde des données du client pour éviter toute référence partagée
+  var clientData = JSON.parse(JSON.stringify(c));
+  // Vider TOUS les champs d'abord
   ['e-prenom','e-nom','e-tel','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     el.value = '';
   });
-  // Puis remplir avec les données du client
+  // Remplir avec la copie locale
   ['e-prenom','e-nom','e-tel','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     var key=fid.replace('e-','');
-    el.value = (c[key] !== undefined && c[key] !== null) ? c[key] : '';
+    el.value = (clientData[key] !== undefined && clientData[key] !== null) ? String(clientData[key]) : '';
   });
   var ds=document.getElementById('delete-sub');if(ds)ds.textContent='Supprimer '+c.name+' ?';
   var locked=isLocked();
@@ -2263,14 +2274,36 @@ function openClientFiche(id,retour){
   goTo('s-client');
 }
 function saveClientEdit(){
-  var cls=getClients();if(!currentClientId||!cls[currentClientId])return;
-  var c=cls[currentClientId];
+  if(!currentClientId || !currentCollecteId) return;
+  if(!clientsParCollecte[currentCollecteId]) return;
+  if(!clientsParCollecte[currentCollecteId][currentClientId]) return;
+
+  // Snapshot de l'état actuel du client UNIQUEMENT
+  var id = currentClientId;
+  var colId = currentCollecteId;
+
+  // Lire les valeurs des champs
+  var newData = {};
   ['prenom','nom','tel','adresse','infos','ville','cp','colis'].forEach(function(k){
-    var el=document.getElementById('e-'+k);if(el)c[k]=el.value.trim();
+    var el = document.getElementById('e-'+k);
+    newData[k] = el ? el.value.trim() : (clientsParCollecte[colId][id][k]||'');
   });
-  var ep=document.getElementById('e-prix');if(ep)c.prix=parseFloat(ep.value)||0;
-  c.name=(c.prenom||'')+' '+(c.nom||'');
-  c.dept=(c.cp||'').substring(0,2);
+  var ep = document.getElementById('e-prix');
+  newData.prix = ep ? (parseFloat(ep.value)||0) : (clientsParCollecte[colId][id].prix||0);
+  newData.name = (newData.prenom||'')+' '+(newData.nom||'');
+  newData.dept = (newData.cp||'').substring(0,2);
+
+  // Conserver les champs non éditables
+  var existing = clientsParCollecte[colId][id];
+  newData.id = existing.id || id;
+  newData.bg = existing.bg || '';
+  newData.color = existing.color || '';
+  newData.by = existing.by || '';
+
+  // Remplacer UNIQUEMENT ce client dans cette collecte
+  clientsParCollecte[colId][id] = newData;
+
+  var c = newData;
   addActivity('✏️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a modifié <strong>'+c.name+'</strong>',"À l'instant");
   sauvegarder();
   var t=document.getElementById('toast-client');
@@ -4582,6 +4615,9 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
 
 
 
