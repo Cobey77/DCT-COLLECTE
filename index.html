@@ -596,7 +596,30 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div class="modal-overlay" id="modal-annuler"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">↩️</div><div class="modal-confirm-title">Annuler cette décision ?</div><div class="modal-confirm-sub" id="annuler-sub"></div><input type="hidden" id="annuler-type" value=""><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-annuler')">Non, garder</button><button class="btn-sm" style="background:#856404;color:#fff;border:2px solid #5a4000;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerAnnuler()">↩️ Oui, annuler</button></div></div></div></div>
 <div class="modal-overlay" id="modal-clear-activite"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🗑️</div><div class="modal-confirm-title">Effacer mon historique ?</div><div class="modal-confirm-sub">Irréversible. Les autres profils garderont le leur.</div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-clear-activite')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="effacerActivite()">🗑️ Effacer</button></div></div></div></div>
 <div class="modal-overlay" id="modal-del-camion"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🚛</div><div class="modal-confirm-title">Supprimer ce camion ?</div><div class="modal-confirm-sub" id="del-camion-sub"></div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-del-camion')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerSupprimerCamion()">🗑️ Supprimer</button></div></div></div></div>
-<div class="modal-overlay" id="modal-contact-edit"><div class="modal-sheet"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title" style="margin-bottom:0;" id="ce-title">Modifier</div><button onclick="closeModal('modal-contact-edit')" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button></div><input type="hidden" id="ce-key"><div class="form-row"><div class="fg"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div><div class="fg"><label class="fl">Nom</label><input class="fi" id="ce-nom"></div></div><div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div><div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div><div class="fg"></div></div><div class="form-row"><div class="fg"><label class="fl">Code postal</label><input class="fi" id="ce-cp" maxlength="5"></div><div class="fg"><label class="fl">Ville</label><input class="fi" id="ce-ville"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-contact-edit')">Annuler</button><button class="btn-sm btn-green-sm" onclick="saveContactEdit()">✅ Enregistrer</button></div><button onclick="demanderSupprimerContact()" style="width:100%;padding:12px;background:#fde0e0;color:#992020;border:2px solid #c0392b;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:10px;">🗑️ Supprimer</button></div></div>
+<div class="modal-overlay" id="modal-contact-edit" style="align-items:center;">
+<div class="modal-sheet" style="border-radius:16px;margin:16px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+    <div class="modal-title" style="margin-bottom:0;" id="ce-title">Modifier</div>
+    <button onclick="closeModal('modal-contact-edit')" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button>
+  </div>
+  <input type="hidden" id="ce-key">
+  <div class="form-row">
+    <div class="fg"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div>
+    <div class="fg"><label class="fl">Nom</label><input class="fi" id="ce-nom"></div>
+  </div>
+  <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div>
+  <div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div>
+  <div class="form-row">
+    <div class="fg"><label class="fl">Code postal</label><input class="fi" id="ce-cp" maxlength="5"></div>
+    <div class="fg"><label class="fl">Ville</label><input class="fi" id="ce-ville"></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">
+    <button class="btn-sm btn-gray-sm" onclick="closeModal('modal-contact-edit')">Annuler</button>
+    <button class="btn-sm btn-green-sm" onclick="saveContactEdit()">✅ Enregistrer</button>
+  </div>
+  <button onclick="demanderSupprimerContact()" style="width:100%;padding:12px;background:#fde0e0;color:#992020;border:2px solid #c0392b;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:10px;">🗑️ Supprimer</button>
+</div>
+</div></div>
 <div class="modal-overlay" id="modal-del-contact"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🗑️</div><div class="modal-confirm-title">Supprimer ce contact ?</div><div class="modal-confirm-sub" id="del-contact-sub"></div><input type="hidden" id="del-contact-key"><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-del-contact')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerSupprimerContact()">🗑️ Supprimer</button></div></div></div></div>
 <div class="modal-overlay" id="modal-waze"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">📍</div><div class="modal-confirm-title">Ouvrir Waze ?</div><div class="modal-confirm-sub" id="waze-adresse"></div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-waze')">Annuler</button><button class="btn-sm btn-green-sm" id="waze-btn">🗺️ Ouvrir Waze</button></div></div></div></div>
 <div class="modal-overlay" id="modal-dispatch-invalid"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">⚠️</div><div class="modal-confirm-title">Dispatch incomplet</div><div class="modal-confirm-sub" id="dispatch-errors" style="text-align:left;white-space:pre-line;"></div><div style="margin-top:16px;"><button class="btn-sm btn-green-sm" style="width:100%;" onclick="closeModal('modal-dispatch-invalid')">OK, je corrige</button></div></div></div></div>
@@ -717,11 +740,13 @@ function ecouterChangements(){
     if(!data) return;
     // Ne pas écraser si c'est nous qui venons d'écrire
     if(window._lastWriteTime && Date.now() - window._lastWriteTime < 2000) return;
+    // Toujours mettre à jour collectes, même si null (collecte supprimée)
     if(data.collectes){
-      // Firebase peut convertir les arrays en objects — normaliser
       var cols = data.collectes;
       if(!Array.isArray(cols)) cols = Object.values(cols);
       collectes = cols.filter(Boolean);
+    } else {
+      collectes = []; // Toutes les collectes ont été supprimées
     }
     if(data.clients && typeof data.clients==='object'){
       Object.assign(clientsParCollecte, JSON.parse(JSON.stringify(data.clients)));
@@ -792,9 +817,17 @@ function ecouterChangements(){
         }
       }
       else if(id==='s-collecte'){
-        updateCollecteHeader();
-        if(currentSubtab==='clients') renderClientsTab();
-        else if(currentSubtab==='dispatch') renderDispatchTab();
+        // Vérifier si la collecte courante existe encore
+        if(currentCollecteId && !collectes.find(function(c){ return c.id===currentCollecteId; })){
+          // La collecte a été supprimée → revenir à l'accueil
+          currentCollecteId = collectes.length ? collectes[0].id : null;
+          goTo('s-home');
+          renderCollectesList();
+        } else {
+          updateCollecteHeader();
+          if(currentSubtab==='clients') renderClientsTab();
+          else if(currentSubtab==='dispatch') renderDispatchTab();
+        }
       }
       else if(id==='s-camion' && currentCamion) renderCamion(currentCamion);
       else if(id==='s-clients') renderContacts();
@@ -831,8 +864,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.14';
-var APP_UPDATE = '21/05/2026 à 09:00';
+var APP_VERSION = 'v1.4.15';
+var APP_UPDATE = '21/05/2026 à 12:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1424,13 +1457,24 @@ function supprimerCollecte(id){
 }
 function confirmerSupprimerCollecte(){
   if(!collecteASupprimer)return;
-  collectes=collectes.filter(function(c){return c.id!==collecteASupprimer;});
-  delete clientsParCollecte[collecteASupprimer];
-  delete dispatchParCollecte[collecteASupprimer];
-  if(currentCollecteId===collecteASupprimer)currentCollecteId=collectes.length?collectes[0].id:null;
+  var idToDelete = collecteASupprimer;
+  collectes=collectes.filter(function(c){return c.id!==idToDelete;});
+  delete clientsParCollecte[idToDelete];
+  delete dispatchParCollecte[idToDelete];
+  if(currentCollecteId===idToDelete)currentCollecteId=collectes.length?collectes[0].id:null;
   collecteASupprimer=null;
   closeModal('modal-del-collecte');
-  sauvegarder();renderCollectesList();
+
+  // Supprimer directement dans Firebase (contourne le guard collectes vide)
+  if(firebaseReady && db){
+    var updates = {};
+    updates['dct/collectes'] = collectes.length ? collectes : null;
+    updates['dct/clients/'+idToDelete] = null;
+    updates['dct/dispatch/'+idToDelete] = null;
+    db.ref().update(updates);
+  }
+  sauvegarder();
+  renderCollectesList();
 }
 function ouvrirCollecte(id){
   try{
@@ -2547,7 +2591,7 @@ function ouvrirConfirmClient(){
       '<div style="margin-bottom:6px;font-size:15px;font-weight:800;">'+prenom+' '+nom+'</div>'
       +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📞 '+(tel||'—')+'</div>'
       +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📍 '+(adresse?adresse+', ':'')+cp+' '+ville+'</div>'
-      +(infos?'<div style="font-size:12px;color:#777;margin-bottom:3px;margin-left:18px;">'+infos+'</div>':'')
+
       +'<div style="font-size:13px;color:#555;margin-bottom:3px;">📦 '+(colis||'—')+'</div>'
       +'<div style="font-size:14px;font-weight:800;color:#006b2d;margin-top:6px;">💰 '+(prix||0)+' €</div>';
   }
@@ -4687,6 +4731,10 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
+
 
 
 
