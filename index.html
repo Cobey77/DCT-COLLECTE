@@ -864,8 +864,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.16';
-var APP_UPDATE = '21/05/2026 à 21:00';
+var APP_VERSION = 'v1.4.17';
+var APP_UPDATE = '21/05/2026 à 21:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4744,6 +4744,17 @@ function _migrerDonneesAncienFormat(){
 }
 
 // INIT
+// Détection du paramètre reset dans l'URL
+(function(){
+  var params = new URLSearchParams(window.location.search);
+  if(params.get('reset') === '1'){
+    // Vider tout le localStorage
+    localStorage.clear();
+    // Rediriger vers l'URL propre sans le paramètre
+    window.location.replace(window.location.pathname);
+    return;
+  }
+})();
 charger();
 buildLogin();
 try{ buildSundays(); }catch(e){}
@@ -4754,6 +4765,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
