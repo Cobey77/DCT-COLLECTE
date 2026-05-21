@@ -773,7 +773,12 @@ function ecouterChangements(){
       });
       Object.assign(dispatchParCollecte, data.dispatch);
     }
-    if(data.contacts && typeof data.contacts==='object') window.dctContacts = data.contacts;
+    // Toujours mettre à jour dctContacts, même si null (contact supprimé)
+    if(data.contacts && typeof data.contacts==='object'){
+      window.dctContacts = data.contacts;
+    } else if(!data.contacts) {
+      window.dctContacts = {}; // Tous les contacts ont été supprimés
+    }
     if(data.activite){
       var al = document.getElementById('activity-list');
       if(al && data.activite.indexOf('Aucune')===-1){
@@ -864,8 +869,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.17';
-var APP_UPDATE = '21/05/2026 à 21:30';
+var APP_VERSION = 'v1.4.18';
+var APP_UPDATE = '21/05/2026 à 22:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3672,21 +3677,51 @@ function demanderSupprimerContact(){
 
 function confirmerSupprimerContact(){
   var key = document.getElementById('del-contact-key').value;
-  
-  // Supprimer du carnet global
+  var name = '';
+
+  // Supprimer du localStorage immédiatement
   if(window.dctContacts && window.dctContacts[key]){
-    var name = window.dctContacts[key].name;
+    name = window.dctContacts[key].name || '';
     delete window.dctContacts[key];
   }
-  // Supprimer dans Firebase - contacts ET clients dans toutes les collectes
+
+  // Supprimer dans clientsParCollecte local
+  var removed = 0;
+  Object.keys(clientsParCollecte).forEach(function(colId){
+    var cls = clientsParCollecte[colId];
+    if(!cls) return;
+    Object.keys(cls).forEach(function(clientId){
+      var c = cls[clientId];
+      if(!c) return;
+      var k = c.tel ? c.tel.replace(/ /g,'') : (c.prenom+'_'+c.nom).toLowerCase();
+      if(k === key){
+        if(dispatchParCollecte[colId]){
+          var asgn = dispatchParCollecte[colId].assigned;
+          var trks = dispatchParCollecte[colId].trucks;
+          var tk = asgn && asgn[clientId];
+          if(tk && trks && trks[tk]){
+            trks[tk].clients = (trks[tk].clients||[]).filter(function(i){return i!==clientId;});
+            trks[tk].validated = (trks[tk].validated||[]).filter(function(i){return i!==clientId;});
+            trks[tk].refused = (trks[tk].refused||[]).filter(function(i){return i!==clientId;});
+            if(trks[tk].hours) delete trks[tk].hours[clientId];
+          }
+          if(asgn) delete asgn[clientId];
+        }
+        if(!name && c.name) name = c.name;
+        delete cls[clientId];
+        removed++;
+      }
+    });
+  });
+
+  // Tout supprimer dans Firebase en une seule opération atomique
   if(firebaseReady && db){
+    var updates = {};
     // Supprimer du carnet contacts
-    db.ref('dct/contacts/'+key).remove();
-    // Supprimer aussi les clients correspondants dans chaque collecte
+    updates['dct/contacts/'+key] = null;
+    // Supprimer clients dans toutes les collectes Firebase
     db.ref('dct/clients').once('value', function(snap){
-      var allClients = snap.val();
-      if(!allClients) return;
-      var updates = {};
+      var allClients = snap.val() || {};
       Object.keys(allClients).forEach(function(colId){
         var cls = allClients[colId];
         if(!cls) return;
@@ -3700,44 +3735,20 @@ function confirmerSupprimerContact(){
           }
         });
       });
-      if(Object.keys(updates).length > 0){
-        db.ref().update(updates);
-      }
+      // Envoyer toutes les suppressions en une fois
+      db.ref().update(updates, function(){
+        // Après suppression Firebase, sauvegarder le reste
+        sauvegarder();
+      });
     });
+  } else {
+    sauvegarder();
   }
-  
-  // Supprimer dans toutes les collectes
-  var removed = 0;
-  Object.keys(clientsParCollecte).forEach(function(colId){
-    var cls = clientsParCollecte[colId];
-    Object.keys(cls).forEach(function(clientId){
-      var c = cls[clientId];
-      var k = c.tel ? c.tel.replace(/ /g,'') : (c.prenom+'_'+c.nom).toLowerCase();
-      if(k === key){
-        // Retirer aussi du dispatch
-        if(dispatchParCollecte[colId]){
-          var asgn = dispatchParCollecte[colId].assigned;
-          var trks = dispatchParCollecte[colId].trucks;
-          var tk = asgn && asgn[clientId];
-          if(tk && trks && trks[tk]){
-            trks[tk].clients = (trks[tk].clients||[]).filter(function(i){return i!==clientId;});
-            trks[tk].validated = (trks[tk].validated||[]).filter(function(i){return i!==clientId;});
-            trks[tk].refused = (trks[tk].refused||[]).filter(function(i){return i!==clientId;});
-            if(trks[tk].hours) delete trks[tk].hours[clientId];
-          }
-          if(asgn) delete asgn[clientId];
-        }
-        delete cls[clientId];
-        removed++;
-      }
-    });
-  });
-  
+
   addActivity('🗑️', currentUser.bg,
     '<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a supprimé le contact <strong>'+(name||key)+'</strong>',
     "À l'instant"
   );
-  sauvegarder();
   closeModal('modal-del-contact');
   closeModal('modal-contact-edit');
   renderContacts();
@@ -4765,6 +4776,8 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
 
 
 
