@@ -474,7 +474,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div class="suggestions" id="suggestions"></div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="f-tel" placeholder="06 00 00 00 00" type="tel" oninput="_showSuggestionsCombo()"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="f-adresse" placeholder="12 rue Pasteur"></div>
-    <div class="fg"><label class="fl">Complément d'adresse</label><input class="fi" id="f-complement" placeholder="Appt 3B · Bât C · Digicode 1234..."></div>
+    
     <div class="form-row">
       <div class="fg"><label class="fl">Code postal</label><input class="fi" id="f-cp" placeholder="93300" maxlength="5"></div>
       <div class="fg"><label class="fl">Ville</label><input class="fi" id="f-ville" placeholder="Aubervilliers"></div>
@@ -508,7 +508,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     </div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="e-tel" type="tel"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="e-adresse"></div>
-    <div class="fg"><label class="fl">Complément d'adresse</label><input class="fi" id="e-complement" placeholder="Appt 3B · Bât C · Digicode..."></div>
+    
     <div class="form-row">
       <div class="fg"><label class="fl">Code postal</label><input class="fi" id="e-cp"></div>
       <div class="fg"><label class="fl">Ville</label><input class="fi" id="e-ville"></div>
@@ -596,7 +596,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div class="modal-overlay" id="modal-annuler"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">↩️</div><div class="modal-confirm-title">Annuler cette décision ?</div><div class="modal-confirm-sub" id="annuler-sub"></div><input type="hidden" id="annuler-type" value=""><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-annuler')">Non, garder</button><button class="btn-sm" style="background:#856404;color:#fff;border:2px solid #5a4000;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerAnnuler()">↩️ Oui, annuler</button></div></div></div></div>
 <div class="modal-overlay" id="modal-clear-activite"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🗑️</div><div class="modal-confirm-title">Effacer mon historique ?</div><div class="modal-confirm-sub">Irréversible. Les autres profils garderont le leur.</div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-clear-activite')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="effacerActivite()">🗑️ Effacer</button></div></div></div></div>
 <div class="modal-overlay" id="modal-del-camion"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🚛</div><div class="modal-confirm-title">Supprimer ce camion ?</div><div class="modal-confirm-sub" id="del-camion-sub"></div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-del-camion')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerSupprimerCamion()">🗑️ Supprimer</button></div></div></div></div>
-<div class="modal-overlay" id="modal-contact-edit"><div class="modal-sheet"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title" style="margin-bottom:0;" id="ce-title">Modifier</div><button onclick="closeModal('modal-contact-edit')" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button></div><input type="hidden" id="ce-key"><div class="form-row"><div class="fg"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div><div class="fg"><label class="fl">Nom</label><input class="fi" id="ce-nom"></div></div><div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div><div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div><div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="ce-infos" placeholder="Appt · Bât · Digicode..."></div><div class="form-row"><div class="fg"><label class="fl">Code postal</label><input class="fi" id="ce-cp" maxlength="5"></div><div class="fg"><label class="fl">Ville</label><input class="fi" id="ce-ville"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-contact-edit')">Annuler</button><button class="btn-sm btn-green-sm" onclick="saveContactEdit()">✅ Enregistrer</button></div><button onclick="demanderSupprimerContact()" style="width:100%;padding:12px;background:#fde0e0;color:#992020;border:2px solid #c0392b;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:10px;">🗑️ Supprimer</button></div></div>
+<div class="modal-overlay" id="modal-contact-edit"><div class="modal-sheet"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;"><div class="modal-title" style="margin-bottom:0;" id="ce-title">Modifier</div><button onclick="closeModal('modal-contact-edit')" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button></div><input type="hidden" id="ce-key"><div class="form-row"><div class="fg"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div><div class="fg"><label class="fl">Nom</label><input class="fi" id="ce-nom"></div></div><div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div><div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div><div class="fg"></div></div><div class="form-row"><div class="fg"><label class="fl">Code postal</label><input class="fi" id="ce-cp" maxlength="5"></div><div class="fg"><label class="fl">Ville</label><input class="fi" id="ce-ville"></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-contact-edit')">Annuler</button><button class="btn-sm btn-green-sm" onclick="saveContactEdit()">✅ Enregistrer</button></div><button onclick="demanderSupprimerContact()" style="width:100%;padding:12px;background:#fde0e0;color:#992020;border:2px solid #c0392b;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);margin-top:10px;">🗑️ Supprimer</button></div></div>
 <div class="modal-overlay" id="modal-del-contact"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">🗑️</div><div class="modal-confirm-title">Supprimer ce contact ?</div><div class="modal-confirm-sub" id="del-contact-sub"></div><input type="hidden" id="del-contact-key"><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-del-contact')">Annuler</button><button class="btn-sm" style="background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="confirmerSupprimerContact()">🗑️ Supprimer</button></div></div></div></div>
 <div class="modal-overlay" id="modal-waze"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">📍</div><div class="modal-confirm-title">Ouvrir Waze ?</div><div class="modal-confirm-sub" id="waze-adresse"></div><div class="modal-confirm-btns"><button class="btn-sm btn-gray-sm" onclick="closeModal('modal-waze')">Annuler</button><button class="btn-sm btn-green-sm" id="waze-btn">🗺️ Ouvrir Waze</button></div></div></div></div>
 <div class="modal-overlay" id="modal-dispatch-invalid"><div class="modal-sheet"><div class="modal-confirm"><div class="modal-emoji">⚠️</div><div class="modal-confirm-title">Dispatch incomplet</div><div class="modal-confirm-sub" id="dispatch-errors" style="text-align:left;white-space:pre-line;"></div><div style="margin-top:16px;"><button class="btn-sm btn-green-sm" style="width:100%;" onclick="closeModal('modal-dispatch-invalid')">OK, je corrige</button></div></div></div></div>
@@ -784,7 +784,13 @@ function ecouterChangements(){
     if(activeScreen){
       var id = activeScreen.id;
       if(id==='s-login') return; // Ne pas interférer avec l'écran de login
-      if(id==='s-home') renderCollectesList();
+      if(id==='s-home'){
+        renderCollectesList();
+        // Si la collecte courante a été supprimée → mettre à jour
+        if(currentCollecteId && !collectes.find(function(c){ return c.id===currentCollecteId; })){
+          currentCollecteId = collectes.length ? collectes[0].id : null;
+        }
+      }
       else if(id==='s-collecte'){
         updateCollecteHeader();
         if(currentSubtab==='clients') renderClientsTab();
@@ -825,8 +831,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.12';
-var APP_UPDATE = '20/05/2026 à 20:30';
+var APP_VERSION = 'v1.4.14';
+var APP_UPDATE = '21/05/2026 à 09:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1170,6 +1176,67 @@ function validerPinAdmin(){
 }
 
 function finalisLogin(collab){
+  // Afficher écran de chargement et charger les données fraîches depuis Firebase
+  var loadScreen = document.getElementById('login-loading-screen');
+  if(loadScreen) loadScreen.classList.add('show');
+
+  var _loginTimeout = setTimeout(function(){
+    var msg = document.getElementById('login-loading-msg');
+    var spinner = document.getElementById('login-loading-spinner');
+    var retry = document.getElementById('login-loading-retry');
+    if(msg) msg.textContent = '⚠️ Connexion lente — vérifiez votre réseau';
+    if(spinner) spinner.style.display = 'none';
+    if(retry) retry.style.display = 'block';
+  }, 15000);
+
+  function _doLogin(){
+    clearTimeout(_loginTimeout);
+    // Délai minimum 800ms pour que l'utilisateur voit l'écran de chargement
+    setTimeout(function(){
+      if(loadScreen) loadScreen.classList.remove('show');
+      _finalisLoginCore(collab);
+    }, 800);
+  }
+
+  if(firebaseReady && db){
+    // Charger les données fraîches depuis Firebase
+    db.ref('dct').once('value', function(snap){
+      var data = snap.val();
+      if(data){
+        if(data.collectes){
+          var cols = Array.isArray(data.collectes) ? data.collectes : Object.values(data.collectes);
+          collectes = cols.filter(Boolean);
+          localStorage.setItem('dct_v3_collectes', JSON.stringify(collectes));
+        }
+        if(data.clients){
+          var clientsCopy = JSON.parse(JSON.stringify(data.clients));
+          Object.assign(clientsParCollecte, clientsCopy);
+          localStorage.setItem('dct_v3_clients', JSON.stringify(clientsParCollecte));
+        }
+        if(data.dispatch){
+          Object.keys(data.dispatch).forEach(function(colId){
+            var d = data.dispatch[colId];
+            if(!d) return;
+            if(!d.trucks) d.trucks = {};
+            if(!d.assigned) d.assigned = {};
+            dispatchParCollecte[colId] = d;
+          });
+          localStorage.setItem('dct_v3_dispatch', JSON.stringify(dispatchParCollecte));
+        }
+        if(collectes.length){
+          var enc = collectes.find(function(x){ return x.statut === 'en_cours'; });
+          currentCollecteId = (enc || collectes[0]).id;
+        }
+      }
+      _doLogin();
+    });
+  } else {
+    // Firebase pas prêt → utiliser localStorage
+    _doLogin();
+  }
+}
+
+function _finalisLoginCore(collab){
   currentUser = collab;
   // Enregistrer la connexion (visible uniquement par l'admin)
   if(!collab.admin){
@@ -1427,7 +1494,7 @@ function saveClientConfirme(){
   var cp=(document.getElementById('f-cp')||{}).value.trim()||'';
   var tel=(document.getElementById('f-tel')||{}).value.trim()||'';
   var adresse=(document.getElementById('f-adresse')||{}).value.trim()||'';
-  var complement=(document.getElementById('f-complement')||{}).value.trim()||'';
+
   var ville=(document.getElementById('f-ville')||{}).value||'';
   var colis=(document.getElementById('f-colis')||{}).value||'';
   var prix=parseFloat((document.getElementById('f-prix')||{}).value)||0;
@@ -2250,12 +2317,12 @@ function openClientFiche(id,retour){
   // Copie profonde des données du client pour éviter toute référence partagée
   var clientData = JSON.parse(JSON.stringify(c));
   // Vider TOUS les champs d'abord
-  ['e-prenom','e-nom','e-tel','e-adresse','e-complement','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     el.value = '';
   });
-  // Remplir avec la copie locale (sans e-infos qui vient de Firebase séparé)
-  ['e-prenom','e-nom','e-tel','e-adresse','e-complement','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  // Remplir avec la copie locale
+  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     var key=fid.replace('e-','');
     el.value = (clientData[key] !== undefined && clientData[key] !== null) ? String(clientData[key]) : '';
@@ -2264,7 +2331,7 @@ function openClientFiche(id,retour){
   var locked=isLocked();
   var lb=document.getElementById('client-locked-banner');if(lb)lb.style.display=locked?'flex':'none';
   var ca=document.getElementById('client-actions');if(ca)ca.style.display=locked?'none':'block';
-  ['e-prenom','e-nom','e-tel','e-adresse','e-complement','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     el.disabled=locked;el.style.background=locked?'#f5f5f5':'';el.style.color=locked?'#999':'';
   });
@@ -2282,7 +2349,7 @@ function saveClientEdit(){
 
   // Lire les valeurs des champs
   var newData = {};
-  ['prenom','nom','tel','adresse','complement','ville','cp','colis'].forEach(function(k){
+  ['prenom','nom','tel','adresse','ville','cp','colis'].forEach(function(k){
     var el = document.getElementById('e-'+k);
     newData[k] = el ? el.value.trim() : (clientsParCollecte[colId][id][k]||'');
   });
@@ -2295,9 +2362,10 @@ function saveClientEdit(){
   // Conserver les champs non éditables
   var existing = clientsParCollecte[colId][id];
   newData.id = existing.id || id;
-  newData.bg = existing.bg || '';
-  newData.color = existing.color || '';
-  newData.by = existing.by || '';
+  // Préserver bg/color ou utiliser les couleurs du collaborateur courant
+  newData.bg = existing.bg || (currentUser ? currentUser.bg : '#f0f0f0');
+  newData.color = existing.color || (currentUser ? currentUser.color : '#333');
+  newData.by = existing.by || (currentUser ? currentUser.name : '');
 
   // Remplacer UNIQUEMENT ce client dans cette collecte
   clientsParCollecte[colId][id] = newData;
@@ -2327,7 +2395,7 @@ function ouvrirAjoutClient(){
   var c=collectes.find(function(x){return x.id===currentCollecteId;});
   var lb=document.getElementById('add-collecte-label');if(lb)lb.textContent=c?c.date:'Collecte';
   var ab=document.getElementById('add-by');if(ab){ab.textContent=currentUser.name;ab.style.color=currentUser.color;}
-  ['f-prenom','f-nom','f-tel','f-adresse','f-infos','f-ville','f-cp','f-colis','f-prix'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  ['f-prenom','f-nom','f-tel','f-adresse','f-ville','f-cp','f-colis','f-prix'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   var sug=document.getElementById('suggestions');if(sug)sug.classList.remove('show');
   goTo('s-add');
 }
@@ -2469,7 +2537,6 @@ function ouvrirConfirmClient(){
   var nom=(document.getElementById('f-nom')||{}).value.trim();
   var tel=(document.getElementById('f-tel')||{}).value.trim();
   var adresse=(document.getElementById('f-adresse')||{}).value.trim();
-  var infos=(document.getElementById('f-infos')||{}).value||'';infos=infos.trim();
   var cp=(document.getElementById('f-cp')||{}).value.trim();
   var ville=(document.getElementById('f-ville')||{}).value.trim();
   var colis=(document.getElementById('f-colis')||{}).value.trim();
@@ -3567,6 +3634,10 @@ function confirmerSupprimerContact(){
     var name = window.dctContacts[key].name;
     delete window.dctContacts[key];
   }
+  // Supprimer aussi directement dans Firebase (pour sync immédiate)
+  if(firebaseReady && db){
+    db.ref('dct/contacts/'+key).remove();
+  }
   
   // Supprimer dans toutes les collectes
   var removed = 0;
@@ -3613,6 +3684,7 @@ function saveContactEdit(){
   var nom = document.getElementById('ce-nom').value.trim();
   var tel = document.getElementById('ce-tel').value.trim();
   var adresse = document.getElementById('ce-adresse').value.trim();
+
   var cp = document.getElementById('ce-cp').value.trim();
   var ville = document.getElementById('ce-ville').value.trim();
   
@@ -3636,7 +3708,7 @@ function saveContactEdit(){
   var newKey = tel ? tel.replace(/ /g,'') : (prenom+'_'+nom).toLowerCase();
   var updatedContact = {
     prenom:prenom, nom:nom, name:prenom+' '+nom,
-    tel:tel, adresse:adresse, cp:cp, ville:ville,
+    tel:tel, adresse:adresse,  cp:cp, ville:ville,
     dept:cp.substring(0,2), by:oldContact.by
   };
   
@@ -3658,6 +3730,7 @@ function saveContactEdit(){
         cls[clientId].name = prenom+' '+nom;
         cls[clientId].tel = tel;
         cls[clientId].adresse = adresse;
+
         cls[clientId].cp = cp;
         cls[clientId].ville = ville;
         cls[clientId].dept = cp.substring(0,2);
@@ -4537,7 +4610,6 @@ function chargerConfigFirebase(){
 var _loadingTimeout = null;
 
 function _cacherEcranChargement(){
-  var screen = document.getElementById('loading-screen');
   if(screen){
     screen.style.transition = 'opacity 0.4s';
     screen.style.opacity = '0';
@@ -4605,15 +4677,26 @@ function _migrerDonneesAncienFormat(){
 }
 
 // INIT
-_demarrerTimeoutChargement();
 charger();
+buildLogin();
 try{ buildSundays(); }catch(e){}
+try{ renderCollectesList(); }catch(e){}
 // Initialiser Firebase — les données seront chargées avant d'afficher les profils
 setTimeout(function(){
   if(typeof firebase !== 'undefined'){
     initFirebase();
   }
 }, 2000);
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -4724,17 +4807,15 @@ setTimeout(function(){
 </div>
 </div>
 
-<div id="loading-screen" style="position:fixed;top:0;left:0;width:100%;height:100%;background:#fff;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;font-family:var(--font);">
-  <div id="loading-content">
-    <div style="font-size:48px;margin-bottom:16px;text-align:center;">🚛</div>
-    <div style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:8px;text-align:center;">Dakar City Transport</div>
-    <div id="loading-msg" style="font-size:13px;color:#888;margin-bottom:24px;text-align:center;">Chargement des données...</div>
-    <div id="loading-spinner" style="width:40px;height:40px;border:4px solid #e0e0e0;border-top:4px solid #0d47a1;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div>
-    <button id="loading-retry" onclick="window.location.reload()" style="display:none;margin-top:20px;padding:12px 24px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">🔄 Réessayer</button>
+<div id="login-loading-screen" class="modal-overlay" style="z-index:99999;background:#fff;flex-direction:column;align-items:center;justify-content:center;">
+  <div style="text-align:center;padding:40px 20px;">
+    <div style="font-size:48px;margin-bottom:16px;">🚛</div>
+    <div style="font-size:18px;font-weight:800;color:#1a1a2e;margin-bottom:8px;">Chargement...</div>
+    <div id="login-loading-msg" style="font-size:13px;color:#888;margin-bottom:24px;">Récupération de vos données</div>
+    <div style="width:40px;height:40px;border:4px solid #e0e0e0;border-top:4px solid #0d47a1;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;" id="login-loading-spinner"></div>
+    <button id="login-loading-retry" onclick="window.location.reload()" style="display:none;margin-top:20px;padding:12px 24px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);">🔄 Réessayer</button>
   </div>
 </div>
-<style>
-@keyframes spin { to { transform: rotate(360deg); } }
-</style>
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
 </body>
 </html>
