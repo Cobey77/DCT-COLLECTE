@@ -410,7 +410,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="header">
     <button class="btn-back" onclick="goTo('s-home')">← Retour</button>
     <div class="h-title">Nouvelle collecte</div>
-    <div style="width:60px;"></div>
+    <button class="btn-pdf" onclick="exportCamionPDF()" style="background:#009A44;color:white;border:none;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 PDF</button>
   </div>
   <div class="content">
     <div class="slabel">Choisir le dimanche</div>
@@ -460,7 +460,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="header">
     <button class="btn-back" onclick="goTo('s-collecte')">← Retour</button>
     <div class="h-title">Nouveau client</div>
-    <div style="width:60px;"></div>
+    <button class="btn-pdf" onclick="exportCamionPDF()" style="background:#009A44;color:white;border:none;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 PDF</button>
   </div>
   <div class="content">
     <div id="toast-add" class="toast toast-success"></div>
@@ -494,7 +494,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="header">
     <button class="btn-back" id="client-back" onclick="goTo('s-collecte')">← Retour</button>
     <div class="h-title">Fiche client</div>
-    <div style="width:60px;"></div>
+    <button class="btn-pdf" onclick="exportCamionPDF()" style="background:#009A44;color:white;border:none;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 PDF</button>
   </div>
   <div class="content">
     <div id="toast-client" class="toast toast-success"></div>
@@ -530,7 +530,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="header">
     <button class="btn-back" onclick="goTo('s-collecte')">← Dispatch</button>
     <div style="text-align:center;"><div class="h-title" style="font-size:14px;" id="camion-title">Camion A</div><div class="h-sub">Feuille de route</div></div>
-    <button class="btn-pdf" onclick="exportCamionPDF()">📄 PDF</button>
+    <button class="btn-pdf" onclick="exportCamionPDF()" style="background:#009A44;color:white;border:none;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 PDF</button>
   </div>
   <div class="content">
     <div style="background:white;border:2px solid var(--green);border-radius:var(--radius);padding:14px;margin-bottom:14px;">
@@ -566,7 +566,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="header" style="background:#1a1a2e;color:#fff;flex-shrink:0;">
     <button class="btn-back" onclick="quitterAdmin()" style="color:#fff;background:rgba(255,255,255,0.15);border-color:rgba(255,255,255,0.3);">← Quitter</button>
     <div class="h-title" style="color:#fff;">⚙️ Administration</div>
-    <div style="width:60px;"></div>
+    <button class="btn-pdf" onclick="exportCamionPDF()" style="background:#009A44;color:white;border:none;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 PDF</button>
   </div>
   <div style="display:flex;border-bottom:2px solid #e0e0e0;background:#fff;flex-shrink:0;">
     <button id="admin-tab-equipe" onclick="showAdminTab('equipe')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid #009A44;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#009A44;font-family:var(--font);">👥 Équipe</button>
@@ -772,6 +772,13 @@ function ecouterChangements(){
           else if(!Array.isArray(tk.refused)) tk.refused=Object.values(tk.refused).filter(Boolean);
           if(!tk.hours || typeof tk.hours!=='object') tk.hours={};
           if(!tk.name) tk.name='Camion '+k;
+          // Préserver wazeTs, finTs et cancelled locaux si Firebase ne les a pas
+          var localTk = dispatchParCollecte[colId] && dispatchParCollecte[colId].trucks && dispatchParCollecte[colId].trucks[k];
+          if(localTk){
+            if(!tk.wazeTs && localTk.wazeTs) tk.wazeTs = localTk.wazeTs;
+            if(!tk.finTs && localTk.finTs) tk.finTs = localTk.finTs;
+            if(!tk.cancelled && localTk.cancelled) tk.cancelled = localTk.cancelled;
+          }
         });
       });
       Object.assign(dispatchParCollecte, data.dispatch);
@@ -872,8 +879,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.21';
-var APP_UPDATE = '22/05/2026 à 16:30';
+var APP_VERSION = 'v1.4.22';
+var APP_UPDATE = '22/05/2026 à 21:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3264,6 +3271,111 @@ function confirmerAnnulation(){
   renderCamion(tk);
 }
 
+
+function exportCamionPDF(){
+  var k = currentCamion;
+  var trks = getTrucks();
+  var cls = getClients();
+  var tk = trks[k];
+  if(!tk) return;
+  var collecte = collectes.find(function(c){ return c.id===currentCollecteId; });
+  var dateStr = collecte ? collecte.date : '';
+  var dateGen = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
+
+  // Trier clients par ordre Waze
+  var sorted = tk.clients.slice().sort(function(a,b){
+    var tsA = (tk.wazeTs&&tk.wazeTs[a]) || 9999999999999;
+    var tsB = (tk.wazeTs&&tk.wazeTs[b]) || 9999999999999;
+    return tsA - tsB;
+  });
+
+  var tot = getTruckTotal(k);
+  var col = getTruckCollected(k);
+
+  var css = '*{box-sizing:border-box;margin:0;padding:0;}'
+    +'body{font-family:Arial,sans-serif;color:#1a1a2e;font-size:13px;padding:20px;}'
+    +'.header{margin-bottom:20px;border-bottom:2px solid #009A44;padding-bottom:12px;}'
+    +'.title{font-size:20px;font-weight:700;color:#009A44;}'
+    +'.subtitle{font-size:13px;color:#555;margin-top:4px;}'
+    +'.stats{display:flex;gap:12px;margin:12px 0 20px;}'
+    +'.stat{background:#f0f0f0;border-radius:8px;padding:8px 14px;text-align:center;}'
+    +'.stat-label{font-size:10px;color:#666;margin-bottom:2px;}'
+    +'.stat-val{font-size:16px;font-weight:700;color:#1a1a2e;}'
+    +'.client-card{border:1px solid #ddd;border-radius:8px;padding:14px;margin-bottom:12px;page-break-inside:avoid;}'
+    +'.client-num{display:inline-block;background:#1a1a2e;color:white;width:24px;height:24px;border-radius:50%;text-align:center;line-height:24px;font-size:12px;font-weight:700;margin-right:8px;}'
+    +'.client-name{font-size:16px;font-weight:700;color:#1a1a2e;}'
+    +'.client-row{display:flex;align-items:flex-start;gap:8px;margin-top:8px;font-size:13px;color:#333;}'
+    +'.client-label{color:#888;min-width:60px;font-size:11px;margin-top:2px;}'
+    +'.badge{padding:3px 10px;border-radius:5px;font-size:11px;font-weight:700;}'
+    +'.badge-ok{background:#d4f5e4;color:#0a5c30;}'
+    +'.badge-no{background:#ffd6d6;color:#8b0000;}'
+    +'.badge-ann{background:#ede0ff;color:#4a0080;}'
+    +'.badge-wait{background:#f0f0f0;color:#666;}'
+    +'.checkbox{width:20px;height:20px;border:2px solid #ddd;border-radius:4px;display:inline-block;margin-right:8px;vertical-align:middle;}'
+    +'.footer{text-align:center;font-size:11px;color:#aaa;margin-top:20px;border-top:1px solid #eee;padding-top:10px;}'
+    +'@media print{.no-print{display:none;}}';
+
+  var html = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><title>Feuille de route — '+tk.name+'</title><style>'+css+'</style></head><body>';
+
+  // En-tête
+  html += '<div class="header">';
+  html += '<div class="title">🚛 '+tk.name+' — Feuille de route</div>';
+  html += '<div class="subtitle">'+dateStr+' · Généré le '+dateGen+'</div>';
+  html += '</div>';
+
+  // Stats
+  html += '<div class="stats">';
+  html += '<div class="stat"><div class="stat-label">Clients</div><div class="stat-val">'+sorted.length+'</div></div>';
+  html += '<div class="stat"><div class="stat-label">Total prévu</div><div class="stat-val">'+tot+' €</div></div>';
+  html += '<div class="stat"><div class="stat-label">Collecté</div><div class="stat-val">'+col+' €</div></div>';
+  html += '</div>';
+
+  // Liste clients
+  sorted.forEach(function(id, i){
+    var c = cls[id];
+    if(!c) return;
+    var val = (tk.validated||[]).includes(id);
+    var ref = (tk.refused||[]).includes(id);
+    var ann = (tk.cancelled||[]).includes(id);
+    var badge = val ? '<span class="badge badge-ok">✅ Livré</span>'
+      : ref ? '<span class="badge badge-no">❌ Refusé</span>'
+      : ann ? '<span class="badge badge-ann">🚫 Annulé</span>'
+      : '<span class="badge badge-wait">⬜ En attente</span>';
+    var adresse = (c.adresse||'') + ', ' + (c.cp||'') + ' ' + (c.ville||'');
+    var infos = c.infos ? '<div class="client-row"><span class="client-label">Infos</span><span>'+c.infos+'</span></div>' : '';
+    var tel = c.tel ? '<div class="client-row"><span class="client-label">Tél.</span><span>'+c.tel+'</span></div>' : '';
+
+    html += '<div class="client-card">';
+    html += '<div style="display:flex;align-items:center;justify-content:space-between;">';
+    html += '<div><span class="client-num">'+(i+1)+'</span><span class="client-name">'+c.name+'</span></div>';
+    html += badge;
+    html += '</div>';
+    html += '<div class="client-row"><span class="client-label">Adresse</span><span style="font-weight:600;">'+adresse+'</span></div>';
+    if(infos) html += infos;
+    if(tel) html += tel;
+    html += '<div class="client-row"><span class="client-label">Colis</span><span>'+(c.colis||'—')+'</span></div>';
+    html += '<div class="client-row"><span class="client-label">Prix</span><span style="font-weight:700;color:#009A44;">'+(c.prix||0)+' €</span></div>';
+    html += '</div>';
+  });
+
+  html += '<div class="footer">Dakar City Transport · '+tk.name+' · '+dateStr+'</div>';
+  html += '<div class="no-print" style="margin-top:24px;padding:16px;background:#f0f0f0;border-radius:10px;text-align:center;">';
+  html += '<p style="font-size:13px;color:#555;margin-bottom:12px;">Sur iPhone : Partager → Imprimer → Pincer → Partager → Enregistrer en PDF</p>';
+  html += '<button onclick="window.print()" style="background:#009A44;color:white;border:none;padding:14px 24px;border-radius:10px;font-size:16px;font-weight:bold;cursor:pointer;width:100%;">🖨️ Imprimer</button>';
+  html += '</div></body></html>';
+
+  var blob = new Blob([html],{type:'text/html;charset=utf-8'});
+  var url = URL.createObjectURL(blob);
+  var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+  if(isIOS){ window.open(url,'_blank'); }
+  else {
+    var a = document.createElement('a');
+    a.href=url; a.download='Feuille_Route_'+tk.name.replace(/ /g,'_')+'_'+dateStr.replace(/\s/g,'_')+'.html';
+    a.style.display='none'; document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); },1000);
+  }
+}
+
 // AFFECTER
 function openAffect(id,name){
   curAffectId=id;curAffectName=name;
@@ -4158,18 +4270,6 @@ function exportPDF(){
     setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},1000);
   }
 }
-function exportCamionPDF(){
-  var k=currentCamion;if(!k)return;
-  var trks=getTrucks(),cls=getClients(),tk=trks[k];if(!tk)return;
-  var sorted=tk.clients.slice().sort(function(a,b){return ((tk.hours&&tk.hours[a])||'99').localeCompare((tk.hours&&tk.hours[b])||'99');});
-  var tot=getTruckTotal(k),col=getTruckCollected(k);
-  var rows='<table><tr><th>#</th><th>Heure</th><th>Client</th><th>Adresse</th><th>Tél</th><th>Colis</th><th>Prix</th><th>Statut</th></tr>';
-  sorted.forEach(function(id,i){var c=cls[id];if(!c)return;var val=(tk.validated||[]).includes(id),ref=(tk.refused||[]).includes(id);rows+='<tr><td>'+(i+1)+'</td><td>'+((tk.hours&&tk.hours[id])||'--')+'</td><td>'+c.name+'</td><td>'+(c.adresse||'')+', '+(c.cp||'')+' '+(c.ville||'')+'</td><td>'+(c.tel||'')+'</td><td>'+(c.colis||'')+'</td><td>'+(c.prix||0)+' €</td><td>'+(val?'<span class="ok">OK</span>':ref?'<span class="no">Non</span>':'<span class="wait">...</span>')+'</td></tr>';});
-  rows+='</table>';
-  genererPDF('Feuille — '+tk.name,'<h2>'+tk.name+'</h2><p>Prévu: '+tot+' € | Collecté: '+col+' €</p>'+rows);
-}
-
-
 
 function afficherConnexionsAdmin(){
   if(!db) return;
@@ -4954,6 +5054,9 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
 
 
 
