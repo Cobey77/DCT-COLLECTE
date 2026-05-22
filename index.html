@@ -127,7 +127,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 .modal-emoji{font-size:38px;margin-bottom:10px;}
 .modal-confirm-title{font-size:17px;font-weight:700;color:var(--text);margin-bottom:8px;}
 .modal-confirm-sub{font-size:13px;color:var(--text2);margin-bottom:22px;}
-.modal-confirm-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.modal-confirm-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;}.btn-modal-cancel{padding:13px;background:#f0f0f0;color:#333;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);}.btn-modal-confirm{padding:13px;background:#c0392b;color:#fff;border:2px solid #922b21;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);}
 
 /* INFO BANNER */
 .info-banner{background:var(--green-light);border:1.5px solid var(--green);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:14px;font-size:12px;color:var(--green-dark);font-weight:600;display:flex;align-items:center;gap:8px;}
@@ -1838,6 +1838,8 @@ function _rafraichirCarte(){
 // ===== CARTE DISPATCH =====
 
 var _mapSelection = [];
+var _wazeTimestamps = {}; // {collecteId_truckKey_clientId: timestamp}
+var _finTimestamps = {}; // {collecteId_truckKey_clientId: timestamp}
 var _mapInstance = null;
 var _mapMarkers = {};
 var _mapPolyline = null; // Ligne de trajet
@@ -3264,7 +3266,12 @@ function confirmerAnnulation(){
   if(!trks[tk].cancelled)trks[tk].cancelled=[];
   if(!trks[tk].cancelled.includes(id))trks[tk].cancelled.push(id);
   if(!trks[tk].finTs)trks[tk].finTs={};
-  trks[tk].finTs[id]=Date.now();
+  var finTs_val = Date.now();
+  trks[tk].finTs[id]=finTs_val;
+  // Écriture directe dans Firebase
+  if(currentCollecteId && firebaseReady && db){
+    db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
+  }
   addActivity('🚫',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — annulé : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
   sauvegarder();
   closeModal('modal-annulation');
@@ -3482,7 +3489,21 @@ function renderCamion(k){
     adresseEl.style.cssText='cursor:pointer;';
     adresseEl.innerHTML='📍 <strong style="color:#009A44;text-decoration:underline;">'+adresseFull+'</strong>';
     (function(wl,af,cid){
-      adresseEl.onclick=function(){ window._wazeClientId=cid; ouvrirModalWaze(wl,af); };
+      adresseEl.onclick=function(){
+        // Enregistrer timestamp départ directement dans Firebase
+        if(currentCamion && currentCollecteId && firebaseReady && db){
+          var ts = Date.now();
+          // Écriture directe dans Firebase sans passer par sauvegarder()
+          db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+currentCamion+'/wazeTs/'+cid).set(ts);
+          // Aussi en mémoire locale
+          var trks = getTrucks();
+          if(trks[currentCamion]){
+            if(!trks[currentCamion].wazeTs) trks[currentCamion].wazeTs = {};
+            trks[currentCamion].wazeTs[cid] = ts;
+          }
+        }
+        ouvrirModalWaze(wl,af,cid);
+      };
     })(wazeLink,adresseFull,c.id);
     det.appendChild(adresseEl);
     var telEl=document.createElement('div');telEl.className='route-detail-row';
@@ -3524,7 +3545,7 @@ function renderCamion(k){
       (function(cid,kk,cn,cp){bv.onclick=function(){askValider(cid,kk,cn,cp);};})(id,k,c.name,c.prix);
       var br=document.createElement('button');br.className='route-action-btn route-action-refuse';br.textContent='❌';
       (function(cid,kk,cn){br.onclick=function(){askRefus(cid,kk,cn);};})(id,k,c.name);
-      var ba=document.createElement('button');ba.className='action-btn route-action-cancel';ba.textContent='🚫';
+      var ba=document.createElement('button');ba.className='route-action-btn route-action-cancel';ba.textContent='🚫 Annulé';
       (function(cid,kk,cn){ba.onclick=function(){demanderAnnulation(cid,kk);};})(id,k,c.name);
       act.appendChild(bv);act.appendChild(br);act.appendChild(ba);
     }
@@ -3538,19 +3559,23 @@ function renderCamion(k){
 }
 
 // HEURE MODAL
-function ouvrirModalWaze(url, adresse){
+function ouvrirModalWaze(url, adresse, clientId){
   var el = document.getElementById('waze-adresse');
   if(el) el.textContent = adresse;
   var btn = document.getElementById('waze-btn');
   if(btn) btn.onclick = function(){
     window.open(url,'_blank');
     closeModal('modal-waze');
-    // Enregistrer timestamp départ Waze si on est dans un camion
-    if(currentCamion && window._wazeClientId){
+    // Enregistrer timestamp départ Waze
+    if(currentCamion && clientId && currentCollecteId){
+      var ts = Date.now();
+      var wazeKey = currentCollecteId+'_'+currentCamion+'_'+clientId;
+      _wazeTimestamps[wazeKey] = ts;
+      try{ localStorage.setItem('dct_waze_ts', JSON.stringify(_wazeTimestamps)); }catch(ee){}
       var trks = getTrucks();
       if(trks[currentCamion]){
         if(!trks[currentCamion].wazeTs) trks[currentCamion].wazeTs = {};
-        trks[currentCamion].wazeTs[window._wazeClientId] = Date.now();
+        trks[currentCamion].wazeTs[clientId] = ts;
         sauvegarder();
       }
     }
@@ -3616,7 +3641,12 @@ function confirmValider(){
   if(!trks[tk].validated)trks[tk].validated=[];
   if(!trks[tk].validated.includes(id))trks[tk].validated.push(id);
   if(!trks[tk].finTs)trks[tk].finTs={};
-  trks[tk].finTs[id]=Date.now();
+  var finTs_val = Date.now();
+  trks[tk].finTs[id]=finTs_val;
+  // Écriture directe dans Firebase
+  if(currentCollecteId && firebaseReady && db){
+    db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
+  }
   addActivity('✅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a validé la ramasse de <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
   sauvegarder();closeModal('modal-valider');renderCamion(tk);
   // Mettre à jour le dispatch automatiquement
@@ -3633,7 +3663,12 @@ function confirmRefus(){
   if(!trks[tk].refused)trks[tk].refused=[];
   if(!trks[tk].refused.includes(id))trks[tk].refused.push(id);
   if(!trks[tk].finTs)trks[tk].finTs={};
-  trks[tk].finTs[id]=Date.now();
+  var finTs_val = Date.now();
+  trks[tk].finTs[id]=finTs_val;
+  // Écriture directe dans Firebase
+  if(currentCollecteId && firebaseReady && db){
+    db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
+  }
   addActivity('❌',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — ramasse non effectuée : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
   sauvegarder();closeModal('modal-refus');renderCamion(tk);
   if(currentSubtab==='dispatch')renderDispatchTab();
@@ -4196,8 +4231,14 @@ function exportPDF(){
     (tk.validated||[]).forEach(function(id){ collecte+=(cls[id]&&cls[id].prix)||0; });
 
     // Heure début = premier wazeTs, fin = dernier finTs
-    var allWaze=Object.values(tk.wazeTs||{}).filter(Boolean);
-    var allFin=Object.values(tk.finTs||{}).filter(Boolean);
+    // Lire timestamps depuis dispatchParCollecte (synchronisé avec Firebase)
+    var allWaze=[]; var allFin=[];
+    sorted.forEach(function(cid){
+      var wts = tk.wazeTs && tk.wazeTs[cid];
+      var fts = tk.finTs && tk.finTs[cid];
+      if(wts) allWaze.push(wts);
+      if(fts) allFin.push(fts);
+    });
     var debut=allWaze.length?Math.min.apply(null,allWaze):null;
     var fin=allFin.length?Math.max.apply(null,allFin):null;
     var dureeTotal=(debut&&fin)?(fin-debut):null;
@@ -4225,8 +4266,8 @@ function exportPDF(){
       var val=(tk.validated||[]).includes(id);
       var ref=(tk.refused||[]).includes(id);
       var ann=(tk.cancelled||[]).includes(id);
-      var wazeTs=(tk.wazeTs&&tk.wazeTs[id])||null;
-      var finTs=(tk.finTs&&tk.finTs[id])||null;
+      var wazeTs = (tk.wazeTs&&tk.wazeTs[id])||null;
+      var finTs = (tk.finTs&&tk.finTs[id])||null;
       var duree=(wazeTs&&finTs)?(finTs-wazeTs):null;
       var adresseFull=(c.adresse||'')+', '+(c.cp||'')+' '+(c.ville||'');
       var badge=val?'<span class="badge badge-ok">✅ Livré</span>':ref?'<span class="badge badge-no">❌ Refusé</span>':ann?'<span class="badge badge-ann">🚫 Annulé</span>':'<span class="badge badge-wait">En attente</span>';
@@ -5054,6 +5095,14 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
+
+
+
+
+
 
 
 
