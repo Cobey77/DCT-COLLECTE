@@ -869,8 +869,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.18';
-var APP_UPDATE = '21/05/2026 à 22:00';
+var APP_VERSION = 'v1.4.19';
+var APP_UPDATE = '22/05/2026 à 14:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -991,8 +991,8 @@ function setNav(tab){
   else if(tab==='clients'){goTo('s-clients');renderContacts();}
   else if(tab==='activite'){
     goTo('s-activite');
-    // Afficher connexions si admin
-    if(currentUser && currentUser.admin) afficherConnexionsAdmin();
+    // Afficher connexions si admin (léger délai pour que le DOM soit prêt)
+    if(currentUser && currentUser.admin) setTimeout(function(){ afficherConnexionsAdmin(); }, 100);
     // Marquer tout comme vu
     if(firebaseReady && db){
       db.ref('dct_notifs/'+currentUser.id).once('value', function(snap){
@@ -4000,9 +4000,11 @@ function afficherConnexionsAdmin(){
   // Charger le deletedAt des connexions depuis Firebase
   db.ref('dct_config/activite_deleted/AD_connexions').once('value', function(snapDel){
     var fbDeletedAt = snapDel.val() || 0;
-    var localDeletedAt = parseInt(localStorage.getItem('dct_connexions_deleted_AD')||'0');
-    var deletedAt = Math.max(fbDeletedAt, localDeletedAt);
-    if(deletedAt > localDeletedAt) localStorage.setItem('dct_connexions_deleted_AD', deletedAt);
+    // Si Firebase n'a pas de deletedAt, on ne se fie PAS au localStorage
+    // car il peut contenir un vieux timestamp après un reset
+    var deletedAt = fbDeletedAt;
+    // Synchroniser le localStorage avec Firebase
+    localStorage.setItem('dct_connexions_deleted_AD', deletedAt);
 
     // Charger toutes les connexions depuis Firebase
     db.ref('dct_connexions').orderByChild('ts').once('value', function(snap){
@@ -4024,7 +4026,6 @@ function afficherConnexionsAdmin(){
       });
 
       if(connexions.length === 0) return;
-
       // Insérer chaque connexion dans le fil chronologique
       connexions.forEach(function(conn){
         var ts = conn.ts || 0;
@@ -4688,12 +4689,8 @@ function chargerConfigFirebase(){
 var _loadingTimeout = null;
 
 function _cacherEcranChargement(){
-  if(screen){
-    screen.style.transition = 'opacity 0.4s';
-    screen.style.opacity = '0';
-    setTimeout(function(){ screen.style.display = 'none'; }, 400);
-  }
-  if(_loadingTimeout) clearTimeout(_loadingTimeout);
+  // loading-screen supprimé - fonction vide pour compatibilité
+  if(typeof _loadingTimeout !== 'undefined') clearTimeout(_loadingTimeout);
 }
 
 function _demarrerTimeoutChargement(){
@@ -4776,6 +4773,11 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
+
+
 
 
 
