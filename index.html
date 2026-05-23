@@ -901,8 +901,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.25';
-var APP_UPDATE = '23/05/2026 à 12:00';
+var APP_VERSION = 'v1.4.26';
+var APP_UPDATE = '23/05/2026 à 12:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3568,7 +3568,12 @@ function renderCamion(k){
       bUndoR.textContent='↩️';
       (function(cid,kk){bUndoR.onclick=function(){ouvrirModalAnnuler(cid,kk,'refus');};})(id,k);
       act.appendChild(bRef);act.appendChild(bUndoR);
-    } else if(!isAnn) {
+    } else if(isAnn) {
+      var bAnnDone=document.createElement('div');bAnnDone.className='route-action-btn';
+      bAnnDone.style.cssText='background:#ede0ff;color:#4a0080;border:2px solid #6b21a8;border-radius:10px;padding:12px;font-size:13px;font-weight:800;flex:1;text-align:center;';
+      bAnnDone.textContent='🚫 Annulé';
+      act.appendChild(bAnnDone);
+    } else {
       var bv=document.createElement('button');bv.className='route-action-btn route-action-validate';
       bv.textContent='📦 Valider — '+c.prix+' €';
       (function(cid,kk,cn,cp){bv.onclick=function(){askValider(cid,kk,cn,cp);};})(id,k,c.name,c.prix);
@@ -4235,6 +4240,7 @@ function exportPDF(){
           if(!Array.isArray(tk.validated)) tk.validated = tk.validated ? Object.values(tk.validated).filter(Boolean) : [];
           if(!Array.isArray(tk.refused)) tk.refused = tk.refused ? Object.values(tk.refused).filter(Boolean) : [];
           if(!tk.cancelled) tk.cancelled = [];
+          else if(!Array.isArray(tk.cancelled)) tk.cancelled = Object.values(tk.cancelled).filter(Boolean);
           if(!tk.wazeTs) tk.wazeTs = {};
           if(!tk.finTs) tk.finTs = {};
           dispatchParCollecte[currentCollecteId].trucks[k] = tk;
@@ -5162,6 +5168,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
