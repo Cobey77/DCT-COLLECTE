@@ -901,8 +901,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.24';
-var APP_UPDATE = '23/05/2026 à 11:15';
+var APP_VERSION = 'v1.4.25';
+var APP_UPDATE = '23/05/2026 à 12:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3294,14 +3294,14 @@ function confirmerAnnulation(){
   if(currentCollecteId && firebaseReady && db){
     db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
   }
-  addActivity('🚫',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — annulé : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
+  window._lastWriteTime=Date.now();
   if(firebaseReady && db && currentCollecteId){
-    var updates = {};
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/cancelled'] = trks[tk].cancelled;
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id] = finTs_ann;
+    var updates={};
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/cancelled']=trks[tk].cancelled;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_ann;
     db.ref().update(updates);
-    window._lastWriteTime = Date.now();
   }
+  addActivity('🚫',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — annulé : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
   sauvegarder();
   closeModal('modal-annulation');
   renderCamion(tk);
@@ -3488,8 +3488,8 @@ function renderCamion(k){
   route.innerHTML='';
   sorted.forEach(function(id,idx){
     var c=cls[id];if(!c)return;
-    var isVal=validated.includes(id),isRef=refused.includes(id),heure=hours[id]||'';
-    var card=document.createElement('div');card.className='route-card'+(isVal?' done':isRef?' refused':'');
+    var cancelled=tk.cancelled||[];var isVal=validated.includes(id),isRef=refused.includes(id),isAnn=cancelled.includes(id),heure=hours[id]||'';
+    var card=document.createElement('div');card.className='route-card'+(isVal?' done':isRef?' refused':isAnn?' cancelled':'');
     var top=document.createElement('div');top.className='route-top';
     top.onclick=function(){openClientFiche(id,'s-camion');};
     var num=document.createElement('div');num.className='route-num';
@@ -3568,7 +3568,7 @@ function renderCamion(k){
       bUndoR.textContent='↩️';
       (function(cid,kk){bUndoR.onclick=function(){ouvrirModalAnnuler(cid,kk,'refus');};})(id,k);
       act.appendChild(bRef);act.appendChild(bUndoR);
-    } else {
+    } else if(!isAnn) {
       var bv=document.createElement('button');bv.className='route-action-btn route-action-validate';
       bv.textContent='📦 Valider — '+c.prix+' €';
       (function(cid,kk,cn,cp){bv.onclick=function(){askValider(cid,kk,cn,cp);};})(id,k,c.name,c.prix);
@@ -3670,15 +3670,19 @@ function confirmValider(){
   if(!trks[tk].validated)trks[tk].validated=[];
   if(!trks[tk].validated.includes(id))trks[tk].validated.push(id);
   if(!trks[tk].finTs)trks[tk].finTs={};
-  var finTs_val = Date.now();
+  var finTs_val=Date.now();
   trks[tk].finTs[id]=finTs_val;
-  // Écriture directe dans Firebase
-  if(currentCollecteId && firebaseReady && db){
-    db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
+  window._lastWriteTime=Date.now();
+  if(firebaseReady && db && currentCollecteId){
+    var updates={};
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/validated']=trks[tk].validated;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_val;
+    db.ref().update(updates);
   }
   addActivity('✅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a validé la ramasse de <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
-  sauvegarder();closeModal('modal-valider');renderCamion(tk);
-  // Mettre à jour le dispatch automatiquement
+  sauvegarder();
+  closeModal('modal-valider');
+  renderCamion(tk);
   if(currentSubtab==='dispatch')renderDispatchTab();
 }
 function askRefus(id,tk,name){
@@ -3692,22 +3696,19 @@ function confirmRefus(){
   if(!trks[tk].refused)trks[tk].refused=[];
   if(!trks[tk].refused.includes(id))trks[tk].refused.push(id);
   if(!trks[tk].finTs)trks[tk].finTs={};
-  var finTs_val = Date.now();
-  trks[tk].finTs[id]=finTs_val;
-  // Écriture directe dans Firebase
-  if(currentCollecteId && firebaseReady && db){
-    db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
+  var finTs_ref=Date.now();
+  trks[tk].finTs[id]=finTs_ref;
+  window._lastWriteTime=Date.now();
+  if(firebaseReady && db && currentCollecteId){
+    var updates={};
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/refused']=trks[tk].refused;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_ref;
+    db.ref().update(updates);
   }
   addActivity('❌',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — ramasse non effectuée : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
-  if(firebaseReady && db && currentCollecteId){
-    var updates = {};
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/refused'] = trks[tk].refused;
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id] = finTs_val;
-    db.ref().update(updates);
-    window._lastWriteTime = Date.now();
-  }
   sauvegarder();
-  closeModal('modal-refus');renderCamion(tk);
+  closeModal('modal-refus');
+  renderCamion(tk);
   if(currentSubtab==='dispatch')renderDispatchTab();
 }
 
@@ -5161,6 +5162,8 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
 
 
 
