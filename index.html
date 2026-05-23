@@ -741,8 +741,7 @@ function ecouterChangements(){
     if(!activeNow || activeNow.id === 's-login') return;
     var data = snapshot.val();
     if(!data) return;
-    // Ne pas écraser si c'est nous qui venons d'écrire
-    if(window._lastWriteTime && Date.now() - window._lastWriteTime < 2000) return;
+    // Synchronisation Firebase active
     // Toujours mettre à jour collectes, même si null (collecte supprimée)
     if(data.collectes){
       var cols = data.collectes;
@@ -781,7 +780,33 @@ function ecouterChangements(){
           }
         });
       });
-      Object.assign(dispatchParCollecte, data.dispatch);
+      // Merger dispatch sans écraser les données locales récentes
+      Object.keys(data.dispatch).forEach(function(colId){
+        if(!dispatchParCollecte[colId]) dispatchParCollecte[colId] = data.dispatch[colId];
+        else {
+          var localD = dispatchParCollecte[colId];
+          var remoteD = data.dispatch[colId];
+          // Merger les trucks
+          if(remoteD.trucks){
+            if(!localD.trucks) localD.trucks = {};
+            Object.keys(remoteD.trucks).forEach(function(k){
+              var remoteTk = remoteD.trucks[k];
+              var localTk = localD.trucks[k];
+              if(!localTk){ localD.trucks[k] = remoteTk; return; }
+              // Merger en gardant le plus complet
+              localD.trucks[k] = remoteTk;
+              // Préserver wazeTs et finTs locaux si Firebase ne les a pas encore
+              if(localTk.wazeTs && Object.keys(localTk.wazeTs).length > Object.keys(remoteTk.wazeTs||{}).length){
+                localD.trucks[k].wazeTs = localTk.wazeTs;
+              }
+              if(localTk.finTs && Object.keys(localTk.finTs).length > Object.keys(remoteTk.finTs||{}).length){
+                localD.trucks[k].finTs = localTk.finTs;
+              }
+            });
+          }
+          if(remoteD.assigned) localD.assigned = remoteD.assigned;
+        }
+      });
     }
     // Toujours mettre à jour dctContacts, même si null (contact supprimé)
     if(data.contacts && typeof data.contacts==='object'){
@@ -879,8 +904,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.22';
-var APP_UPDATE = '22/05/2026 à 21:00';
+var APP_VERSION = 'v1.4.23';
+var APP_UPDATE = '23/05/2026 à 10:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4182,6 +4207,34 @@ function _formatDuree(ms){
 }
 
 function exportPDF(){
+  // Charger les données fraîches depuis Firebase avant de générer le PDF
+  if(firebaseReady && db && currentCollecteId){
+    db.ref('dct/dispatch/'+currentCollecteId).once('value', function(snap){
+      var freshDispatch = snap.val();
+      if(freshDispatch && freshDispatch.trucks){
+        // Mettre à jour dispatchParCollecte avec les données fraîches
+        if(!dispatchParCollecte[currentCollecteId]) dispatchParCollecte[currentCollecteId]={trucks:{},assigned:{}};
+        Object.keys(freshDispatch.trucks).forEach(function(k){
+          var tk = freshDispatch.trucks[k];
+          if(!tk) return;
+          // Normaliser
+          if(!Array.isArray(tk.clients)) tk.clients = tk.clients ? Object.values(tk.clients).filter(Boolean) : [];
+          if(!Array.isArray(tk.validated)) tk.validated = tk.validated ? Object.values(tk.validated).filter(Boolean) : [];
+          if(!Array.isArray(tk.refused)) tk.refused = tk.refused ? Object.values(tk.refused).filter(Boolean) : [];
+          if(!tk.cancelled) tk.cancelled = [];
+          if(!tk.wazeTs) tk.wazeTs = {};
+          if(!tk.finTs) tk.finTs = {};
+          dispatchParCollecte[currentCollecteId].trucks[k] = tk;
+        });
+      }
+      _genererPDFContent();
+    });
+  } else {
+    _genererPDFContent();
+  }
+}
+
+function _genererPDFContent(){
   var trks=getTrucks(),cls=getClients();
   var collecte=collectes.find(function(c){return c.id===currentCollecteId;});
   var dateStr=collecte?collecte.date:'';
@@ -4259,7 +4312,7 @@ function exportPDF(){
     html+='</div>';
 
     // Tableau clients
-    html+='<table><thead><tr><th style="width:24px">#</th><th>Client</th><th>Adresse</th><th style="white-space:nowrap">Départ</th><th style="white-space:nowrap">Fin</th><th style="white-space:nowrap">Durée</th><th style="white-space:nowrap">Statut</th><th style="text-align:right;white-space:nowrap">Prix</th></tr></thead><tbody>';
+    html+='<table><thead><tr><th style="width:24px">#</th><th>Client</th><th>Adresse</th><th style="white-space:nowrap">Départ</th><th style="white-space:nowrap">Fin</th><th style="white-space:nowrap">Durée</th><th style="white-space:nowrap">Statut</th><th style="white-space:nowrap">Colis</th><th style="text-align:right;white-space:nowrap">Prix</th></tr></thead><tbody>';
 
     sorted.forEach(function(id,i){
       var c=cls[id];if(!c)return;
@@ -4281,7 +4334,8 @@ function exportPDF(){
       html+='<td style="text-align:center;color:#333;">'+_formatHeure(finTs)+'</td>';
       html+='<td style="text-align:center;color:#333;">'+_formatDuree(duree)+'</td>';
       html+='<td style="text-align:center;">'+badge+'</td>';
-      html+='<td style="text-align:right;font-weight:700;color:#1a1a2e;">'+prix+'</td>';
+      html+='<td style="vertical-align:top;">'+(c.colis||'—')+'</td>';
+      html+='<td style="text-align:right;font-weight:700;color:#1a1a2e;white-space:nowrap;">'+prix+'</td>';
       html+='</tr>';
     });
 
@@ -5095,6 +5149,9 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
 
 
 
