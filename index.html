@@ -3295,6 +3295,13 @@ function confirmerAnnulation(){
     db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
   }
   addActivity('🚫',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — annulé : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
+  if(firebaseReady && db && currentCollecteId){
+    var updates = {};
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/cancelled'] = trks[tk].cancelled;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id] = finTs_ann;
+    db.ref().update(updates);
+    window._lastWriteTime = Date.now();
+  }
   sauvegarder();
   closeModal('modal-annulation');
   renderCamion(tk);
@@ -3692,7 +3699,15 @@ function confirmRefus(){
     db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id).set(finTs_val);
   }
   addActivity('❌',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — ramasse non effectuée : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
-  sauvegarder();closeModal('modal-refus');renderCamion(tk);
+  if(firebaseReady && db && currentCollecteId){
+    var updates = {};
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/refused'] = trks[tk].refused;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id] = finTs_val;
+    db.ref().update(updates);
+    window._lastWriteTime = Date.now();
+  }
+  sauvegarder();
+  closeModal('modal-refus');renderCamion(tk);
   if(currentSubtab==='dispatch')renderDispatchTab();
 }
 
@@ -5146,6 +5161,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
