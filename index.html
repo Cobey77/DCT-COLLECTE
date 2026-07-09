@@ -741,6 +741,8 @@ function ecouterChangements(){
     _cacherEcranChargement();
     buildLogin();
     try{ renderCollectesList(); }catch(e){}
+    // Mettre à jour les statuts automatiquement selon la date
+    setTimeout(function(){ _mettreAJourStatuts(); }, 500);
   });
 
   db.ref('dct').on('value', function(snapshot){
@@ -912,8 +914,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.1';
-var APP_UPDATE = '23/05/2026 à 20:45';
+var APP_VERSION = 'v2.2';
+var APP_UPDATE = '10/07/2026 à 00:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1403,6 +1405,8 @@ function _finalisLoginCore(collab){
     });
   }
   goTo('s-home');
+  renderCollectesList();
+  setTimeout(function(){ _mettreAJourStatuts(); }, 300);
 }
 
 // TRI DATES
@@ -3829,6 +3833,71 @@ function creerCollecte(){
   renderCollectesList();ouvrirCollecte(id);
 }
 
+
+// ===== MISE À JOUR AUTOMATIQUE DES STATUTS =====
+var MOIS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+var JOURS_FR = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
+
+function _parseDateCollecte(dateLabel){
+  // Format: "Dimanche 12 juillet 2026"
+  try {
+    var parts = dateLabel.toLowerCase().split(' ');
+    // parts = ["dimanche", "12", "juillet", "2026"]
+    var jour = parseInt(parts[1]);
+    var mois = MOIS_FR.indexOf(parts[2]);
+    var annee = parseInt(parts[3]);
+    if(isNaN(jour) || mois < 0 || isNaN(annee)) return null;
+    return new Date(annee, mois, jour, 23, 59, 59); // minuit = fin de journée
+  } catch(e){ return null; }
+}
+
+function _mettreAJourStatuts(){
+  if(!collectes || !collectes.length) return;
+  var now = new Date();
+  var changed = false;
+  collectes.forEach(function(c){
+    if(c.statut === 'terminee') return; // Déjà terminée → ne pas changer
+    var dateC = _parseDateCollecte(c.date);
+    if(!dateC) return;
+    if(now > dateC){
+      // La date est passée → Terminée
+      if(c.statut !== 'terminee'){
+        c.statut = 'terminee';
+        changed = true;
+      }
+    } else {
+      // La date est dans le futur
+      // La collecte la plus proche = en_cours, les autres = a_venir
+    }
+  });
+  
+  // Parmi celles qui ne sont pas terminées, la plus proche = en_cours
+  var aVenir = collectes.filter(function(c){ return c.statut !== 'terminee'; });
+  if(aVenir.length > 0){
+    // Trier par date
+    aVenir.sort(function(a,b){
+      var da = _parseDateCollecte(a.date);
+      var db2 = _parseDateCollecte(b.date);
+      if(!da || !db2) return 0;
+      return da - db2;
+    });
+    // La première = en_cours, les autres = a_venir
+    aVenir.forEach(function(c, i){
+      var newStatut = i === 0 ? 'en_cours' : 'a_venir';
+      if(c.statut !== newStatut){
+        c.statut = newStatut;
+        changed = true;
+      }
+    });
+  }
+  
+  if(changed){
+    sauvegarder();
+    renderCollectesList();
+  }
+}
+// ===== FIN MISE À JOUR STATUTS =====
+
 // ACTIVITÉ
 
 function _reordonnerActivite(list){
@@ -5212,6 +5281,8 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
 
 
 
