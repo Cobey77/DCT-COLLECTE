@@ -912,8 +912,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.0.0';
-var APP_UPDATE = '23/05/2026 à 20:30';
+var APP_VERSION = 'v2.1';
+var APP_UPDATE = '23/05/2026 à 20:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1438,7 +1438,33 @@ function renderCollectesList(){
   }
   addSection('En cours',enCours);
   addSection('À venir',aVenir);
-  addSection('Historique',terminees);
+
+  // Historique dépliable
+  if(terminees.length){
+    var histBtn = document.createElement('div');
+    histBtn.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:12px 4px;cursor:pointer;user-select:none;';
+    var histOpen = localStorage.getItem('dct_hist_open') === '1';
+    histBtn.innerHTML = '<span class="slabel" style="margin:0;">HISTORIQUE</span>'
+      + '<span style="display:flex;align-items:center;gap:8px;">'
+      + '<span style="background:#f0f0f0;color:#555;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;">'+terminees.length+' collecte'+(terminees.length>1?'s':'')+'</span>'
+      + '<span id="hist-arrow" style="font-size:14px;transition:transform 0.2s;">'+(histOpen?'▲':'▼')+'</span>'
+      + '</span>';
+    container.appendChild(histBtn);
+
+    var histContainer = document.createElement('div');
+    histContainer.id = 'hist-container';
+    histContainer.style.display = histOpen ? 'block' : 'none';
+    terminees.forEach(function(c){ histContainer.appendChild(makeCollecteCard(c)); });
+    container.appendChild(histContainer);
+
+    histBtn.onclick = function(){
+      var isOpen = histContainer.style.display !== 'none';
+      histContainer.style.display = isOpen ? 'none' : 'block';
+      var arrow = document.getElementById('hist-arrow');
+      if(arrow) arrow.textContent = isOpen ? '▼' : '▲';
+      localStorage.setItem('dct_hist_open', isOpen ? '0' : '1');
+    };
+  }
 }
 
 function makeCollecteCard(c){
@@ -5186,6 +5212,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
