@@ -717,6 +717,17 @@ function ecouterChangements(){
           if(!d) return;
           if(!d.trucks) d.trucks = {};
           if(!d.assigned) d.assigned = {};
+          // Normaliser chaque truck
+          Object.keys(d.trucks).forEach(function(k){
+            var tk = d.trucks[k];
+            if(!tk) return;
+            if(!Array.isArray(tk.clients)) tk.clients = tk.clients ? Object.values(tk.clients).filter(Boolean) : [];
+            if(!Array.isArray(tk.validated)) tk.validated = tk.validated ? Object.values(tk.validated).filter(Boolean) : [];
+            if(!Array.isArray(tk.refused)) tk.refused = tk.refused ? Object.values(tk.refused).filter(Boolean) : [];
+            if(!Array.isArray(tk.cancelled)) tk.cancelled = tk.cancelled ? Object.values(tk.cancelled).filter(Boolean) : [];
+            if(!tk.wazeTs || typeof tk.wazeTs !== 'object') tk.wazeTs = {};
+            if(!tk.finTs || typeof tk.finTs !== 'object') tk.finTs = {};
+          });
           dispatchParCollecte[colId] = d;
         });
         localStorage.setItem('dct_v3_dispatch', JSON.stringify(dispatchParCollecte));
@@ -901,8 +912,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v1.4.26';
-var APP_UPDATE = '23/05/2026 à 12:30';
+var APP_VERSION = 'v2.0.0';
+var APP_UPDATE = '23/05/2026 à 20:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3362,8 +3373,6 @@ function exportCamionPDF(){
   // Stats
   html += '<div class="stats">';
   html += '<div class="stat"><div class="stat-label">Clients</div><div class="stat-val">'+sorted.length+'</div></div>';
-  html += '<div class="stat"><div class="stat-label">Total prévu</div><div class="stat-val">'+tot+' €</div></div>';
-  html += '<div class="stat"><div class="stat-label">Collecté</div><div class="stat-val">'+col+' €</div></div>';
   html += '</div>';
 
   // Liste clients
@@ -3390,7 +3399,7 @@ function exportCamionPDF(){
     if(infos) html += infos;
     if(tel) html += tel;
     html += '<div class="client-row"><span class="client-label">Colis</span><span>'+(c.colis||'—')+'</span></div>';
-    html += '<div class="client-row"><span class="client-label">Prix</span><span style="font-weight:700;color:#009A44;">'+(c.prix||0)+' €</span></div>';
+    // Prix non affiché sur la feuille de route chauffeur
     html += '</div>';
   });
 
@@ -3482,7 +3491,14 @@ function renderCamion(k){
   var cfp=document.getElementById('c-fin-pct');if(cfp)cfp.textContent=pctF+'% collecté';
   var locked=isLocked();
   var hours=tk.hours||{};
-  var sorted=tk.clients.slice().sort(function(a,b){return (hours[a]||'99h99').localeCompare(hours[b]||'99h99');});
+  // Trier par heure si fixée, sinon garder l'ordre de la carte (tk.clients)
+  var sorted=tk.clients.slice().sort(function(a,b){
+    var ha=hours[a], hb=hours[b];
+    if(ha && hb) return ha.localeCompare(hb);
+    if(ha) return -1;
+    if(hb) return 1;
+    return tk.clients.indexOf(a)-tk.clients.indexOf(b);
+  });
   var route=document.getElementById('camion-route');if(!route)return;
   if(!tk.clients.length){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
   route.innerHTML='';
@@ -4291,9 +4307,11 @@ function _genererPDFContent(){
   Object.keys(trks).forEach(function(k){
     var tk=trks[k];
     var sorted=tk.clients.slice().sort(function(a,b){
-      var tsA=(tk.wazeTs&&tk.wazeTs[a])||9999999999999;
-      var tsB=(tk.wazeTs&&tk.wazeTs[b])||9999999999999;
-      return tsA-tsB;
+      var ha=tk.hours&&tk.hours[a], hb=tk.hours&&tk.hours[b];
+      if(ha && hb) return ha.localeCompare(hb);
+      if(ha) return -1;
+      if(hb) return 1;
+      return tk.clients.indexOf(a)-tk.clients.indexOf(b);
     });
 
     var livres=(tk.validated||[]).length;
@@ -5168,6 +5186,9 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
 
 
 
