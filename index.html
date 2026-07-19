@@ -210,7 +210,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 .route-actions{display:flex;gap:8px;padding:10px 14px 12px;}
 .route-action-btn{flex:1;padding:12px;border-radius:var(--radius-sm);font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);border:2.5px solid;text-align:center;}
 .route-action-validate{background:var(--green);color:#fff;border-color:var(--green-dark);}
-.route-action-refuse{background:#c0392b;color:#fff;border-color:#922b21;}
+.route-action-refuse{background:#c0392b;color:#fff;border-color:#922b21;}.route-action-more{background:#f0f0f0;color:#444;border:2px solid #bbb;font-size:18px;}.route-card.reported{border-color:#e65100 !important;background:#fff8f0 !important;}
 .route-action-done-g{background:var(--green-light);color:var(--green-dark);border-color:var(--green);cursor:default;}
 .route-action-done-r{background:#fde0e0;color:#992020;border-color:#c0392b;cursor:default;}
 .time-input{padding:8px 11px;border:2px solid #aaa;border-radius:8px;font-size:13px;font-family:var(--font);color:var(--text);background:var(--white);width:115px;}
@@ -725,6 +725,7 @@ function ecouterChangements(){
             if(!Array.isArray(tk.validated)) tk.validated = tk.validated ? Object.values(tk.validated).filter(Boolean) : [];
             if(!Array.isArray(tk.refused)) tk.refused = tk.refused ? Object.values(tk.refused).filter(Boolean) : [];
             if(!Array.isArray(tk.cancelled)) tk.cancelled = tk.cancelled ? Object.values(tk.cancelled).filter(Boolean) : [];
+            if(!Array.isArray(tk.reported)) tk.reported = tk.reported ? Object.values(tk.reported).filter(Boolean) : [];
             if(!tk.wazeTs || typeof tk.wazeTs !== 'object') tk.wazeTs = {};
             if(!tk.finTs || typeof tk.finTs !== 'object') tk.finTs = {};
           });
@@ -914,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.3';
-var APP_UPDATE = '19/07/2026 à 09:00';
+var APP_VERSION = 'v2.5';
+var APP_UPDATE = '19/07/2026 à 10:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3559,8 +3560,8 @@ function renderCamion(k){
   route.innerHTML='';
   sorted.forEach(function(id,idx){
     var c=cls[id];if(!c)return;
-    var cancelled=tk.cancelled||[];var isVal=validated.includes(id),isRef=refused.includes(id),isAnn=cancelled.includes(id),heure=hours[id]||'';
-    var card=document.createElement('div');card.className='route-card'+(isVal?' done':isRef?' refused':isAnn?' cancelled':'');
+    var cancelled=tk.cancelled||[];var reported=tk.reported||[];var isVal=validated.includes(id),isRef=refused.includes(id),isAnn=cancelled.includes(id),isRep=reported.includes(id),heure=hours[id]||'';
+    var card=document.createElement('div');card.className='route-card'+(isVal?' done':isRef?' refused':isAnn?' cancelled':isRep?' reported':'');
     var top=document.createElement('div');top.className='route-top';
     top.onclick=function(){openClientFiche(id,'s-camion');};
     var num=document.createElement('div');num.className='route-num';
@@ -3644,14 +3645,19 @@ function renderCamion(k){
       bAnnDone.style.cssText='background:#ede0ff;color:#4a0080;border:2px solid #6b21a8;border-radius:10px;padding:12px;font-size:13px;font-weight:800;flex:1;text-align:center;';
       bAnnDone.textContent='🚫 Annulé';
       act.appendChild(bAnnDone);
+    } else if(isRep) {
+      var bRepDone=document.createElement('div');bRepDone.className='route-action-btn';
+      bRepDone.style.cssText='background:#fff3e0;color:#e65100;border:2px solid #e65100;border-radius:10px;padding:12px;font-size:13px;font-weight:800;flex:1;text-align:center;';
+      bRepDone.textContent='📅 Reporté';
+      act.appendChild(bRepDone);
     } else {
       var bv=document.createElement('button');bv.className='route-action-btn route-action-validate';
       bv.textContent='📦 Valider — '+c.prix+' €';
       (function(cid,kk,cn,cp){bv.onclick=function(){askValider(cid,kk,cn,cp);};})(id,k,c.name,c.prix);
       var br=document.createElement('button');br.className='route-action-btn route-action-refuse';br.textContent='❌';
       (function(cid,kk,cn){br.onclick=function(){askRefus(cid,kk,cn);};})(id,k,c.name);
-      var ba=document.createElement('button');ba.className='route-action-btn route-action-cancel';ba.textContent='🚫 Annulé';
-      (function(cid,kk,cn){ba.onclick=function(){demanderAnnulation(cid,kk);};})(id,k,c.name);
+      var ba=document.createElement('button');ba.className='route-action-btn route-action-more';ba.textContent='⋯';
+      (function(cid,kk,cn){ba.onclick=function(){ouvrirModalPlus(cid,kk,cn);};})(id,k,c.name);
       act.appendChild(bv);act.appendChild(br);act.appendChild(ba);
     }
     card.appendChild(top);card.appendChild(det);card.appendChild(act);route.appendChild(card);
@@ -3846,7 +3852,25 @@ function creerCollecte(){
   var doublon=collectes.find(function(c){return c.date.toLowerCase()===dateLabel.toLowerCase();});
   if(doublon){showToastNew('⚠️ Une collecte existe déjà pour le '+dateLabel+'.');return;}
   var id='col_'+Date.now();
-  collectes.unshift({id:id,date:dateLabel,type:excepOn?'exceptionnel':'normal',statut:'en_cours'});
+  // Déterminer le statut selon la semaine
+  var now2 = new Date();
+  var dayOfWeek = now2.getDay(); // 0=dim, 1=lun...6=sam
+  // Début de la semaine en cours (lundi)
+  var debutSemaine = new Date(now2);
+  var diffLundi = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  debutSemaine.setDate(now2.getDate() + diffLundi);
+  debutSemaine.setHours(0,0,0,0);
+  // Fin de la semaine en cours (dimanche à 23h59)
+  var finSemaine = new Date(debutSemaine);
+  finSemaine.setDate(debutSemaine.getDate() + 6);
+  finSemaine.setHours(23,59,59,999);
+  // Parser la date de la collecte
+  var dateCollecte = _parseDateCollecte(dateLabel);
+  var statutCollecte = 'a_venir';
+  if(dateCollecte && dateCollecte >= debutSemaine && dateCollecte <= finSemaine){
+    statutCollecte = 'en_cours';
+  }
+  collectes.unshift({id:id,date:dateLabel,type:excepOn?'exceptionnel':'normal',statut:statutCollecte});
   clientsParCollecte[id]={};dispatchParCollecte[id]={trucks:{},assigned:{}};
   currentCollecteId=id;truckCount=0;
   addActivity('📅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a créé la collecte du <strong>'+dateLabel+'</strong>',"À l'instant");
@@ -3858,6 +3882,117 @@ function creerCollecte(){
   renderCollectesList();ouvrirCollecte(id);
 }
 
+
+
+// ===== MODAL PLUS (Annulé / Reporté) =====
+var _plusClientId = null;
+var _plusTruckKey = null;
+var _plusClientNom = null;
+
+function ouvrirModalPlus(cid, tk, nom){
+  _plusClientId = cid;
+  _plusTruckKey = tk;
+  _plusClientNom = nom;
+  var modal = document.getElementById('modal-plus');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'modal-plus';
+    modal.className = 'modal-overlay';
+    var html = '<div class="modal-sheet">';
+    html += '<div class="modal-confirm">';
+    html += '<div class="modal-emoji">⋯</div>';
+    html += '<div class="modal-confirm-title" id="plus-title"></div>';
+    html += '<div style="display:grid;gap:10px;margin-top:16px;">';
+    html += '<button style="padding:14px;background:#ede0ff;color:#4a0080;border:2px solid #6b21a8;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="demanderAnnulation(_plusClientId,_plusTruckKey)">🚫 Annulé</button>';
+    html += '<button style="padding:14px;background:#fff3e0;color:#e65100;border:2px solid #e65100;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="ouvrirModalReport()">📅 Reporté</button>';
+    html += '<button style="padding:12px;background:#f0f0f0;color:#333;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="closeModal(&quot;modal-plus&quot;)">Annuler</button>';
+    html += '</div></div></div>';
+    modal.innerHTML = html;
+    document.body.appendChild(modal);
+  }
+  var t = document.getElementById('plus-title');
+  if(t) t.textContent = nom || '';
+  openModal('modal-plus');
+}
+
+function ouvrirModalReport(){
+  closeModal('modal-plus');
+  // Construire liste collectes à venir
+  var aVenir = collectes.filter(function(c){ return c.statut === 'a_venir' && c.id !== currentCollecteId; });
+  var modal = document.getElementById('modal-report');
+  if(modal) modal.remove();
+  modal = document.createElement('div');
+  modal.id = 'modal-report';
+  modal.className = 'modal-overlay';
+  var html = '<div class="modal-sheet">';
+  html += '<div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:4px;">📅 Reporter</div>';
+  html += '<div style="font-size:13px;color:#666;margin-bottom:16px;">'+(_plusClientNom||'')+'</div>';
+  if(aVenir.length > 0){
+    html += '<div style="font-size:12px;color:#666;margin-bottom:6px;">Choisir une collecte :</div>';
+    html += '<select id="report-select" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;font-family:var(--font);margin-bottom:12px;">';
+    html += '<option value="">-- Sélectionner --</option>';
+    aVenir.forEach(function(c){ html += '<option value="'+c.id+'">'+c.date+'</option>'; });
+    html += '</select>';
+  } else {
+    html += '<div style="background:#fff3e0;border-radius:8px;padding:10px;font-size:13px;color:#e65100;margin-bottom:12px;">Aucune collecte à venir disponible.</div>';
+  }
+  html += '<button style="width:100%;padding:12px;background:#009A44;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;" onclick="creerCollecteEtReporter()">➕ Créer une nouvelle collecte</button>';
+  if(aVenir.length > 0){
+    html += '<button style="width:100%;padding:12px;background:#e65100;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;" onclick="confirmerReport()">✅ Confirmer le report</button>';
+  }
+  html += '<button style="width:100%;padding:12px;background:#f0f0f0;color:#333;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="closeModal(&quot;modal-report&quot;)">Annuler</button>';
+  html += '</div>';
+  modal.innerHTML = html;
+  document.body.appendChild(modal);
+  openModal('modal-report');
+}
+
+function confirmerReport(){
+  var sel = document.getElementById('report-select');
+  var colId = sel ? sel.value : '';
+  if(!colId){ showToastNew('⚠️ Sélectionnez une collecte'); return; }
+  _appliquerReport(colId);
+}
+
+function creerCollecteEtReporter(){
+  closeModal('modal-report');
+  // Ouvrir le formulaire de création de collecte
+  // Après création, on reporter automatiquement
+  window._reportApresCrea = true;
+  goTo('s-home');
+  showToastNew('📅 Créez la collecte puis le client sera reporté automatiquement');
+}
+
+function _appliquerReport(colIdDest){
+  var trks = getTrucks();
+  var tk = trks[_plusTruckKey];
+  if(!tk) return;
+  // Marquer comme reporté dans la collecte d'origine
+  if(!tk.reported) tk.reported = [];
+  if(!tk.reported.includes(_plusClientId)) tk.reported.push(_plusClientId);
+  if(!tk.finTs) tk.finTs = {};
+  tk.finTs[_plusClientId] = Date.now();
+  // Ajouter à la collecte de destination
+  if(!clientsParCollecte[colIdDest]) clientsParCollecte[colIdDest] = {};
+  var clientOrigine = (getClients())[_plusClientId];
+  if(clientOrigine){
+    var newId = 'c_'+Date.now();
+    clientsParCollecte[colIdDest][newId] = Object.assign({}, clientOrigine);
+  }
+  // Firebase direct
+  window._lastWriteTime = Date.now();
+  if(firebaseReady && db && currentCollecteId){
+    var updates = {};
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/reported'] = tk.reported;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/finTs/'+_plusClientId] = tk.finTs[_plusClientId];
+    if(clientOrigine) updates['dct/clients/'+colIdDest] = clientsParCollecte[colIdDest];
+    db.ref().update(updates);
+  }
+  addActivity('📅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a reporté <strong>'+(_plusClientNom||'')+'</strong>',"À l'instant");
+  sauvegarder();
+  closeModal('modal-report');
+  renderCamion(_plusTruckKey);
+}
 
 // ===== MISE À JOUR AUTOMATIQUE DES STATUTS =====
 var MOIS_FR = ['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
@@ -3879,43 +4014,38 @@ function _parseDateCollecte(dateLabel){
 function _mettreAJourStatuts(){
   if(!collectes || !collectes.length) return;
   var now = new Date();
+  var dayOfWeek = now.getDay();
+  // Début semaine en cours (lundi)
+  var debutSemaine = new Date(now);
+  var diffLundi = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  debutSemaine.setDate(now.getDate() + diffLundi);
+  debutSemaine.setHours(0,0,0,0);
+  // Fin semaine en cours (dimanche à 23h59)
+  var finSemaine = new Date(debutSemaine);
+  finSemaine.setDate(debutSemaine.getDate() + 6);
+  finSemaine.setHours(23,59,59,999);
+
   var changed = false;
   collectes.forEach(function(c){
-    if(c.statut === 'terminee') return; // Déjà terminée → ne pas changer
     var dateC = _parseDateCollecte(c.date);
     if(!dateC) return;
-    if(now > dateC){
-      // La date est passée → Terminée
-      if(c.statut !== 'terminee'){
-        c.statut = 'terminee';
-        changed = true;
-      }
+    var nouveauStatut;
+    if(dateC < debutSemaine){
+      // Semaine passée → Terminée
+      nouveauStatut = 'terminee';
+    } else if(dateC >= debutSemaine && dateC <= finSemaine){
+      // Semaine en cours → En cours
+      nouveauStatut = 'en_cours';
     } else {
-      // La date est dans le futur
-      // La collecte la plus proche = en_cours, les autres = a_venir
+      // Semaine future → À venir
+      nouveauStatut = 'a_venir';
+    }
+    if(c.statut !== nouveauStatut){
+      c.statut = nouveauStatut;
+      changed = true;
     }
   });
-  
-  // Parmi celles qui ne sont pas terminées, la plus proche = en_cours
-  var aVenir = collectes.filter(function(c){ return c.statut !== 'terminee'; });
-  if(aVenir.length > 0){
-    // Trier par date
-    aVenir.sort(function(a,b){
-      var da = _parseDateCollecte(a.date);
-      var db2 = _parseDateCollecte(b.date);
-      if(!da || !db2) return 0;
-      return da - db2;
-    });
-    // La première = en_cours, les autres = a_venir
-    aVenir.forEach(function(c, i){
-      var newStatut = i === 0 ? 'en_cours' : 'a_venir';
-      if(c.statut !== newStatut){
-        c.statut = newStatut;
-        changed = true;
-      }
-    });
-  }
-  
+
   if(changed){
     sauvegarder();
     renderCollectesList();
@@ -4382,6 +4512,8 @@ function exportPDF(){
           if(!Array.isArray(tk.refused)) tk.refused = tk.refused ? Object.values(tk.refused).filter(Boolean) : [];
           if(!tk.cancelled) tk.cancelled = [];
           else if(!Array.isArray(tk.cancelled)) tk.cancelled = Object.values(tk.cancelled).filter(Boolean);
+          if(!tk.reported) tk.reported=[];
+          else if(!Array.isArray(tk.reported)) tk.reported = Object.values(tk.reported).filter(Boolean);
           if(!tk.wazeTs) tk.wazeTs = {};
           if(!tk.finTs) tk.finTs = {};
           dispatchParCollecte[currentCollecteId].trucks[k] = tk;
@@ -5311,6 +5443,11 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
+
+
 
 
 
