@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.4';
-var APP_UPDATE = '20/07/2026 à 09:00';
+var APP_VERSION = 'v2.6.5';
+var APP_UPDATE = '20/07/2026 à 09:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3324,6 +3324,7 @@ function confirmerSupprimerCamion(){
 function demanderAnnulation(id,tk){
   var cls=getClients();var c=cls[id];if(!c)return;
   var trks=getTrucks();if(!trks[tk])return;
+  closeModal('modal-plus');
   // Stocker pour confirmation
   window._annulationId=id; window._annulationTk=tk;
   // Modal de confirmation simple
@@ -5481,6 +5482,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
