@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6';
-var APP_UPDATE = '19/07/2026 à 11:30';
+var APP_VERSION = 'v2.6.1';
+var APP_UPDATE = '19/07/2026 à 11:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1418,7 +1418,7 @@ function sortByDate(arr,asc){
 function renderCollectesList(){
   var enCours=sortByDate(collectes.filter(function(c){return c.statut==='en_cours';}),true);
   var aVenir=sortByDate(collectes.filter(function(c){return c.statut==='a_venir';}),true);
-  var terminees=sortByDate(collectes.filter(function(c){return c.statut==='terminee';}),true);
+  var terminees=sortByDate(collectes.filter(function(c){return c.statut==='terminee';}),false);
   var container=document.getElementById('home-collectes');
   if(!container)return;
   container.innerHTML='';
@@ -5469,6 +5469,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
