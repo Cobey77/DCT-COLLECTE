@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.9';
-var APP_UPDATE = '20/07/2026 à 11:30';
+var APP_VERSION = 'v2.7';
+var APP_UPDATE = '20/07/2026 à 12:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3903,14 +3903,7 @@ function creerCollecte(){
   var ef=document.getElementById('excep-fields');if(ef)ef.style.display='none';
   var sg=document.getElementById('sunday-grid');if(sg){sg.style.opacity='1';sg.style.pointerEvents='auto';}
   renderCollectesList();
-  // Si un report est en attente, l'appliquer maintenant
-  if(window._reportApresCrea && _plusClientId){
-    window._reportApresCrea = false;
-    _appliquerReport(id);
-    showToastNew('📅 '+(_plusClientNom||'Client')+' reporté sur cette collecte !');
-  } else {
-    ouvrirCollecte(id);
-  }
+  ouvrirCollecte(id);
 }
 
 
@@ -3956,7 +3949,6 @@ function _retourModalPlus(){
 
 function ouvrirModalReport(){
   closeModal('modal-plus');
-  // Construire liste collectes à venir
   var aVenir = collectes.filter(function(c){ return c.statut === 'a_venir' && c.id !== currentCollecteId; });
   var modal = document.getElementById('modal-report');
   if(modal) modal.remove();
@@ -3972,12 +3964,9 @@ function ouvrirModalReport(){
     html += '<option value="">-- Sélectionner --</option>';
     aVenir.forEach(function(c){ html += '<option value="'+c.id+'">'+c.date+'</option>'; });
     html += '</select>';
-  } else {
-    html += '<div style="background:#fff3e0;border-radius:8px;padding:10px;font-size:13px;color:#e65100;margin-bottom:12px;">Aucune collecte à venir disponible.</div>';
-  }
-  html += '<button style="width:100%;padding:12px;background:#009A44;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;" onclick="creerCollecteEtReporter()">➕ Créer une nouvelle collecte</button>';
-  if(aVenir.length > 0){
     html += '<button style="width:100%;padding:12px;background:#e65100;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;" onclick="confirmerReport()">✅ Confirmer le report</button>';
+  } else {
+    html += '<div style="background:#fff3e0;border-radius:8px;padding:12px;font-size:13px;color:#e65100;margin-bottom:12px;text-align:center;">Aucune collecte à venir.<br>Créez-en une depuis l\'accueil d\'abord.</div>';
   }
   html += '<button style="width:100%;padding:12px;background:#f0f0f0;color:#333;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="_retourModalPlus()">← Retour</button>';
   html += '</div>';
@@ -3993,13 +3982,7 @@ function confirmerReport(){
   _appliquerReport(colId);
 }
 
-function creerCollecteEtReporter(){
-  closeModal('modal-report');
-  window._reportApresCrea = true;
-  window._reportCollecteOrigine = currentCollecteId; // Sauvegarder AVANT que currentCollecteId change
-  goTo('s-home');
-  showToastNew('📅 Créez la collecte — le client sera reporté automatiquement !');
-}
+// creerCollecteEtReporter supprimé
 
 function _appliquerReport(colIdDest){
   var colIdOrigine = window._reportCollecteOrigine || currentCollecteId;
@@ -5494,6 +5477,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
