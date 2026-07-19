@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.3';
-var APP_UPDATE = '19/07/2026 à 12:30';
+var APP_VERSION = 'v2.6.4';
+var APP_UPDATE = '20/07/2026 à 09:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -974,7 +974,7 @@ var curValiderId = null, curValiderTk = null;
 var curRefusId = null, curRefusTk = null;
 var collecteASupprimer = null, collecteStatutId = null;
 var curHeureId = null, curHeureTk = null;
-var curAnnulerId = null, curAnnulerTk = null;
+var curAnnulerId = null, curAnnulerTk = null, curAnnulerType = null;
 var curSupprimerCamion = null;
 var excepOn = false;
 var activeFilter = '';
@@ -3730,16 +3730,14 @@ function validerHeure(){
 
 // ANNULER RAMASSE
 function ouvrirModalAnnuler(id,tk,type){
-  curAnnulerId=id;curAnnulerTk=tk;
+  curAnnulerId=id;curAnnulerTk=tk;curAnnulerType=type;
   var c=getClients()[id]||{};
   var typeLabel=type==='valider'?'la validation':type==='refus'?'le refus':type==='annulation'?'l\'annulation':'le report';
   var el=document.getElementById('annuler-sub');if(el)el.textContent='Annuler '+typeLabel+' de '+c.name+' ?';
-  var el2=document.getElementById('annuler-type');if(el2)el2.value=type;
   openModal('modal-annuler');
 }
 function confirmerAnnuler(){
-  var el=document.getElementById('annuler-type');
-  var type=el?el.value:'valider';
+  var type=curAnnulerType||'valider';
   var trks=getTrucks();var tk=trks[curAnnulerTk];if(!tk)return;
   if(type==='valider'){tk.validated=(tk.validated||[]).filter(function(i){return i!==curAnnulerId;});}
   else if(type==='refus'){tk.refused=(tk.refused||[]).filter(function(i){return i!==curAnnulerId;});}
@@ -5483,6 +5481,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
