@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.7';
-var APP_UPDATE = '20/07/2026 à 10:30';
+var APP_VERSION = 'v2.6.8';
+var APP_UPDATE = '20/07/2026 à 11:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4018,7 +4018,8 @@ function _appliquerReport(colIdDest){
   tk.finTs[_plusClientId] = finTsRep;
   // Ajouter à la collecte de destination avec le bon format d'ID
   if(!clientsParCollecte[colIdDest]) clientsParCollecte[colIdDest] = {};
-  var clientOrigine = (getClients())[_plusClientId];
+  // Lire le client depuis la collecte d'origine (pas currentCollecteId qui a changé)
+  var clientOrigine = (clientsParCollecte[colIdOrigine]||{})[_plusClientId];
   var newId = 'C'+(Date.now()%999999);
   if(clientOrigine){
     clientsParCollecte[colIdDest][newId] = Object.assign({}, clientOrigine);
@@ -5494,6 +5495,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
