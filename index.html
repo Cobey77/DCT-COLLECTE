@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.5';
-var APP_UPDATE = '20/07/2026 à 09:30';
+var APP_VERSION = 'v2.6.6';
+var APP_UPDATE = '20/07/2026 à 10:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3902,7 +3902,15 @@ function creerCollecte(){
   var et=document.getElementById('excep-toggle');if(et)et.classList.remove('on');
   var ef=document.getElementById('excep-fields');if(ef)ef.style.display='none';
   var sg=document.getElementById('sunday-grid');if(sg){sg.style.opacity='1';sg.style.pointerEvents='auto';}
-  renderCollectesList();ouvrirCollecte(id);
+  renderCollectesList();
+  // Si un report est en attente, l'appliquer maintenant
+  if(window._reportApresCrea && window._plusClientId){
+    window._reportApresCrea = false;
+    _appliquerReport(id);
+    showToastNew('📅 '+(_plusClientNom||'Client')+' reporté sur cette collecte !');
+  } else {
+    ouvrirCollecte(id);
+  }
 }
 
 
@@ -3987,11 +3995,9 @@ function confirmerReport(){
 
 function creerCollecteEtReporter(){
   closeModal('modal-report');
-  // Ouvrir le formulaire de création de collecte
-  // Après création, on reporter automatiquement
   window._reportApresCrea = true;
   goTo('s-home');
-  showToastNew('📅 Créez la collecte puis le client sera reporté automatiquement');
+  showToastNew('📅 Créez la collecte — le client sera reporté automatiquement !');
 }
 
 function _appliquerReport(colIdDest){
@@ -5482,6 +5488,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
