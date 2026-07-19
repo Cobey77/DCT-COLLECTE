@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.6';
-var APP_UPDATE = '20/07/2026 à 10:00';
+var APP_VERSION = 'v2.6.7';
+var APP_UPDATE = '20/07/2026 à 10:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3996,12 +3996,18 @@ function confirmerReport(){
 function creerCollecteEtReporter(){
   closeModal('modal-report');
   window._reportApresCrea = true;
+  window._reportCollecteOrigine = currentCollecteId; // Sauvegarder AVANT que currentCollecteId change
   goTo('s-home');
   showToastNew('📅 Créez la collecte — le client sera reporté automatiquement !');
 }
 
 function _appliquerReport(colIdDest){
-  var trks = getTrucks();
+  // Utiliser la collecte d'origine sauvegardée si currentCollecteId a changé
+  var colIdOrigine = window._reportCollecteOrigine || currentCollecteId;
+  window._reportCollecteOrigine = null;
+  // Récupérer les trucks de la collecte d'origine
+  if(!dispatchParCollecte[colIdOrigine]) dispatchParCollecte[colIdOrigine] = {trucks:{},assigned:{}};
+  var trks = dispatchParCollecte[colIdOrigine].trucks;
   var tk = trks[_plusTruckKey];
   if(!tk) return;
   // Marquer comme reporté dans la collecte d'origine
@@ -4023,10 +4029,10 @@ function _appliquerReport(colIdDest){
   }
   // Firebase direct
   window._lastWriteTime = Date.now();
-  if(firebaseReady && db && currentCollecteId){
+  if(firebaseReady && db){
     var updates = {};
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/reported'] = tk.reported;
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/finTs/'+_plusClientId] = finTsRep;
+    updates['dct/dispatch/'+colIdOrigine+'/trucks/'+_plusTruckKey+'/reported'] = tk.reported;
+    updates['dct/dispatch/'+colIdOrigine+'/trucks/'+_plusTruckKey+'/finTs/'+_plusClientId] = finTsRep;
     if(clientOrigine){
       updates['dct/clients/'+colIdDest+'/'+newId] = clientsParCollecte[colIdDest][newId];
       updates['dct/dispatch/'+colIdDest+'/assigned/'+newId] = null;
@@ -5488,6 +5494,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
