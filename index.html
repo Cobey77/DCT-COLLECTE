@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.1';
-var APP_UPDATE = '19/07/2026 à 11:45';
+var APP_VERSION = 'v2.6.2';
+var APP_UPDATE = '19/07/2026 à 12:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3644,12 +3644,20 @@ function renderCamion(k){
       var bAnnDone=document.createElement('div');bAnnDone.className='route-action-btn';
       bAnnDone.style.cssText='background:#ede0ff;color:#4a0080;border:2px solid #6b21a8;border-radius:10px;padding:12px;font-size:13px;font-weight:800;flex:1;text-align:center;';
       bAnnDone.textContent='🚫 Annulé';
-      act.appendChild(bAnnDone);
+      var bUndoAnn=document.createElement('button');bUndoAnn.className='route-action-btn';
+      bUndoAnn.style.cssText='background:#fff3cd;color:#856404;border:2px solid #856404;border-radius:10px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);flex-shrink:0;';
+      bUndoAnn.textContent='↩️';
+      (function(cid,kk){bUndoAnn.onclick=function(){ouvrirModalAnnuler(cid,kk,'annulation');};})(id,k);
+      act.appendChild(bAnnDone);act.appendChild(bUndoAnn);
     } else if(isRep) {
       var bRepDone=document.createElement('div');bRepDone.className='route-action-btn';
       bRepDone.style.cssText='background:#fff3e0;color:#e65100;border:2px solid #e65100;border-radius:10px;padding:12px;font-size:13px;font-weight:800;flex:1;text-align:center;';
       bRepDone.textContent='📅 Reporté';
-      act.appendChild(bRepDone);
+      var bUndoRep=document.createElement('button');bUndoRep.className='route-action-btn';
+      bUndoRep.style.cssText='background:#fff3cd;color:#856404;border:2px solid #856404;border-radius:10px;padding:12px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);flex-shrink:0;';
+      bUndoRep.textContent='↩️';
+      (function(cid,kk){bUndoRep.onclick=function(){ouvrirModalAnnuler(cid,kk,'report');};})(id,k);
+      act.appendChild(bRepDone);act.appendChild(bUndoRep);
     } else {
       var bv=document.createElement('button');bv.className='route-action-btn route-action-validate';
       bv.textContent='📦 Valider — '+c.prix+' €';
@@ -5469,6 +5477,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
