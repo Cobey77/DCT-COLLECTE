@@ -914,8 +914,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.2';
-var APP_UPDATE = '10/07/2026 à 00:45';
+var APP_VERSION = 'v2.3';
+var APP_UPDATE = '19/07/2026 à 09:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -938,7 +938,14 @@ var STATUTS = ['a_venir','en_cours','terminee'];
 var STATUT_LABELS = {a_venir:'À venir',en_cours:'En cours',terminee:'Terminée'};
 
 function getTc(k){
-  // Couleurs par index numérique
+  // Utiliser la couleur stockée dans le camion si disponible
+  var trks = getTrucks();
+  var tk = trks[k];
+  if(tk && tk.color){
+    var c = tk.color;
+    return {bg: c+'22', color: c, bar: c};
+  }
+  // Fallback couleurs prédéfinies par index
   var colors=[
     {bg:'#e3f2fd',color:'#0d47a1',bar:'#1565c0'},
     {bg:'#fff8e1',color:'#e65100',bar:'#ef6c00'},
@@ -947,11 +954,8 @@ function getTc(k){
     {bg:'#e8f5e9',color:'#1b5e20',bar:'#2e7d32'},
     {bg:'#e0f7fa',color:'#006064',bar:'#00838f'},
     {bg:'#fff3e0',color:'#bf360c',bar:'#d84315'},
-    {bg:'#f1f8e9',color:'#33691e',bar:'#558b2f'},
-    {bg:'#fbe9e7',color:'#bf360c',bar:'#e64a19'},
-    {bg:'#e8eaf6',color:'#283593',bar:'#303f9f'}
+    {bg:'#f1f8e9',color:'#33691e',bar:'#558b2f'}
   ];
-  // Extraire le numéro de la clé (T01 -> 0, T02 -> 1, etc.)
   var num = parseInt(k.replace('T',''))||1;
   return colors[(num-1)%colors.length]||{bg:'#f0f0f0',color:'#333',bar:'#666'};
 }
@@ -1180,20 +1184,7 @@ function _creerPinCollab(){
       closeModal('modal-collab-pin');
       var collab = COLLABS.find(function(c){ return c.id===id; });
       if(collab){
-        // Notifier uniquement l'admin via dct_connexions
-        if(firebaseReady && db){
-          var now2 = new Date();
-          db.ref('dct_connexions').push({
-            who: collab.name,
-            id: collab.id,
-            bg: collab.bg,
-            color: collab.color,
-            date: now2.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+now2.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
-            ts: Date.now(),
-            type: 'pin_create',
-            label: '🔐 a créé son code PIN'
-          });
-        }
+        // Notification PIN supprimée
         finalisLogin(collab);
       }
       showToastNew('✅ PIN créé !');
@@ -1523,6 +1514,7 @@ function changerStatut(s){
   var idx=collectes.findIndex(function(x){return x.id===collecteStatutId;});
   if(idx>=0)collectes[idx].statut=s;
   closeModal('modal-statut');
+  addActivity('✏️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a modifié le statut d\'une collecte',"À l'instant");
   sauvegarder();renderCollectesList();
   if(collecteStatutId===currentCollecteId)updateCollecteHeader();
 }
@@ -3259,17 +3251,50 @@ function toggleRename(k){
 function confirmRename(k){
   var v=document.getElementById('ri-'+k);if(!v||!v.value.trim())return;
   var trks=getTrucks();if(trks[k])trks[k].name=v.value.trim();
+  addActivity('✏️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a renommé un camion en <strong>'+v.value.trim()+'</strong>',"À l'instant");
   sauvegarder();renderDispatchTab();
 }
 function addTruck(){
+  // Ouvrir modal de création avec nom personnalisé
+  var modal = document.getElementById('modal-add-truck');
+  if(!modal){
+    modal = document.createElement('div');
+    modal.id = 'modal-add-truck';
+    modal.className = 'modal-overlay';
+    modal.style.cssText = 'align-items:center;';
+    var modalHtml = '<div class="modal-sheet" style="border-radius:16px;margin:16px;">';
+    modalHtml += '<div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:16px;">🚛 Nouveau camion</div>';
+    modalHtml += '<div class="fg"><label class="fl">Nom du camion</label>';
+    modalHtml += '<input class="fi" id="new-truck-name" placeholder="Ex: Camion Paris, Camion Sud..." maxlength="30"></div>';
+    modalHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">';
+    modalHtml += '<button class="btn-sm btn-gray-sm" onclick="closeModal(&quot;modal-add-truck&quot;)">Annuler</button>';
+    modalHtml += '<button class="btn-sm btn-green-sm" onclick="_confirmerAddTruck()">✅ Créer</button>';
+    modalHtml += '</div></div>';
+    modal.innerHTML = modalHtml;
+    document.body.appendChild(modal);
+  }
+  var inp = document.getElementById('new-truck-name');
+  if(inp) inp.value = '';
+  openModal('modal-add-truck');
+  setTimeout(function(){ var i=document.getElementById('new-truck-name'); if(i) i.focus(); }, 300);
+}
+
+function _confirmerAddTruck(){
+  var nom = (document.getElementById('new-truck-name')||{}).value||'';
+  nom = nom.trim();
+  if(!nom){ showToastNew('⚠️ Entrez un nom pour le camion'); return; }
   var trks=getTrucks();
-  // Trouver le premier numéro disponible
   var num=1;
   while(trks['T'+String(num).padStart(2,'0')]) num++;
-  if(num>99) return; // Max 99 camions
+  if(num>99) return;
   var k='T'+String(num).padStart(2,'0');
-  trks[k]={name:'Camion '+String(num).padStart(2,'0'),clients:[],validated:[],refused:[],hours:{}};
+  // Couleur automatique
+  var couleurs = ['#0d47a1','#e65100','#6b21a8','#1a7a40','#c0392b','#00838f','#4a148c','#f57f17'];
+  var couleur = couleurs[(num-1) % couleurs.length];
+  trks[k]={name:nom,clients:[],validated:[],refused:[],hours:{},cancelled:[],wazeTs:{},finTs:{},color:couleur};
   truckCount=Object.keys(trks).length;
+  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a ajouté le camion <strong>'+nom+'</strong>',"À l'instant");
+  closeModal('modal-add-truck');
   sauvegarder();renderDispatchTab();
 }
 function demanderSupprimerCamion(k){
@@ -3924,23 +3949,11 @@ function addActivity(emoji,bg,text,time){
   var timeLabel=dateStr+' à '+heureStr;
   var ts = Date.now();
 
-  // Si on n'est pas sur l'écran activité, créer l'item en mémoire et sauvegarder
-  if(!list){
-    // Créer un div temporaire pour sauvegarder via sauvegarder()
-    var tmpList = document.createElement('div');
-    tmpList.id = 'activity-list-tmp';
-    // Récupérer l'activité existante depuis localStorage
-    var existing = localStorage.getItem('dct_v3_activite') || '';
-    tmpList.innerHTML = existing;
-    var item = document.createElement('div');
-    item.className = 'activity-item';
-    item.setAttribute('data-ts', ts);
-    item.innerHTML = '<div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div>';
-    tmpList.insertBefore(item, tmpList.firstChild);
-    localStorage.setItem('dct_v3_activite', tmpList.innerHTML);
-    // Sync Firebase
-    sauvegarderFirebase();
-    // Notifier les autres collaborateurs
+  // Créer l'item HTML
+  var itemHtml = '<div class="activity-item" data-ts="'+ts+'"><div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div></div>';
+
+  // Notifier les autres collaborateurs
+  function _notifier(){
     if(firebaseReady && db){
       var notifRef = db.ref('dct_notifs');
       notifRef.transaction(function(current){
@@ -3951,6 +3964,23 @@ function addActivity(emoji,bg,text,time){
         return data;
       });
     }
+  }
+
+  // Si on n'est pas sur l'écran activité → écrire directement dans Firebase
+  if(!list){
+    if(firebaseReady && db){
+      // Lire l'activité existante depuis Firebase, ajouter l'item, réécrire
+      db.ref('dct/activite').once('value', function(snap){
+        var existing = snap.val() || '';
+        var newActivite = itemHtml + existing;
+        db.ref('dct/activite').set(newActivite);
+      });
+    } else {
+      // Fallback localStorage
+      var existing2 = localStorage.getItem('dct_v3_activite') || '';
+      localStorage.setItem('dct_v3_activite', itemHtml + existing2);
+    }
+    _notifier();
     return;
   }
   var empty=list.querySelector('div[style*="text-align:center"]');if(empty)empty.remove();
@@ -5281,6 +5311,10 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
+
 
 
 
