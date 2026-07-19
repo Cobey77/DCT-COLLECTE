@@ -916,7 +916,7 @@ function sauvegarderFirebase(){
 // ===== FIN FIREBASE =====
 
 var APP_VERSION = 'v2.6';
-var APP_UPDATE = '19/07/2026 à 11:00';
+var APP_UPDATE = '19/07/2026 à 11:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3724,7 +3724,7 @@ function validerHeure(){
 function ouvrirModalAnnuler(id,tk,type){
   curAnnulerId=id;curAnnulerTk=tk;
   var c=getClients()[id]||{};
-  var typeLabel=type==='valider'?'la validation':'le refus';
+  var typeLabel=type==='valider'?'la validation':type==='refus'?'le refus':type==='annulation'?'l\'annulation':'le report';
   var el=document.getElementById('annuler-sub');if(el)el.textContent='Annuler '+typeLabel+' de '+c.name+' ?';
   var el2=document.getElementById('annuler-type');if(el2)el2.value=type;
   openModal('modal-annuler');
@@ -3734,8 +3734,24 @@ function confirmerAnnuler(){
   var type=el?el.value:'valider';
   var trks=getTrucks();var tk=trks[curAnnulerTk];if(!tk)return;
   if(type==='valider'){tk.validated=(tk.validated||[]).filter(function(i){return i!==curAnnulerId;});}
-  else{tk.refused=(tk.refused||[]).filter(function(i){return i!==curAnnulerId;});}
-  addActivity('↩️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a annulé '+(type==='valider'?'la collecte':'le refus')+' de <strong>'+(getClients()[curAnnulerId]||{}).name+'</strong>',"À l'instant");
+  else if(type==='refus'){tk.refused=(tk.refused||[]).filter(function(i){return i!==curAnnulerId;});}
+  else if(type==='annulation'){tk.cancelled=(tk.cancelled||[]).filter(function(i){return i!==curAnnulerId;});}
+  else if(type==='report'){tk.reported=(tk.reported||[]).filter(function(i){return i!==curAnnulerId;});}
+  // Supprimer le finTs aussi
+  if(tk.finTs) delete tk.finTs[curAnnulerId];
+  var typeLabel=type==='valider'?'la collecte':type==='refus'?'le refus':type==='annulation'?'l\'annulation':'le report';
+  addActivity('↩️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a annulé '+typeLabel+' de <strong>'+(getClients()[curAnnulerId]||{}).name+'</strong>',"À l'instant");
+  // Écriture directe Firebase
+  window._lastWriteTime=Date.now();
+  if(firebaseReady && db && currentCollecteId){
+    var updates={};
+    if(type==='valider') updates['dct/dispatch/'+currentCollecteId+'/trucks/'+curAnnulerTk+'/validated']=tk.validated;
+    else if(type==='refus') updates['dct/dispatch/'+currentCollecteId+'/trucks/'+curAnnulerTk+'/refused']=tk.refused;
+    else if(type==='annulation') updates['dct/dispatch/'+currentCollecteId+'/trucks/'+curAnnulerTk+'/cancelled']=tk.cancelled;
+    else if(type==='report') updates['dct/dispatch/'+currentCollecteId+'/trucks/'+curAnnulerTk+'/reported']=tk.reported;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+curAnnulerTk+'/finTs/'+curAnnulerId]=null;
+    db.ref().update(updates);
+  }
   sauvegarder();closeModal('modal-annuler');renderCamion(curAnnulerTk);
   if(currentSubtab==='dispatch')renderDispatchTab();
 }
@@ -5453,6 +5469,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
