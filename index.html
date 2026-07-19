@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.6.2';
-var APP_UPDATE = '19/07/2026 à 12:00';
+var APP_VERSION = 'v2.6.3';
+var APP_UPDATE = '19/07/2026 à 12:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4003,22 +4003,28 @@ function _appliquerReport(colIdDest){
   if(!tk.reported) tk.reported = [];
   if(!tk.reported.includes(_plusClientId)) tk.reported.push(_plusClientId);
   if(!tk.finTs) tk.finTs = {};
-  tk.finTs[_plusClientId] = Date.now();
-  // Ajouter à la collecte de destination
+  var finTsRep = Date.now();
+  tk.finTs[_plusClientId] = finTsRep;
+  // Ajouter à la collecte de destination avec le bon format d'ID
   if(!clientsParCollecte[colIdDest]) clientsParCollecte[colIdDest] = {};
   var clientOrigine = (getClients())[_plusClientId];
+  var newId = 'C'+(Date.now()%999999);
   if(clientOrigine){
-    var newId = 'c_'+Date.now();
     clientsParCollecte[colIdDest][newId] = Object.assign({}, clientOrigine);
+    // Ajouter dans assigned comme un client normal (non affecté)
+    if(!dispatchParCollecte[colIdDest]) dispatchParCollecte[colIdDest] = {trucks:{},assigned:{}};
+    if(!dispatchParCollecte[colIdDest].assigned) dispatchParCollecte[colIdDest].assigned = {};
+    dispatchParCollecte[colIdDest].assigned[newId] = null;
   }
   // Firebase direct
   window._lastWriteTime = Date.now();
   if(firebaseReady && db && currentCollecteId){
     var updates = {};
     updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/reported'] = tk.reported;
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/finTs/'+_plusClientId] = tk.finTs[_plusClientId];
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/finTs/'+_plusClientId] = finTsRep;
     if(clientOrigine){
       updates['dct/clients/'+colIdDest+'/'+newId] = clientsParCollecte[colIdDest][newId];
+      updates['dct/dispatch/'+colIdDest+'/assigned/'+newId] = null;
     }
     db.ref().update(updates);
   }
@@ -5477,6 +5483,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
