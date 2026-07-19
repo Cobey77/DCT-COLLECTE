@@ -915,8 +915,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.5';
-var APP_UPDATE = '19/07/2026 à 10:00';
+var APP_VERSION = 'v2.6';
+var APP_UPDATE = '19/07/2026 à 11:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3338,7 +3338,7 @@ function demanderAnnulation(id,tk){
       '<div class="modal-confirm-title" id="ann-title"></div>',
       '<div class="modal-confirm-text">Ce client sera marqué comme annulé.</div>',
       '<div class="modal-confirm-btns">',
-      '<button class="btn-modal-cancel" onclick="closeModal(&quot;modal-annulation&quot;)">Annuler</button>',
+      '<button class="btn-modal-cancel" onclick="_retourModalPlus()">← Retour</button>',
       '<button class="btn-modal-confirm" style="background:#6b21a8;border-color:#4a0080;" onclick="confirmerAnnulation()">🚫 Confirmer</button>',
       '</div></div></div>'
     ].join('');
@@ -3365,7 +3365,7 @@ function confirmerAnnulation(){
   if(firebaseReady && db && currentCollecteId){
     var updates={};
     updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/cancelled']=trks[tk].cancelled;
-    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_ann;
+    updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_val;
     db.ref().update(updates);
   }
   addActivity('🚫',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — annulé : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
@@ -3915,6 +3915,14 @@ function ouvrirModalPlus(cid, tk, nom){
   openModal('modal-plus');
 }
 
+function _retourModalPlus(){
+  closeModal('modal-annulation');
+  closeModal('modal-report');
+  if(_plusClientId && _plusTruckKey){
+    openModal('modal-plus');
+  }
+}
+
 function ouvrirModalReport(){
   closeModal('modal-plus');
   // Construire liste collectes à venir
@@ -3940,7 +3948,7 @@ function ouvrirModalReport(){
   if(aVenir.length > 0){
     html += '<button style="width:100%;padding:12px;background:#e65100;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;" onclick="confirmerReport()">✅ Confirmer le report</button>';
   }
-  html += '<button style="width:100%;padding:12px;background:#f0f0f0;color:#333;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="closeModal(&quot;modal-report&quot;)">Annuler</button>';
+  html += '<button style="width:100%;padding:12px;background:#f0f0f0;color:#333;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);" onclick="_retourModalPlus()">← Retour</button>';
   html += '</div>';
   modal.innerHTML = html;
   document.body.appendChild(modal);
@@ -3985,7 +3993,9 @@ function _appliquerReport(colIdDest){
     var updates = {};
     updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/reported'] = tk.reported;
     updates['dct/dispatch/'+currentCollecteId+'/trucks/'+_plusTruckKey+'/finTs/'+_plusClientId] = tk.finTs[_plusClientId];
-    if(clientOrigine) updates['dct/clients/'+colIdDest] = clientsParCollecte[colIdDest];
+    if(clientOrigine){
+      updates['dct/clients/'+colIdDest+'/'+newId] = clientsParCollecte[colIdDest][newId];
+    }
     db.ref().update(updates);
   }
   addActivity('📅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a reporté <strong>'+(_plusClientNom||'')+'</strong>',"À l'instant");
@@ -5443,6 +5453,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
