@@ -897,15 +897,12 @@ function sauvegarderFirebase(){
   clearTimeout(syncTimeout);
   syncTimeout = setTimeout(function(){
     window._lastWriteTime = Date.now();
-    var al = document.getElementById('activity-list');
-    var activiteHtml = al ? al.innerHTML : (localStorage.getItem('dct_v3_activite') || '');
-
+    // Ne PAS écraser dct/activite — géré séparément via addActivity
     db.ref('dct').update({
       collectes: collectes,
       clients: clientsParCollecte,
       dispatch: dispatchParCollecte,
-      contacts: window.dctContacts || {},
-      activite: activiteHtml
+      contacts: window.dctContacts || {}
     }).catch(function(e){ console.log("Erreur sync:", e); });
   }, 800); // Debounce 800ms pour grouper les écritures
 }
@@ -915,8 +912,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.7';
-var APP_UPDATE = '20/07/2026 à 12:00';
+var APP_VERSION = 'v2.7.1';
+var APP_UPDATE = '20/07/2026 à 20:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5477,6 +5474,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
