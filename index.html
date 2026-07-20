@@ -912,8 +912,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.7.1';
-var APP_UPDATE = '20/07/2026 à 20:00';
+var APP_VERSION = 'v2.7.2';
+var APP_UPDATE = '20/07/2026 à 20:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1038,6 +1038,16 @@ function setNav(tab){
   else if(tab==='clients'){goTo('s-clients');renderContacts();}
   else if(tab==='activite'){
     goTo('s-activite');
+    // Recharger l'activité depuis Firebase à chaque ouverture
+    if(firebaseReady && db){
+      db.ref('dct/activite').once('value', function(snap){
+        var activiteHtml = snap.val() || '';
+        var al = document.getElementById('activity-list');
+        if(al && activiteHtml && activiteHtml.indexOf('Aucune')===-1){
+          al.innerHTML = activiteHtml;
+        }
+      });
+    }
     // Afficher connexions si admin (léger délai pour que le DOM soit prêt)
     if(currentUser && currentUser.admin) setTimeout(function(){ afficherConnexionsAdmin(); }, 100);
     // Marquer tout comme vu
@@ -5474,6 +5484,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
