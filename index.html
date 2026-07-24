@@ -746,30 +746,6 @@ function ecouterChangements(){
     setTimeout(function(){ _mettreAJourStatuts(); }, 500);
   });
 
-  // Écoute temps réel des nouvelles activités
-  db.ref('dct/activite_items').on('child_added', function(snap){
-    var item = snap.val();
-    if(!item || !item.ts) return;
-    // Ne mettre à jour que si on est sur s-activite
-    var al = document.getElementById('activity-list');
-    if(!al) return;
-    var deletedAt = parseInt(localStorage.getItem('dct_activite_deleted_'+(currentUser&&currentUser.id))||'0');
-    if(item.ts <= deletedAt) return;
-    // Vérifier si l'item existe déjà dans le DOM
-    if(al.querySelector('[data-ts="'+item.ts+'"]')) return;
-    // Ajouter l'item en haut
-    var empty = al.querySelector('div[style*="text-align:center"]');
-    if(empty) empty.remove();
-    var div = document.createElement('div');
-    div.className = 'activity-item';
-    div.setAttribute('data-ts', item.ts);
-    div.innerHTML = '<div class="activity-dot" style="background:'+item.bg+';">'+item.emoji+'</div>'
-      +'<div><div class="activity-text">'+item.text+'</div>'
-      +'<div class="activity-time">'+item.timeLabel+'</div></div>';
-    al.insertBefore(div, al.firstChild);
-    _reordonnerActivite(al);
-  });
-
   db.ref('dct').on('value', function(snapshot){
     // Ne JAMAIS traiter si on est sur l'écran login
     var activeNow = document.querySelector('.screen.active');
@@ -5506,6 +5482,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
