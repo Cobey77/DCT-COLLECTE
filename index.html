@@ -912,8 +912,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.8';
-var APP_UPDATE = '24/07/2026 à 12:00';
+var APP_VERSION = 'v2.8.2';
+var APP_UPDATE = '24/07/2026 à 12:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4132,7 +4132,7 @@ function _chargerEtAfficherActivite(){
   db.ref('dct_config/activite_deleted/'+(currentUser&&currentUser.id)).once('value', function(snap){
     var fbDeletedAt = snap.val() || 0;
     deletedAt = Math.max(deletedAt, fbDeletedAt);
-    db.ref('dct/activite_items').orderByChild('ts').once('value', function(snap2){
+    db.ref('activite_items').orderByChild('ts').once('value', function(snap2){
       var items = [];
       snap2.forEach(function(child){ items.push(child.val()); });
       _afficherActiviteItems(items, deletedAt);
@@ -4151,7 +4151,7 @@ function addActivity(emoji,bg,text,time){
 
   // Écrire dans Firebase comme objet JSON (nouveau système)
   if(firebaseReady && db){
-    db.ref('dct/activite_items').push({
+    db.ref('activite_items').push({
       ts: ts,
       emoji: emoji,
       bg: bg,
@@ -5482,6 +5482,7 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
 
 
 
