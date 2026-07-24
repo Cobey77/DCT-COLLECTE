@@ -746,6 +746,30 @@ function ecouterChangements(){
     setTimeout(function(){ _mettreAJourStatuts(); }, 500);
   });
 
+  // Écoute temps réel des nouvelles activités
+  db.ref('dct/activite_items').on('child_added', function(snap){
+    var item = snap.val();
+    if(!item || !item.ts) return;
+    // Ne mettre à jour que si on est sur s-activite
+    var al = document.getElementById('activity-list');
+    if(!al) return;
+    var deletedAt = parseInt(localStorage.getItem('dct_activite_deleted_'+(currentUser&&currentUser.id))||'0');
+    if(item.ts <= deletedAt) return;
+    // Vérifier si l'item existe déjà dans le DOM
+    if(al.querySelector('[data-ts="'+item.ts+'"]')) return;
+    // Ajouter l'item en haut
+    var empty = al.querySelector('div[style*="text-align:center"]');
+    if(empty) empty.remove();
+    var div = document.createElement('div');
+    div.className = 'activity-item';
+    div.setAttribute('data-ts', item.ts);
+    div.innerHTML = '<div class="activity-dot" style="background:'+item.bg+';">'+item.emoji+'</div>'
+      +'<div><div class="activity-text">'+item.text+'</div>'
+      +'<div class="activity-time">'+item.timeLabel+'</div></div>';
+    al.insertBefore(div, al.firstChild);
+    _reordonnerActivite(al);
+  });
+
   db.ref('dct').on('value', function(snapshot){
     // Ne JAMAIS traiter si on est sur l'écran login
     var activeNow = document.querySelector('.screen.active');
@@ -912,8 +936,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.7.2';
-var APP_UPDATE = '20/07/2026 à 20:30';
+var APP_VERSION = 'v2.8';
+var APP_UPDATE = '24/07/2026 à 12:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1038,16 +1062,8 @@ function setNav(tab){
   else if(tab==='clients'){goTo('s-clients');renderContacts();}
   else if(tab==='activite'){
     goTo('s-activite');
-    // Recharger l'activité depuis Firebase à chaque ouverture
-    if(firebaseReady && db){
-      db.ref('dct/activite').once('value', function(snap){
-        var activiteHtml = snap.val() || '';
-        var al = document.getElementById('activity-list');
-        if(al && activiteHtml && activiteHtml.indexOf('Aucune')===-1){
-          al.innerHTML = activiteHtml;
-        }
-      });
-    }
+    // Recharger l'activité depuis Firebase à chaque ouverture (nouveau système)
+    _chargerEtAfficherActivite();
     // Afficher connexions si admin (léger délai pour que le DOM soit prêt)
     if(currentUser && currentUser.admin) setTimeout(function(){ afficherConnexionsAdmin(); }, 100);
     // Marquer tout comme vu
@@ -4111,79 +4127,85 @@ function _reordonnerActivite(list){
   items.forEach(function(item){ list.appendChild(item); });
 }
 
+
+// ===== SYSTÈME ACTIVITÉ v2 =====
+function _buildActivityItemHtml(item){
+  return '<div class="activity-item" data-ts="'+item.ts+'">'
+    +'<div class="activity-dot" style="background:'+item.bg+';">'+item.emoji+'</div>'
+    +'<div><div class="activity-text">'+item.text+'</div>'
+    +'<div class="activity-time">'+item.timeLabel+'</div></div></div>';
+}
+
+function _afficherActiviteItems(items, deletedAt){
+  var al = document.getElementById('activity-list');
+  if(!al) return;
+  // Filtrer par deletedAt et trier par ts décroissant
+  var filtered = items.filter(function(i){ return i.ts > deletedAt; });
+  filtered.sort(function(a,b){ return b.ts - a.ts; });
+  if(!filtered.length){
+    al.innerHTML = '<div style="text-align:center;color:#aaa;padding:40px 20px;font-size:14px;"><div style="font-size:32px;margin-bottom:10px;">📋</div>Aucune activité pour le moment.</div>';
+    return;
+  }
+  al.innerHTML = filtered.map(_buildActivityItemHtml).join('');
+}
+
+function _chargerEtAfficherActivite(){
+  if(!firebaseReady || !db) return;
+  var deletedAt = parseInt(localStorage.getItem('dct_activite_deleted_'+(currentUser&&currentUser.id))||'0');
+  // Prendre aussi le deletedAt Firebase
+  db.ref('dct_config/activite_deleted/'+(currentUser&&currentUser.id)).once('value', function(snap){
+    var fbDeletedAt = snap.val() || 0;
+    deletedAt = Math.max(deletedAt, fbDeletedAt);
+    db.ref('dct/activite_items').orderByChild('ts').once('value', function(snap2){
+      var items = [];
+      snap2.forEach(function(child){ items.push(child.val()); });
+      _afficherActiviteItems(items, deletedAt);
+    });
+  });
+}
+// ===== FIN SYSTÈME ACTIVITÉ v2 =====
+
 function addActivity(emoji,bg,text,time){
   if(currentUser && currentUser.admin) return; // Admin invisible
-  var list=document.getElementById('activity-list');
   var now=new Date();
   var dateStr=now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
   var heureStr=now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
   var timeLabel=dateStr+' à '+heureStr;
   var ts = Date.now();
 
-  // Créer l'item HTML
-  var itemHtml = '<div class="activity-item" data-ts="'+ts+'"><div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div></div>';
+  // Écrire dans Firebase comme objet JSON (nouveau système)
+  if(firebaseReady && db){
+    db.ref('dct/activite_items').push({
+      ts: ts,
+      emoji: emoji,
+      bg: bg,
+      text: text,
+      timeLabel: timeLabel
+    });
+  }
+
+  // Mettre à jour le DOM local si on est sur l'écran activité
+  var list = document.getElementById('activity-list');
+  if(list){
+    var empty=list.querySelector('div[style*="text-align:center"]');if(empty)empty.remove();
+    var item=document.createElement('div');item.className='activity-item';
+    item.setAttribute('data-ts', ts);
+    item.innerHTML='<div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div>';
+    list.insertBefore(item,list.firstChild);
+    _reordonnerActivite(list);
+  }
 
   // Notifier les autres collaborateurs
-  function _notifier(){
-    if(firebaseReady && db){
-      var notifRef = db.ref('dct_notifs');
-      notifRef.transaction(function(current){
-        var data = current || {};
-        COLLABS.forEach(function(co){
-          if(co.name !== currentUser.name && !co.admin) data[co.id] = (data[co.id]||0) + 1;
-        });
-        return data;
-      });
-    }
-  }
-
-  // Si on n'est pas sur l'écran activité → écrire directement dans Firebase
-  if(!list){
-    if(firebaseReady && db){
-      // Lire l'activité existante depuis Firebase, ajouter l'item, réécrire
-      db.ref('dct/activite').once('value', function(snap){
-        var existing = snap.val() || '';
-        var newActivite = itemHtml + existing;
-        db.ref('dct/activite').set(newActivite);
-      });
-    } else {
-      // Fallback localStorage
-      var existing2 = localStorage.getItem('dct_v3_activite') || '';
-      localStorage.setItem('dct_v3_activite', itemHtml + existing2);
-    }
-    _notifier();
-    return;
-  }
-  var empty=list.querySelector('div[style*="text-align:center"]');if(empty)empty.remove();
-  var item=document.createElement('div');item.className='activity-item';
-  item.setAttribute('data-ts', ts);
-  item.innerHTML='<div class="activity-dot" style="background:'+bg+';">'+emoji+'</div><div><div class="activity-text">'+text+'</div><div class="activity-time">'+timeLabel+'</div></div>';
-  list.insertBefore(item,list.firstChild);
-  // Réordonner le fil par timestamp décroissant
-  _reordonnerActivite(list);
-  // Incrémenter le compteur global dans Firebase
   if(firebaseReady && db){
     var notifRef = db.ref('dct_notifs');
     notifRef.transaction(function(current){
       var data = current || {};
       COLLABS.forEach(function(co){
-        if(co.name !== currentUser.name && !co.admin){
-          data[co.id] = (data[co.id]||0) + 1;
-        }
+        if(co.name !== currentUser.name && !co.admin) data[co.id] = (data[co.id]||0) + 1;
       });
       return data;
     });
-  } else {
-    // Fallback localStorage
-    COLLABS.forEach(function(co){
-      if(co.name !== currentUser.name && !co.admin){
-        var key = 'dct_notif_'+co.id;
-        var count = parseInt(localStorage.getItem(key)||'0') + 1;
-        localStorage.setItem(key, count);
-      }
-    });
   }
-  sauvegarder();
 }
 function effacerActivite(){
   var now = Date.now();
@@ -5484,6 +5506,9 @@ setTimeout(function(){
     initFirebase();
   }
 }, 2000);
+
+
+
 
 
 
