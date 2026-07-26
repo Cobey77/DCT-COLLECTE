@@ -806,13 +806,11 @@ function ecouterChangements(){
               if(!localTk){ localD.trucks[k] = remoteTk; return; }
               // Merger en gardant le plus complet
               localD.trucks[k] = remoteTk;
-              // Préserver wazeTs et finTs locaux si Firebase ne les a pas encore
-              if(localTk.wazeTs && Object.keys(localTk.wazeTs).length > Object.keys(remoteTk.wazeTs||{}).length){
-                localD.trucks[k].wazeTs = localTk.wazeTs;
-              }
-              if(localTk.finTs && Object.keys(localTk.finTs).length > Object.keys(remoteTk.finTs||{}).length){
-                localD.trucks[k].finTs = localTk.finTs;
-              }
+              // v2.8.3 : fusion CLÉ PAR CLÉ (plus de comparaison de
+              // nombre de clés, qui faisait disparaître les départs
+              // enregistrés par les autres téléphones).
+              localD.trucks[k].wazeTs = _fusionnerTs(remoteTk.wazeTs, localTk.wazeTs, 'min');
+              localD.trucks[k].finTs  = _fusionnerTs(remoteTk.finTs,  localTk.finTs,  'max');
             });
           }
           if(remoteD.assigned) localD.assigned = remoteD.assigned;
@@ -886,6 +884,23 @@ function ecouterChangements(){
   });
 }
 
+// v2.8.3 : fusionne deux tables {clientId: timestamp} sans perte.
+// mode 'min' = on garde le plus ancien (heure de départ),
+// mode 'max' = on garde le plus récent (heure de fin).
+function _fusionnerTs(distant, local, mode){
+  var res = {};
+  [distant, local].forEach(function(src){
+    if(!src || typeof src !== 'object') return;
+    Object.keys(src).forEach(function(cid){
+      var v = src[cid];
+      if(typeof v !== 'number' || !v) return;
+      if(res[cid] === undefined){ res[cid] = v; return; }
+      res[cid] = (mode === 'max') ? Math.max(res[cid], v) : Math.min(res[cid], v);
+    });
+  });
+  return res;
+}
+
 function sauvegarderFirebase(){
   if(!db || !firebaseReady) return;
   // GUARD : ne jamais écraser Firebase avec des données vides
@@ -912,8 +927,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.8.2';
-var APP_UPDATE = '24/07/2026 à 12:30';
+var APP_VERSION = 'v2.8.3';
+var APP_UPDATE = '27/07/2026 à 00:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1893,7 +1908,6 @@ function _rafraichirCarte(){
 // ===== CARTE DISPATCH =====
 
 var _mapSelection = [];
-var _wazeTimestamps = {}; // {collecteId_truckKey_clientId: timestamp}
 var _finTimestamps = {}; // {collecteId_truckKey_clientId: timestamp}
 var _mapInstance = null;
 var _mapMarkers = {};
@@ -3591,18 +3605,8 @@ function renderCamion(k){
     adresseEl.innerHTML='📍 <strong style="color:#009A44;text-decoration:underline;">'+adresseFull+'</strong>';
     (function(wl,af,cid){
       adresseEl.onclick=function(){
-        // Enregistrer timestamp départ directement dans Firebase
-        if(currentCamion && currentCollecteId && firebaseReady && db){
-          var ts = Date.now();
-          // Écriture directe dans Firebase sans passer par sauvegarder()
-          db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+currentCamion+'/wazeTs/'+cid).set(ts);
-          // Aussi en mémoire locale
-          var trks = getTrucks();
-          if(trks[currentCamion]){
-            if(!trks[currentCamion].wazeTs) trks[currentCamion].wazeTs = {};
-            trks[currentCamion].wazeTs[cid] = ts;
-          }
-        }
+        // v2.8.3 : aucune écriture ici. Le départ est enregistré
+        // uniquement au clic sur "Ouvrir Waze" (cf. ouvrirModalWaze).
         ouvrirModalWaze(wl,af,cid);
       };
     })(wazeLink,adresseFull,c.id);
@@ -3685,18 +3689,31 @@ function ouvrirModalWaze(url, adresse, clientId){
   if(btn) btn.onclick = function(){
     window.open(url,'_blank');
     closeModal('modal-waze');
-    // Enregistrer timestamp départ Waze
-    if(currentCamion && clientId && currentCollecteId){
+    // v2.8.3 : SEULE écriture du départ. Transaction Firebase =
+    // le premier passage sur Waze fait foi, les clics suivants
+    // n'écrasent jamais la valeur existante.
+    if(currentCamion && clientId && currentCollecteId && firebaseReady && db){
       var ts = Date.now();
-      var wazeKey = currentCollecteId+'_'+currentCamion+'_'+clientId;
-      _wazeTimestamps[wazeKey] = ts;
-      try{ localStorage.setItem('dct_waze_ts', JSON.stringify(_wazeTimestamps)); }catch(ee){}
       var trks = getTrucks();
       if(trks[currentCamion]){
         if(!trks[currentCamion].wazeTs) trks[currentCamion].wazeTs = {};
-        trks[currentCamion].wazeTs[clientId] = ts;
-        sauvegarder();
+        // Déjà un départ connu localement : on ne touche à rien.
+        if(trks[currentCamion].wazeTs[clientId]) return;
       }
+      window._lastWriteTime = Date.now();
+      db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+currentCamion+'/wazeTs/'+clientId)
+        .transaction(function(actuel){
+          return (actuel === null || actuel === undefined) ? ts : actuel;
+        }, function(err, committed, snap){
+          if(err){ console.log('[WAZE] erreur transaction:', err); return; }
+          var valeur = snap && snap.val();
+          if(!valeur) return;
+          var t = getTrucks();
+          if(t[currentCamion]){
+            if(!t[currentCamion].wazeTs) t[currentCamion].wazeTs = {};
+            t[currentCamion].wazeTs[clientId] = valeur;
+          }
+        });
     }
   };
   openModal('modal-waze');
