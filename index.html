@@ -927,8 +927,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.8.5-DIAG';
-var APP_UPDATE = '27/07/2026 à 01:00 (diagnostic)';
+var APP_VERSION = 'v2.8.6';
+var APP_UPDATE = '27/07/2026 à 01:10';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3609,7 +3609,7 @@ function renderCamion(k){
         // uniquement au clic sur "Ouvrir Waze" (cf. ouvrirModalWaze).
         ouvrirModalWaze(wl,af,cid);
       };
-    })(wazeLink,adresseFull,c.id);
+    })(wazeLink,adresseFull,id);   // v2.8.6 : 'id' (clé du client), pas 'c.id' qui n'existe pas
     det.appendChild(adresseEl);
     var telEl=document.createElement('div');telEl.className='route-detail-row';
     if(telClean){
@@ -3688,57 +3688,29 @@ function ouvrirModalWaze(url, adresse, clientId){
   var btn = document.getElementById('waze-btn');
   if(btn) btn.onclick = function(){
     closeModal('modal-waze');
-    // ===== v2.8.5-DIAG : version de diagnostic temporaire =====
-    // Affiche l'état réel des variables au moment du clic.
-    // À RETIRER une fois la cause identifiée.
-    var D = [];
-    D.push('camion    : ' + (currentCamion || 'VIDE'));
-    D.push('collecte  : ' + (currentCollecteId || 'VIDE'));
-    D.push('client    : ' + (clientId || 'VIDE'));
-    D.push('firebase  : ' + (firebaseReady ? 'oui' : 'NON'));
-    D.push('db        : ' + (db ? 'oui' : 'NON'));
-
-    var ecrit = false, erreurMsg = '';
-    var dejaEnregistre = false;
+    // v2.8.6 : écriture du départ AVANT l'ouverture de Waze (ouvrir Waze
+    // met Safari en veille sur iOS et interrompt tout ce qui suit).
+    // set() direct sur le chemin précis, comme le finTs du bouton Livré.
     if(currentCamion && clientId && currentCollecteId && firebaseReady && db){
-      var ts = Date.now();
       var trks = getTrucks();
-      D.push('camion trouve : ' + (trks[currentCamion] ? 'oui' : 'NON'));
       if(trks[currentCamion]){
         if(!trks[currentCamion].wazeTs) trks[currentCamion].wazeTs = {};
-        D.push('departs deja la : ' + Object.keys(trks[currentCamion].wazeTs).length);
-        if(trks[currentCamion].wazeTs[clientId]) dejaEnregistre = true;
-      }
-      D.push('deja enregistre : ' + (dejaEnregistre ? 'OUI (on ecrit pas)' : 'non'));
-      if(!dejaEnregistre){
-        window._lastWriteTime = Date.now();
-        if(trks[currentCamion]) trks[currentCamion].wazeTs[clientId] = ts;
-        try{
+        // Le premier clic fait foi : on ne réécrit jamais un départ existant.
+        if(!trks[currentCamion].wazeTs[clientId]){
+          var ts = Date.now();
+          window._lastWriteTime = Date.now();
+          trks[currentCamion].wazeTs[clientId] = ts;
           db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+currentCamion+'/wazeTs/'+clientId)
             .set(ts)
-            .then(function(){ window._wazeDiagOk = true; })
-            .catch(function(e){ window._wazeDiagErr = String(e); });
-          ecrit = true;
-        }catch(ex){ erreurMsg = String(ex); }
-        try{ localStorage.setItem('dct_v3_dispatch', JSON.stringify(dispatchParCollecte)); }catch(ee){}
+            .catch(function(e){ console.log('[WAZE] erreur écriture départ:', e); });
+          try{ localStorage.setItem('dct_v3_dispatch', JSON.stringify(dispatchParCollecte)); }catch(ee){}
+          if(typeof renderCamion === 'function' && currentCamion) renderCamion(currentCamion);
+        }
       }
-    } else {
-      D.push('>>> GARDE BLOQUE : une valeur ci-dessus est VIDE/NON');
     }
-    D.push('ecriture envoyee : ' + (ecrit ? 'OUI' : 'NON'));
-    if(erreurMsg) D.push('exception : ' + erreurMsg);
-    D.push('chemin : dct/dispatch/'+currentCollecteId+'/trucks/'+currentCamion+'/wazeTs/'+clientId);
-    alert('DIAGNOSTIC DEPART WAZE\n\n' + D.join('\n'));
-
-    // Deuxieme alerte 1,5 s plus tard : reponse du serveur Firebase
-    setTimeout(function(){
-      var r = window._wazeDiagOk ? 'FIREBASE A CONFIRME L ECRITURE'
-            : (window._wazeDiagErr ? 'FIREBASE A REFUSE :\n' + window._wazeDiagErr
-                                   : 'AUCUNE REPONSE DU SERVEUR (reseau ?)');
-      alert('RESULTAT SERVEUR\n\n' + r);
-      window._wazeDiagOk = false; window._wazeDiagErr = '';
-      window.open(url,'_blank');
-    }, 1500);
+    // Ouverture de Waze en dernier, mais DANS le geste utilisateur :
+    // un window.open différé (setTimeout) est bloqué par iOS.
+    window.open(url,'_blank');
   };
   openModal('modal-waze');
 }
