@@ -927,8 +927,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.8.3';
-var APP_UPDATE = '27/07/2026 à 00:30';
+var APP_VERSION = 'v2.8.4';
+var APP_UPDATE = '27/07/2026 à 00:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3687,34 +3687,35 @@ function ouvrirModalWaze(url, adresse, clientId){
   if(el) el.textContent = adresse;
   var btn = document.getElementById('waze-btn');
   if(btn) btn.onclick = function(){
-    window.open(url,'_blank');
     closeModal('modal-waze');
-    // v2.8.3 : SEULE écriture du départ. Transaction Firebase =
-    // le premier passage sur Waze fait foi, les clics suivants
-    // n'écrasent jamais la valeur existante.
+    // v2.8.4 : ORDRE CRITIQUE — on écrit le départ AVANT d'ouvrir Waze.
+    // Ouvrir Waze met Safari en veille sur iOS : tout ce qui reste à
+    // faire après window.open() est abandonné. En v2.8.3 l'écriture
+    // était placée après, et une transaction (aller-retour serveur)
+    // n'avait aucune chance d'aboutir. Ici : un simple set(), envoyé
+    // immédiatement, exactement comme le finTs du bouton Livré.
+    var dejaEnregistre = false;
     if(currentCamion && clientId && currentCollecteId && firebaseReady && db){
       var ts = Date.now();
       var trks = getTrucks();
       if(trks[currentCamion]){
         if(!trks[currentCamion].wazeTs) trks[currentCamion].wazeTs = {};
-        // Déjà un départ connu localement : on ne touche à rien.
-        if(trks[currentCamion].wazeTs[clientId]) return;
+        // Départ déjà connu pour ce client : le premier clic fait foi.
+        if(trks[currentCamion].wazeTs[clientId]) dejaEnregistre = true;
       }
-      window._lastWriteTime = Date.now();
-      db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+currentCamion+'/wazeTs/'+clientId)
-        .transaction(function(actuel){
-          return (actuel === null || actuel === undefined) ? ts : actuel;
-        }, function(err, committed, snap){
-          if(err){ console.log('[WAZE] erreur transaction:', err); return; }
-          var valeur = snap && snap.val();
-          if(!valeur) return;
-          var t = getTrucks();
-          if(t[currentCamion]){
-            if(!t[currentCamion].wazeTs) t[currentCamion].wazeTs = {};
-            t[currentCamion].wazeTs[clientId] = valeur;
-          }
-        });
+      if(!dejaEnregistre){
+        window._lastWriteTime = Date.now();
+        // Mémoire locale d'abord (instantané, survit à la mise en veille)
+        if(trks[currentCamion]) trks[currentCamion].wazeTs[clientId] = ts;
+        // Puis Firebase, en écriture directe sur le chemin précis
+        db.ref('dct/dispatch/'+currentCollecteId+'/trucks/'+currentCamion+'/wazeTs/'+clientId)
+          .set(ts)
+          .catch(function(e){ console.log('[WAZE] erreur écriture départ:', e); });
+        try{ localStorage.setItem('dct_v3_dispatch', JSON.stringify(dispatchParCollecte)); }catch(ee){}
+      }
     }
+    // Court délai avant d'ouvrir Waze : laisse le paquet Firebase partir.
+    setTimeout(function(){ window.open(url,'_blank'); }, 250);
   };
   openModal('modal-waze');
 }
