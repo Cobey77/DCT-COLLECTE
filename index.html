@@ -927,8 +927,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.8.7';
-var APP_UPDATE = '31/07/2026 à 15:45';
+var APP_VERSION = 'v2.8.8';
+var APP_UPDATE = '31/07/2026 à 17:05';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3283,11 +3283,11 @@ function addTruck(){
     modalHtml += '<div class="fg"><label class="fl">Équipage</label>';
     modalHtml += '<input class="fi" id="new-truck-name" placeholder="Samba + Issyaka" maxlength="60" oninput="_syncPastilles()"></div>';
     modalHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
-    COLLABS.forEach(function(cb){
+    COLLABS.filter(function(cb){return !cb.admin;}).forEach(function(cb){
       modalHtml += '<span class="pastille-collab" data-nom="'+cb.name+'" data-bg="'+cb.bg+'" data-color="'+cb.color+'" onclick="_togglePastille(this)" style="font-size:12px;padding:5px 11px;border-radius:999px;background:#f2f2f2;color:#888;font-weight:700;cursor:pointer;border:2px solid transparent;">'+cb.name+'</span>';
     });
+    modalHtml += '<span onclick="_ouvrirAutreNom()" style="font-size:12px;padding:5px 11px;border-radius:999px;background:#fff;color:#333;font-weight:700;cursor:pointer;border:2px dashed #999;">+ Autre</span>';
     modalHtml += '</div>';
-    modalHtml += '<div style="font-size:12px;color:#999;margin-top:10px;line-height:1.5;">Tapez sur les prénoms, ou écrivez librement dans le champ.</div>';
     modalHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">';
     modalHtml += '<button class="btn-sm btn-gray-sm" onclick="_annulerAddTruck()">Annuler</button>';
     modalHtml += '<button class="btn-sm btn-green-sm" onclick="_confirmerAddTruck()">✅ Créer</button>';
@@ -3304,7 +3304,61 @@ function addTruck(){
 
 function _annulerAddTruck(){
   _pendingAffect=null;
+  _fermerAutreNom();
   closeModal('modal-add-truck');
+}
+function _ouvrirAutreNom(){
+  var m=document.getElementById('modal-autre-nom');
+  if(!m){
+    m=document.createElement('div');
+    m.id='modal-autre-nom';
+    m.style.cssText='position:fixed;inset:0;background:transparent;display:none;align-items:center;justify-content:center;z-index:300;';
+    var h='<div style="background:#fff;border-radius:16px;margin:24px;padding:20px;max-width:340px;width:100%;border:1px solid #ccc;box-shadow:0 8px 30px rgba(0,0,0,0.25);">';
+    h+='<div style="font-size:16px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">Autre personne</div>';
+    h+='<div style="font-size:13px;color:#666;line-height:1.5;margin-bottom:14px;">Chauffeur ext\u00e9rieur, renfort, accompagnant\u2026</div>';
+    h+='<div class="fg"><label class="fl">Pr\u00e9nom</label>';
+    h+='<input class="fi" id="autre-nom-input" placeholder="Mamadou" maxlength="30" oninput="_majBoutonAutre()"></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">';
+    h+='<button class="btn-sm btn-gray-sm" onclick="_fermerAutreNom()">Annuler</button>';
+    h+='<button class="btn-sm btn-green-sm" id="autre-nom-ok" onclick="_validerAutreNom()" disabled style="opacity:0.45;">Ajouter</button>';
+    h+='</div></div>';
+    m.innerHTML=h;
+    document.body.appendChild(m);
+  }
+  var i=document.getElementById('autre-nom-input');
+  if(i) i.value='';
+  _majBoutonAutre();
+  m.style.display='flex';
+  setTimeout(function(){ var x=document.getElementById('autre-nom-input'); if(x) x.focus(); },200);
+}
+function _majBoutonAutre(){
+  var i=document.getElementById('autre-nom-input');
+  var b=document.getElementById('autre-nom-ok');
+  if(!i||!b) return;
+  var vide=(i.value.trim().length===0);
+  b.disabled=vide;
+  b.style.opacity=vide?'0.45':'1';
+  b.style.cursor=vide?'not-allowed':'pointer';
+}
+function _fermerAutreNom(){
+  var m=document.getElementById('modal-autre-nom');
+  if(m) m.style.display='none';
+}
+function _validerAutreNom(){
+  var i=document.getElementById('autre-nom-input');
+  if(!i) return;
+  var nom=i.value.trim();
+  if(!nom) return;
+  var inp=document.getElementById('new-truck-name');
+  if(inp){
+    var parts=inp.value.split('+').map(function(x){return x.trim();}).filter(function(x){return x.length>0;});
+    var deja=false;
+    for(var j=0;j<parts.length;j++){ if(parts[j].toLowerCase()===nom.toLowerCase()) deja=true; }
+    if(!deja) parts.push(nom);
+    inp.value=parts.join(' + ');
+    _syncPastilles();
+  }
+  _fermerAutreNom();
 }
 function _pastilleOn(el){
   el.style.background=el.getAttribute('data-bg');
@@ -3319,12 +3373,21 @@ function _pastilleOff(el){
   el.setAttribute('data-on','0');
 }
 function _togglePastille(el){
-  if(el.getAttribute('data-on')==='1') _pastilleOff(el); else _pastilleOn(el);
-  var noms=[];
-  var ps=document.querySelectorAll('#modal-add-truck .pastille-collab');
-  for(var i=0;i<ps.length;i++){ if(ps[i].getAttribute('data-on')==='1') noms.push(ps[i].getAttribute('data-nom')); }
   var inp=document.getElementById('new-truck-name');
-  if(inp) inp.value=noms.join(' + ');
+  if(!inp) return;
+  var nom=el.getAttribute('data-nom');
+  var parts=inp.value.split('+').map(function(x){return x.trim();}).filter(function(x){return x.length>0;});
+  var etait=(el.getAttribute('data-on')==='1');
+  if(etait){
+    _pastilleOff(el);
+    parts=parts.filter(function(x){return x.toLowerCase()!==nom.toLowerCase();});
+  }else{
+    _pastilleOn(el);
+    var deja=false;
+    for(var i=0;i<parts.length;i++){ if(parts[i].toLowerCase()===nom.toLowerCase()) deja=true; }
+    if(!deja) parts.push(nom);
+  }
+  inp.value=parts.join(' + ');
 }
 function _syncPastilles(){
   var inp=document.getElementById('new-truck-name');
