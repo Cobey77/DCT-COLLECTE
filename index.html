@@ -101,7 +101,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 .client-price{font-size:13px;font-weight:800;color:var(--green-dark);}
 
 /* TRUCK PILL */
-.truck-pill{font-size:11px;padding:4px 10px;border-radius:20px;font-weight:700;flex-shrink:0;white-space:nowrap;border:1.5px solid;}
+.truck-pill{font-size:11px;padding:4px 10px;border-radius:20px;font-weight:700;flex-shrink:1;white-space:normal;word-break:break-word;text-align:center;border:1.5px solid;}
 
 /* PROGRESS */
 .progress-bg{height:8px;background:#e0e0e0;border-radius:4px;overflow:hidden;border:1px solid #ccc;margin-bottom:4px;}
@@ -183,8 +183,8 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 /* TRUCK CARD */
 .truck-card{background:var(--white);border:2px solid var(--border);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;cursor:pointer;}
 .truck-card:active{opacity:0.95;}
-.truck-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#F7F7F5;border-bottom:1px solid #ececec;}
-.truck-name{font-size:14px;font-weight:700;color:var(--text);}
+.truck-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 14px;background:#F7F7F5;border-bottom:1px solid #ececec;}
+.truck-name{font-size:14px;font-weight:700;color:var(--text);word-break:break-word;line-height:1.3;}
 .truck-count{font-size:12px;padding:3px 10px;border-radius:20px;font-weight:700;border:1.5px solid;}
 .truck-finance{padding:10px 14px;border-bottom:1px solid #ececec;background:#fafafa;}
 .truck-fin-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;}
@@ -927,8 +927,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.8.6';
-var APP_UPDATE = '27/07/2026 à 01:10';
+var APP_VERSION = 'v2.8.7';
+var APP_UPDATE = '31/07/2026 à 15:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -988,6 +988,7 @@ var collecteASupprimer = null, collecteStatutId = null;
 var curHeureId = null, curHeureTk = null;
 var curAnnulerId = null, curAnnulerTk = null, curAnnulerType = null;
 var curSupprimerCamion = null;
+var _pendingAffect = null;
 var excepOn = false;
 var activeFilter = '';
 var truckCount = 0;
@@ -1700,12 +1701,12 @@ function renderDispatchTab(){
       pills+='<span class="truck-pill-item" style="background:'+(isDone?'#d4f0e0':isRef?'#fde0e0':tc.bg)+';color:'+(isDone?'#006b2d':isRef?'#992020':tc.color)+';border-color:'+tc.color+';">'+c.name+(tk.hours&&tk.hours[id]?' · '+tk.hours[id]:'')+(isDone?' ✅':isRef?' ❌':'')+'</span>';
     });
     card.innerHTML='<div class="truck-head">'
-      +'<div style="display:flex;align-items:center;gap:8px;">'
+      +'<div style="display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;flex-wrap:wrap;">'
       +'<span class="truck-name">'+tk.name+'</span>'
       +'<span onclick="event.stopPropagation();toggleRename(\''+k+'\')" style="font-size:11px;cursor:pointer;padding:2px 8px;background:#e0e0e0;border-radius:6px;color:#333;font-weight:700;border:1px solid #bbb;">✏️</span>'
       +'<span onclick="event.stopPropagation();demanderSupprimerCamion(\''+k+'\')" style="font-size:11px;cursor:pointer;padding:2px 8px;background:#fde0e0;border-radius:6px;color:#c0392b;font-weight:700;border:1px solid #c0392b;">🗑️</span>'
       +'</div>'
-      +'<span class="truck-count" style="background:'+tc.bg+';color:'+tc.color+';border-color:'+tc.color+';">'+tk.clients.length+' client'+(tk.clients.length!==1?'s':'')+'</span>'
+      +'<span class="truck-count" style="flex-shrink:0;background:'+tc.bg+';color:'+tc.color+';border-color:'+tc.color+';">'+tk.clients.length+' client'+(tk.clients.length!==1?'s':'')+'</span>'
       +'</div>'
       +'<div class="rename-zone" id="rz-'+k+'" onclick="event.stopPropagation()">'
       +'<input class="rename-input" id="ri-'+k+'" value="'+tk.name+'">'
@@ -3277,11 +3278,18 @@ function addTruck(){
     modal.className = 'modal-overlay';
     modal.style.cssText = 'align-items:center;';
     var modalHtml = '<div class="modal-sheet" style="border-radius:16px;margin:16px;">';
-    modalHtml += '<div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:16px;">🚛 Nouveau camion</div>';
-    modalHtml += '<div class="fg"><label class="fl">Nom du camion</label>';
-    modalHtml += '<input class="fi" id="new-truck-name" placeholder="Ex: Camion Paris, Camion Sud..." maxlength="30"></div>';
+    modalHtml += '<div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">🚛 Nouveau camion</div>';
+    modalHtml += '<div style="font-size:13px;color:#666;line-height:1.5;margin-bottom:16px;">Sélectionnez qui part dans ce camion.</div>';
+    modalHtml += '<div class="fg"><label class="fl">Équipage</label>';
+    modalHtml += '<input class="fi" id="new-truck-name" placeholder="Samba + Issyaka" maxlength="60" oninput="_syncPastilles()"></div>';
+    modalHtml += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;">';
+    COLLABS.forEach(function(cb){
+      modalHtml += '<span class="pastille-collab" data-nom="'+cb.name+'" data-bg="'+cb.bg+'" data-color="'+cb.color+'" onclick="_togglePastille(this)" style="font-size:12px;padding:5px 11px;border-radius:999px;background:#f2f2f2;color:#888;font-weight:700;cursor:pointer;border:2px solid transparent;">'+cb.name+'</span>';
+    });
+    modalHtml += '</div>';
+    modalHtml += '<div style="font-size:12px;color:#999;margin-top:10px;line-height:1.5;">Tapez sur les prénoms, ou écrivez librement dans le champ.</div>';
     modalHtml += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">';
-    modalHtml += '<button class="btn-sm btn-gray-sm" onclick="closeModal(&quot;modal-add-truck&quot;)">Annuler</button>';
+    modalHtml += '<button class="btn-sm btn-gray-sm" onclick="_annulerAddTruck()">Annuler</button>';
     modalHtml += '<button class="btn-sm btn-green-sm" onclick="_confirmerAddTruck()">✅ Créer</button>';
     modalHtml += '</div></div>';
     modal.innerHTML = modalHtml;
@@ -3289,14 +3297,53 @@ function addTruck(){
   }
   var inp = document.getElementById('new-truck-name');
   if(inp) inp.value = '';
+  _resetPastilles();
   openModal('modal-add-truck');
   setTimeout(function(){ var i=document.getElementById('new-truck-name'); if(i) i.focus(); }, 300);
 }
 
+function _annulerAddTruck(){
+  _pendingAffect=null;
+  closeModal('modal-add-truck');
+}
+function _pastilleOn(el){
+  el.style.background=el.getAttribute('data-bg');
+  el.style.color=el.getAttribute('data-color');
+  el.style.borderColor=el.getAttribute('data-color');
+  el.setAttribute('data-on','1');
+}
+function _pastilleOff(el){
+  el.style.background='#f2f2f2';
+  el.style.color='#888';
+  el.style.borderColor='transparent';
+  el.setAttribute('data-on','0');
+}
+function _togglePastille(el){
+  if(el.getAttribute('data-on')==='1') _pastilleOff(el); else _pastilleOn(el);
+  var noms=[];
+  var ps=document.querySelectorAll('#modal-add-truck .pastille-collab');
+  for(var i=0;i<ps.length;i++){ if(ps[i].getAttribute('data-on')==='1') noms.push(ps[i].getAttribute('data-nom')); }
+  var inp=document.getElementById('new-truck-name');
+  if(inp) inp.value=noms.join(' + ');
+}
+function _syncPastilles(){
+  var inp=document.getElementById('new-truck-name');
+  if(!inp) return;
+  var txt=inp.value.toLowerCase();
+  var ps=document.querySelectorAll('#modal-add-truck .pastille-collab');
+  for(var i=0;i<ps.length;i++){
+    var n=ps[i].getAttribute('data-nom').toLowerCase();
+    if(txt.indexOf(n)!==-1) _pastilleOn(ps[i]); else _pastilleOff(ps[i]);
+  }
+}
+function _resetPastilles(){
+  var ps=document.querySelectorAll('#modal-add-truck .pastille-collab');
+  for(var i=0;i<ps.length;i++) _pastilleOff(ps[i]);
+}
 function _confirmerAddTruck(){
   var nom = (document.getElementById('new-truck-name')||{}).value||'';
   nom = nom.trim();
-  if(!nom){ showToastNew('⚠️ Entrez un nom pour le camion'); return; }
+  if(!nom){ showToastNew('⚠️ Indiquez qui part dans ce camion'); return; }
   var trks=getTrucks();
   var num=1;
   while(trks['T'+String(num).padStart(2,'0')]) num++;
@@ -3310,6 +3357,10 @@ function _confirmerAddTruck(){
   addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a ajouté le camion <strong>'+nom+'</strong>',"À l'instant");
   closeModal('modal-add-truck');
   sauvegarder();renderDispatchTab();
+  if(_pendingAffect){
+    var pa=_pendingAffect; _pendingAffect=null;
+    setTimeout(function(){ openAffect(pa.id,pa.name); }, 350);
+  }
 }
 function demanderSupprimerCamion(k){
   curSupprimerCamion=k;
@@ -3495,7 +3546,12 @@ function exportCamionPDF(){
 function openAffect(id,name){
   curAffectId=id;curAffectName=name;
   var trks=getTrucks();
-  if(Object.keys(trks).length===0){trks['A']={name:'Camion A',clients:[],validated:[],refused:[],hours:{}};truckCount=1;sauvegarder();}
+  if(Object.keys(trks).length===0){
+    _pendingAffect={id:id,name:name};
+    showToastNew('\u26a0\ufe0f Cr\u00e9ez d\'abord un camion');
+    addTruck();
+    return;
+  }
   var asgn=getAssigned();var isAssigned=!!asgn[id];
   var el=document.getElementById('affect-title');if(el)el.textContent=isAssigned?'Modifier — '+name:'Affecter '+name+' à…';
   var ar=document.getElementById('affect-retirer');if(ar)ar.style.display=isAssigned?'block':'none';
