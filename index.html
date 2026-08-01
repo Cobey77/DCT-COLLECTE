@@ -983,7 +983,7 @@ function sauvegarderFirebase(){
 // ===== FIN FIREBASE =====
 
 var APP_VERSION = 'v2.9.1';
-var APP_UPDATE = '01/08/2026 à 13:30';
+var APP_UPDATE = '01/08/2026 à 14:05';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2885,7 +2885,7 @@ function renderClientsTab(){
       row.setAttribute('data-search',c.name+' '+c.ville+' '+(c.cp||''));
       var init=initiales(c.prenom,c.nom);
       var asgn=getAssigned()[c.id];var tc2=asgn?getTc(asgn):null;var trks=getTrucks();
-      var pillHtml=asgn?'<span style="background:'+tc2.bg+';color:'+tc2.color+';font-size:10px;padding:2px 8px;border-radius:20px;font-weight:700;border:1px solid '+tc2.color+';">'+(trks[asgn]?trks[asgn].name:asgn)+'</span>':'';
+      var pillHtml=asgn?'<span style="background:'+tc2.bg+';color:'+tc2.color+';font-size:10px;padding:2px 8px;border-radius:20px;font-weight:700;border:1px solid '+tc2.color+';">\ud83d\ude9b '+(trks[asgn]?trks[asgn].name:asgn)+'</span>':'';
       row.innerHTML='<div class="av" style="background:'+c.bg+';color:'+c.color+';font-size:12px;">'+init+'</div>'
         +'<div class="client-info"><div class="client-name">'+c.name+'</div>'
         +'<div class="client-sub">'+(c.adresse?c.adresse+', ':'')+c.cp+' '+c.ville+'</div>'
