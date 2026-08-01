@@ -983,7 +983,7 @@ function sauvegarderFirebase(){
 // ===== FIN FIREBASE =====
 
 var APP_VERSION = 'v2.9.2';
-var APP_UPDATE = '01/08/2026 à 15:20';
+var APP_UPDATE = '01/08/2026 à 15:50';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1072,22 +1072,52 @@ function verifierReferencesOrphelines(){
           if(!cls[id]) det.push(f+' \u2192 '+id);
         });
       });
-      if(det.length) rapport.push({collecte:colId, camion:(tk.name||k), refs:det});
+      if(det.length){
+        var _c=collectes.find(function(x){return x.id===colId;});
+        rapport.push({
+          collecte:colId,
+          date:_c?_c.date:'(collecte inconnue)',
+          statut:_c?_c.statut:'',
+          camion:(tk.name||k),
+          refs:det
+        });
+      }
     });
   });
   return rapport;
 }
 function afficherReferencesOrphelines(){
   var r=verifierReferencesOrphelines();
-  if(!r.length){ alert('Aucune r\u00e9f\u00e9rence orpheline. Tout est propre.'); return; }
-  var txt='R\u00c9F\u00c9RENCES ORPHELINES D\u00c9TECT\u00c9ES\n(clients supprim\u00e9s encore pr\u00e9sents dans un camion)\n\n';
-  r.forEach(function(x){
-    txt+='\u2022 '+x.camion+' \u2014 '+x.refs.length+' r\u00e9f\u00e9rence(s)\n';
-    x.refs.forEach(function(d){ txt+='   '+d+'\n'; });
-    txt+='\n';
-  });
-  txt+='Rien n\'a \u00e9t\u00e9 supprim\u00e9.';
-  alert(txt);
+  var m=document.getElementById('modal-orphelins');
+  if(!m){
+    m=document.createElement('div');
+    m.id='modal-orphelins';
+    m.className='modal-overlay';
+    m.innerHTML='<div class="modal-sheet" style="max-height:80vh;display:flex;flex-direction:column;">'
+      +'<div style="font-size:16px;font-weight:800;color:#1a1a2e;margin-bottom:4px;">\ud83d\udd0d Diagnostic des donn\u00e9es</div>'
+      +'<div style="font-size:12px;color:#888;margin-bottom:12px;">Clients supprim\u00e9s encore r\u00e9f\u00e9renc\u00e9s dans un camion. <strong>Rien n\'a \u00e9t\u00e9 modifi\u00e9.</strong></div>'
+      +'<div id="orph-list" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>'
+      +'<button class="btn-sm btn-gray-sm" style="width:100%;margin-top:12px;flex-shrink:0;" onclick="closeModal(\'modal-orphelins\')">Fermer</button></div>';
+    document.body.appendChild(m);
+  }
+  var h='';
+  if(!r.length){
+    h='<div style="text-align:center;color:#0a5c30;font-size:14px;font-weight:700;padding:20px;">\u2705 Aucune r\u00e9f\u00e9rence orpheline.<br>Tout est propre.</div>';
+  } else {
+    var tot=0; r.forEach(function(x){ tot+=x.refs.length; });
+    h+='<div style="background:#fff3e0;color:#e65100;font-size:12.5px;font-weight:700;padding:9px 12px;border-radius:8px;margin-bottom:12px;">'+tot+' r\u00e9f\u00e9rence(s) sur '+r.length+' camion(s)</div>';
+    r.forEach(function(x){
+      var enc=(x.statut==='en_cours');
+      h+='<div style="border:1.5px solid '+(enc?'#e65100':'#eee')+';border-radius:10px;padding:10px;margin-bottom:9px;">';
+      h+='<div style="font-size:13px;font-weight:800;color:#1a1a2e;">'+_esc(x.camion)+'</div>';
+      h+='<div style="font-size:11.5px;color:'+(enc?'#e65100':'#888')+';margin-top:2px;font-weight:'+(enc?'800':'400')+';">'+_esc(x.date)+(enc?' \u2014 COLLECTE EN COURS':'')+'</div>';
+      h+='<div style="font-size:11px;color:#666;margin-top:6px;line-height:1.6;font-family:monospace;">';
+      x.refs.forEach(function(d){ h+=_esc(d)+'<br>'; });
+      h+='</div></div>';
+    });
+  }
+  document.getElementById('orph-list').innerHTML=h;
+  openModal('modal-orphelins');
 }
 function nettoyerCamionFantome(){
   // L'ancien code creait un camion de cle 'A' nomme 'Camion A'.
