@@ -983,7 +983,7 @@ function sauvegarderFirebase(){
 // ===== FIN FIREBASE =====
 
 var APP_VERSION = 'v2.9.2';
-var APP_UPDATE = '01/08/2026 à 15:50';
+var APP_UPDATE = '01/08/2026 à 16:25';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1118,6 +1118,63 @@ function afficherReferencesOrphelines(){
   }
   document.getElementById('orph-list').innerHTML=h;
   openModal('modal-orphelins');
+}
+function nettoyerOrphelinsCollecteEnCours(){
+  var col=collectes.find(function(c){ return c.statut==='en_cours'; });
+  if(!col){ alert('Aucune collecte en cours.'); return; }
+  var d=dispatchParCollecte[col.id];
+  if(!d||!d.trucks){ alert('Aucun camion sur la collecte en cours.'); return; }
+  var cls=clientsParCollecte[col.id]||{};
+
+  // 1) Etat AVANT (uniquement la collecte en cours)
+  var avant=[], nbRefs=0;
+  Object.keys(d.trucks).forEach(function(k){
+    var tk=d.trucks[k];
+    avant.push({k:k, nom:(tk.name||k), n:(tk.clients||[]).length});
+  });
+
+  // 2) Purge des seules references sans fiche client
+  Object.keys(d.trucks).forEach(function(k){
+    var tk=d.trucks[k]; if(!tk) return;
+    ['clients','validated','refused','cancelled','reported'].forEach(function(f){
+      if(!Array.isArray(tk[f])) return;
+      var av=tk[f].length;
+      tk[f]=tk[f].filter(function(id){ return !!cls[id]; });
+      nbRefs+=av-tk[f].length;
+    });
+    ['hours','wazeTs','finTs'].forEach(function(f){
+      if(!tk[f]) return;
+      Object.keys(tk[f]).forEach(function(id){
+        if(!cls[id]){ delete tk[f][id]; nbRefs++; }
+      });
+    });
+  });
+  // Affectations pointant vers un client disparu
+  if(d.assigned){
+    Object.keys(d.assigned).forEach(function(id){
+      if(!cls[id]){ delete d.assigned[id]; nbRefs++; }
+    });
+  }
+
+  if(nbRefs===0){ alert('Rien \u00e0 nettoyer sur la collecte en cours.'); return; }
+
+  // 3) Ecriture
+  window._lastWriteTime=Date.now();
+  if(firebaseReady && db){
+    var u={}; u['dct/dispatch/'+col.id]=d;
+    db.ref().update(u);
+  }
+  try{ localStorage.setItem('dct_v3_dispatch', JSON.stringify(dispatchParCollecte)); }catch(e){}
+
+  // 4) Compte rendu AVANT / APRES
+  var txt='NETTOYAGE TERMIN\u00c9\n'+col.date+'\n\n'+nbRefs+' r\u00e9f\u00e9rence(s) orpheline(s) retir\u00e9e(s).\n\nCLIENTS PAR CAMION :\n';
+  avant.forEach(function(a){
+    var ap=(d.trucks[a.k].clients||[]).length;
+    txt+='\u2022 '+a.nom+' : '+a.n+' \u2192 '+ap+(a.n===ap?'  (inchang\u00e9)':'')+'\n';
+  });
+  alert(txt);
+  if(typeof renderDispatchTab==='function') renderDispatchTab();
+  if(typeof renderSuivi==='function' && document.getElementById('suivi-list')) try{ renderSuivi(); }catch(e){}
 }
 function nettoyerCamionFantome(){
   // L'ancien code creait un camion de cle 'A' nomme 'Camion A'.
@@ -6044,7 +6101,9 @@ function renderAdminSecurite(){
     + '<div style="height:1px;background:#eee;margin:22px 0 16px;"></div>'
     + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:8px;">🔍 Diagnostic des donn\u00e9es</div>'
     + '<p style="font-size:12px;color:#888;margin-bottom:12px;">V\u00e9rifie si des clients supprim\u00e9s sont encore r\u00e9f\u00e9renc\u00e9s dans un camion. <strong>Ne supprime rien.</strong></p>'
-    + '<button onclick="afficherReferencesOrphelines()" style="width:100%;padding:13px;background:#fff;color:#1a237e;border:2px solid #1a237e;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">🔍 Analyser (sans rien modifier)</button>';
+    + '<button onclick="afficherReferencesOrphelines()" style="width:100%;padding:13px;background:#fff;color:#1a237e;border:2px solid #1a237e;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">🔍 Analyser (sans rien modifier)</button>'
+    + '<button onclick="nettoyerOrphelinsCollecteEnCours()" style="width:100%;margin-top:8px;padding:13px;background:#fff3e0;color:#e65100;border:2px solid #e65100;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">🧹 Nettoyer la collecte en cours</button>'
+    + '<p style="font-size:11.5px;color:#999;margin-top:8px;line-height:1.5;">Retire uniquement les r\u00e9f\u00e9rences sans fiche client, sur la collecte en cours. Les clients existants ne sont jamais touch\u00e9s.</p>';
 }
 
 function changerPin(){
