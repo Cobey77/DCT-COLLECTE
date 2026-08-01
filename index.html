@@ -117,6 +117,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 .suivi-band{background:#14304f;}
 .suivi-card{background:#fff;border-radius:14px;padding:13px;margin-bottom:10px;cursor:pointer;}
 .suivi-pulse{width:8px;height:8px;border-radius:50%;background:#22c55e;display:inline-block;animation:suiviPulse 1.6s infinite;}
+.suivi-off{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.3);display:inline-block;}
 .suivi-dot{display:none;position:absolute;top:-2px;right:-4px;width:8px;height:8px;border-radius:50%;background:#22c55e;border:2px solid #fff;}
 @keyframes suiviPulse{0%,100%{opacity:1;}50%{opacity:.35;}}
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.5);display:none;align-items:flex-end;justify-content:center;z-index:200;}
@@ -981,8 +982,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.9';
-var APP_UPDATE = '01/08/2026 à 11:55';
+var APP_VERSION = 'v2.9.1';
+var APP_UPDATE = '01/08/2026 à 12:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1248,6 +1249,23 @@ function _suiviStatsCamion(tk){
 }
 
 // ===== ECRAN PRINCIPAL =====
+function _suiviCamionsEnRoute(){
+  // Activite reelle : au moins un client avec un depart mais pas de fin.
+  var n=0;
+  Object.keys(dispatchParCollecte).forEach(function(colId){
+    var d=dispatchParCollecte[colId];
+    if(!d||!d.trucks) return;
+    Object.keys(d.trucks).forEach(function(k){
+      var tk=d.trucks[k];
+      if(!tk||!tk.wazeTs) return;
+      var ids=tk.clients||[];
+      for(var i=0;i<ids.length;i++){
+        if(_suiviStatut(tk,ids[i])==='route'){ n++; return; }
+      }
+    });
+  });
+  return n;
+}
 function renderSuivi(){
   _suiviChoisirCollecte();
   var col = _suiviCollecte();
@@ -1268,7 +1286,8 @@ function renderSuivi(){
   var b='';
   b+='<div style="padding:16px 16px 18px;">';
   b+='<div style="display:flex;align-items:center;gap:7px;">';
-  if(col && col.statut==='en_cours') b+='<span class="suivi-pulse"></span>';
+  var _roule=false; keys.forEach(function(k){ if(_suiviStatsCamion(trks[k]).enRoute) _roule=true; });
+  b+= _roule ? '<span class="suivi-pulse"></span>' : '<span class="suivi-off"></span>';
   b+='<span style="color:#fff;font-size:17px;font-weight:800;">Suivi live</span></div>';
   if(col){
     var tagS = col.statut==='en_cours'?'En cours':col.statut==='terminee'?'Termin\u00e9e':'\u00c0 venir';
@@ -1371,6 +1390,8 @@ function renderSuivi(){
   if(keys.length) h+='<div style="text-align:center;font-size:11.5px;color:#94a3b8;margin:12px 0 4px;">Touche une carte pour voir le d\u00e9tail du camion.</div>';
   var elL=document.getElementById('suivi-list');
   if(elL) elL.innerHTML=h;
+  try{ majPastilleSuivi(); }catch(e){}
+  if(_suiviActif() && !_suiviTimer) _suiviStartTimer();
 }
 
 // ===== DETAIL : TIMELINE =====
@@ -1427,6 +1448,8 @@ function renderTimelineCamion(k){
   var elT=document.getElementById('suivi-timeline');
   if(elT) elT.innerHTML=h;
   goTo('s-suivi-detail');
+  try{ majPastilleSuivi(); }catch(e){}
+  if(!_suiviTimer) _suiviStartTimer();
 }
 
 // ===== SELECTEUR DE COLLECTE =====
@@ -1484,9 +1507,13 @@ function majChronos(){
 }
 function _suiviStartTimer(){
   _suiviStopTimer();
-  var col=_suiviCollecte();
-  if(!col || col.statut!=='en_cours') return;
-  _suiviTimer=setInterval(majChronos,1000);
+  // Rien a rafraichir tant qu'aucun chrono n'est affiche a l'ecran.
+  if(!document.querySelector('[data-dep]')) return;
+  _suiviTimer=setInterval(function(){
+    majChronos();
+    // Le dernier camion en route a termine : plus rien a compter.
+    if(!document.querySelector('[data-dep]')) _suiviStopTimer();
+  },1000);
 }
 function _suiviStopTimer(){
   if(_suiviTimer){ clearInterval(_suiviTimer); _suiviTimer=null; }
@@ -1524,9 +1551,10 @@ function buildLogin(){
   chargerMessageAdmin();
 }
 function majPastilleSuivi(){
-  var enc = collectes.find(function(c){ return c.statut==='en_cours'; });
+  var actif=false;
+  try{ actif = _suiviCamionsEnRoute()>0; }catch(e){}
   var d = document.querySelectorAll('.suivi-dot');
-  for(var i=0;i<d.length;i++) d[i].style.display = enc ? 'block' : 'none';
+  for(var i=0;i<d.length;i++) d[i].style.display = actif ? 'block' : 'none';
 }
 function updateNotifBadge(){
   var count = parseInt(localStorage.getItem('dct_notif_'+currentUser.id)||'0');
