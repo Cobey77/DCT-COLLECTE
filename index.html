@@ -983,7 +983,7 @@ function sauvegarderFirebase(){
 // ===== FIN FIREBASE =====
 
 var APP_VERSION = 'v2.9.1';
-var APP_UPDATE = '01/08/2026 à 12:20';
+var APP_UPDATE = '01/08/2026 à 13:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1220,6 +1220,14 @@ function _dureeTxt(ms){
   if(m<60) return m+' min';
   return Math.floor(m/60)+'h'+String(m%60).padStart(2,'0');
 }
+function _suiviAdresse(c){
+  if(!c) return '';
+  var rue=(c.adresse||'').trim();
+  var cp=(c.cp||'').trim();
+  var ville=(c.ville||'').trim();
+  var fin=[cp,ville].filter(Boolean).join(' ');
+  return [rue,fin].filter(Boolean).join(', ');
+}
 function _esc(t){
   return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -1360,11 +1368,11 @@ function renderSuivi(){
 
     if(s.enRoute){
       var cE=cls[s.enRoute.id]||{};
-      var adr=(cE.adresse||'')+(cE.ville?', '+cE.ville:'');
+      var adr=_suiviAdresse(cE);
       h+='<div style="margin-top:11px;border:1px solid #f0c9a0;background:#fff3e0;border-radius:10px;padding:10px;">';
       h+='<div style="font-size:9.5px;font-weight:800;letter-spacing:0.8px;color:#c2410c;">EN ROUTE</div>';
       h+='<div style="font-size:14px;font-weight:800;color:#14304f;margin-top:3px;">'+_esc(cE.name||'Client')+'</div>';
-      if(adr.trim()!==',') h+='<div style="font-size:12px;color:#64748b;margin-top:2px;">'+_esc(adr)+'</div>';
+      if(adr) h+='<div style="font-size:12px;color:#64748b;margin-top:2px;">'+_esc(adr)+'</div>';
       h+='<div style="font-size:12.5px;font-weight:800;color:#c2410c;margin-top:6px;">\u23f1 En route depuis <span data-dep="'+s.enRoute.dep+'">'+_chrono(Date.now()-s.enRoute.dep)+'</span></div>';
       h+='</div>';
     } else if(s.total && s.traites===s.total){
@@ -1425,8 +1433,8 @@ function renderTimelineCamion(k){
     h+='</div>';
     h+='<div style="flex:1;padding-bottom:'+(last?'4px':'16px')+';">';
     h+='<div style="font-size:14px;font-weight:800;color:'+(gris?'#94a3b8':'#14304f')+';">'+_esc(c.name||'Client')+'</div>';
-    var adr=(c.adresse||'')+(c.ville?', '+c.ville:'');
-    if(adr.replace(/[ ,]/g,'')) h+='<div style="font-size:12px;color:'+(gris?'#b3bcc7':'#64748b')+';margin-top:2px;">'+_esc(adr)+'</div>';
+    var adr=_suiviAdresse(c);
+    if(adr) h+='<div style="font-size:12px;color:'+(gris?'#b3bcc7':'#64748b')+';margin-top:2px;">'+_esc(adr)+'</div>';
 
     if(st==='route' && w){
       h+='<div style="font-size:12px;color:#475569;margin-top:5px;">Parti \u00e0 '+_hhmm(w)+'</div>';
