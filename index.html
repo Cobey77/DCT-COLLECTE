@@ -983,7 +983,7 @@ function sauvegarderFirebase(){
 // ===== FIN FIREBASE =====
 
 var APP_VERSION = 'v2.9.1';
-var APP_UPDATE = '01/08/2026 à 14:05';
+var APP_UPDATE = '01/08/2026 à 14:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1355,7 +1355,7 @@ function renderSuivi(){
     h+='<div class="suivi-card" onclick="renderTimelineCamion(\''+k+'\')">';
     h+='<div style="display:flex;align-items:center;gap:8px;">';
     h+='<span style="width:11px;height:11px;border-radius:3px;background:'+coul+';flex-shrink:0;"></span>';
-    h+='<span style="font-size:14px;font-weight:800;color:#14304f;flex:1;word-break:break-word;">'+_esc(tk.name)+'</span>';
+    h+='<span style="font-size:14px;font-weight:800;color:#14304f;flex:1;word-break:break-word;">\ud83d\ude9b '+_esc(tk.name)+'</span>';
     h+='<span style="font-size:12.5px;font-weight:800;color:#64748b;white-space:nowrap;">'+s.traites+'/'+s.total+' \u203a</span></div>';
 
     if(s.total){
@@ -1412,7 +1412,7 @@ function renderTimelineCamion(k){
   var b='<div style="padding:14px 16px;">';
   b+='<div style="display:flex;align-items:center;gap:10px;">';
   b+='<span onclick="goTo(\'s-suivi\');renderSuivi();" style="color:#fff;font-size:20px;font-weight:800;cursor:pointer;line-height:1;">\u2039</span>';
-  b+='<span style="color:#fff;font-size:16px;font-weight:800;word-break:break-word;">'+_esc(tk.name)+'</span></div>';
+  b+='<span style="color:#fff;font-size:16px;font-weight:800;word-break:break-word;">\ud83d\ude9b '+_esc(tk.name)+'</span></div>';
   b+='<div style="color:rgba(255,255,255,0.75);font-size:12.5px;font-weight:600;margin-top:4px;margin-left:30px;">'+(col?_esc(col.date)+' \u00b7 ':'')+s.traites+'/'+s.total+' clients trait\u00e9s</div>';
   b+='</div>';
   var elB=document.getElementById('suivi-detail-band');
@@ -2173,7 +2173,7 @@ function renderDispatchTab(){
     });
     card.innerHTML='<div class="truck-head">'
       +'<div style="display:flex;align-items:center;gap:8px;flex:1 1 auto;min-width:0;flex-wrap:wrap;">'
-      +'<span class="truck-name">'+tk.name+'</span>'
+      +'<span class="truck-name">\ud83d\ude9b '+tk.name+'</span>'
       +'<span onclick="event.stopPropagation();toggleRename(\''+k+'\')" style="font-size:11px;cursor:pointer;padding:2px 8px;background:#e0e0e0;border-radius:6px;color:#333;font-weight:700;border:1px solid #bbb;">✏️</span>'
       +'<span onclick="event.stopPropagation();demanderSupprimerCamion(\''+k+'\')" style="font-size:11px;cursor:pointer;padding:2px 8px;background:#fde0e0;border-radius:6px;color:#c0392b;font-weight:700;border:1px solid #c0392b;">🗑️</span>'
       +'</div>'
@@ -3247,7 +3247,7 @@ function _ajouterMarqueur(id, c, lat, lng, isAffected, asgn, trks){
     (c.cp||c.ville ? '<div style="font-size:12px;color:#555;">'+(c.cp||'')+' '+(c.ville||'')+'</div>' : '')+
     (c.colis ? '<div style="font-size:12px;color:#555;margin-top:3px;">📦 '+c.colis+'</div>' : '')+
     (c.prix ? '<div style="font-size:12px;font-weight:700;color:#006b2d;margin-top:3px;">💶 '+c.prix+' €</div>' : '')+
-    '<div style="margin-top:6px;font-size:11px;color:'+(isAffected?'#006b2d':'#c0392b')+';font-weight:700;">'+(isAffected?'✅ '+asgTruck:'⬜ Non affecté')+'</div>'+
+    '<div style="margin-top:6px;font-size:11px;color:'+(isAffected?'#006b2d':'#c0392b')+';font-weight:700;">'+(isAffected?'\ud83d\ude9b '+asgTruck:'\u2b1c Non affect\u00e9')+'</div>'+
     '</div>';
   marker._clientId = id;
   marker._clientData = c;
@@ -4098,7 +4098,7 @@ function buildAffectOptions(){
     var tc=getTc(k),tk=trks[k];
     var div=document.createElement('div');div.className='modal-option';
     div.innerHTML='<div class="modal-icon" style="background:'+tc.bg+';border:1.5px solid '+tc.color+';"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+tc.color+'" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="1"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>'
-      +'<div><div class="modal-option-name">'+tk.name+'</div><div class="modal-option-sub">'+tk.clients.length+' client(s) · '+getTruckTotal(k)+' €</div></div>';
+      +'<div><div class="modal-option-name">\ud83d\ude9b '+tk.name+'</div><div class="modal-option-sub">'+tk.clients.length+' client(s) · '+getTruckTotal(k)+' €</div></div>';
     (function(kk){div.onclick=function(){affecter(kk);};})(k);
     opts.appendChild(div);
   });
@@ -4135,7 +4135,7 @@ function openCamion(k){currentCamion=k;renderCamion(k);goTo('s-camion');}
 function renderCamion(k){
   var trks=getTrucks(),cls=getClients(),tc=getTc(k),tk=trks[k];
   if(!tk)return;
-  var tit=document.getElementById('camion-title');if(tit)tit.textContent=tk.name;
+  var tit=document.getElementById('camion-title');if(tit)tit.textContent='\ud83d\ude9b '+tk.name;
   var total=getTruckTotal(k),collected=getTruckCollected(k);
   var pctF=total>0?Math.round(collected/total*100):0;
   var validated=tk.validated||[],refused=tk.refused||[];
@@ -4171,7 +4171,11 @@ function renderCamion(k){
     var num=document.createElement('div');num.className='route-num';
     num.style.background=isVal?'#006b2d':isRef?'#c0392b':tc.bar;num.textContent=idx+1;
     var info=document.createElement('div');info.style.flex='1';
-    info.innerHTML='<div class="route-client-name" style="color:'+tc.color+';">'+c.name+'</div><div style="font-size:11px;color:#555;margin-top:2px;">Tap pour modifier</div>';
+    var _co=COLLABS.find(function(x){return x.name===c.by;})||{bg:'#e0e0e0',color:'#555'};
+    var _byHtml = c.by
+      ? '<div style="font-size:11px;color:#555;margin-top:3px;">Ajout\u00e9 par <span style="background:'+_co.bg+';color:'+_co.color+';font-size:10px;padding:2px 8px;border-radius:20px;font-weight:700;border:1px solid '+_co.color+';">'+c.by+'</span></div>'
+      : '<div style="font-size:11px;color:#555;margin-top:2px;">Tap pour modifier</div>';
+    info.innerHTML='<div class="route-client-name" style="color:'+tc.color+';">'+c.name+'</div>'+_byHtml;
     var heureEl;
     if(!locked&&!isVal&&!isRef){
       heureEl=document.createElement('button');
