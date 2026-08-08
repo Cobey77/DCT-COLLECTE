@@ -321,7 +321,80 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   </div>
 </div>
 
-<!-- ESPACE PARTENAIRE — v2.10.0 -->
+<!-- RAMASSAGE FRANCE — v3.0.1 -->
+<div class="screen" id="s-france">
+  <div class="header">
+    <button class="btn-back" onclick="goTo('s-home')">← Accueil</button>
+    <div style="text-align:center;">
+      <div class="h-title">🇫🇷 Ramassage France</div>
+      <div class="h-sub" id="fr-sous">Suivi des colis</div>
+    </div>
+    <div id="fr-av" class="av" style="width:30px;height:30px;font-size:10px;"></div>
+  </div>
+  <div class="subtabs">
+    <div class="subtab active" id="ftab-suivi" onclick="switchFranceTab('suivi')">🔍 Suivi</div>
+    <div class="subtab" id="ftab-tournees" onclick="switchFranceTab('tournees')">📅 Tournées</div>
+  </div>
+  <div id="fr-recherche" style="background:#fff;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
+    <input class="fi" id="fr-q" placeholder="🔍 Nom, téléphone ou référence…" oninput="renderFrance()" style="margin:0;">
+  </div>
+  <div class="content" id="france-content" style="background:#F2F3F5;"></div>
+  <div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
+    <button class="btn btn-green" style="margin:0;" onclick="ouvrirAjoutFrance()">+ Inscrire un client</button>
+  </div>
+</div>
+
+<!-- NOUVEAU CLIENT FRANCE -->
+<div class="screen" id="s-france-add">
+  <div class="header">
+    <button class="btn-back" onclick="goTo('s-france')">← Retour</button>
+    <div class="h-title" id="fadd-titre">Inscrire un client</div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content">
+    <div class="info-banner">🇫🇷 Ramassage France · Inscrit par <strong id="fadd-by" style="margin-left:4px;"></strong></div>
+    <div class="form-row">
+      <div class="fg"><label class="fl">Prénom</label><input class="fi" id="fa-prenom" placeholder="Fatou"></div>
+      <div class="fg"><label class="fl">Nom</label><input class="fi" id="fa-nom" placeholder="Ndiaye"></div>
+    </div>
+    <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="fa-tel" type="tel" placeholder="06 00 00 00 00"></div>
+    <div class="fg"><label class="fl">Adresse</label><input class="fi" id="fa-adresse" placeholder="27 bd du Président Wilson"></div>
+    <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="fa-infos" placeholder="Appt · Bât · Digicode..."></div>
+    <div class="form-row">
+      <div class="fg"><label class="fl">Code postal</label><input class="fi" id="fa-cp" maxlength="5" placeholder="33200" oninput="majZoneFrance()"></div>
+      <div class="fg"><label class="fl">Ville</label><input class="fi" id="fa-ville" placeholder="Bordeaux"></div>
+    </div>
+    <div id="fa-zone" style="font-size:12px;font-weight:700;padding:9px 12px;border-radius:10px;background:#f0f0f0;color:#888;margin-bottom:12px;">Zone — saisissez le code postal</div>
+    <div class="form-row">
+      <div class="fg"><label class="fl">Nombre de colis</label><input class="fi" id="fa-nb" type="number" min="1" value="1"></div>
+      <div class="fg"><label class="fl">Prix (€)</label><input class="fi" id="fa-prix" type="number" min="0" placeholder="0"></div>
+    </div>
+    <div class="fg"><label class="fl">Description du colis</label><textarea class="fi" id="fa-colis" rows="3" placeholder="ex : 1 valise + 2 cartons" style="resize:none;"></textarea></div>
+    <div class="modal-option" onclick="togglePayeFrance()" id="fa-paye-box">
+      <div id="fa-paye-check" style="width:24px;height:24px;border-radius:7px;border:2px solid #ccc;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;"></div>
+      <div style="font-size:14px;font-weight:700;">Client déjà payé</div>
+    </div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-green" onclick="saveClientFrance()">✅ Enregistrer</button>
+      <button class="btn btn-gray" onclick="goTo('s-france')">✕ Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- FICHE CLIENT FRANCE -->
+<div class="screen" id="s-france-client">
+  <div class="header">
+    <button class="btn-back" onclick="goTo('s-france')">← Suivi</button>
+    <div style="text-align:center;">
+      <div class="h-title" id="fc-nom">Client</div>
+      <div class="h-sub" id="fc-lieu"></div>
+    </div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content" id="fc-content" style="background:#F2F3F5;"></div>
+</div>
+
+<!-- ESPACE PARTENAIRE -->
 <div class="screen" id="s-partenaire">
   <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
     <span id="part-societe">🚚 GLOBAL LOGISTIQUE</span>
@@ -339,7 +412,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div style="text-align:center;padding:40px 20px;color:#888;">
       <div style="font-size:40px;margin-bottom:14px;">🚚</div>
       <div style="font-size:16px;font-weight:800;color:#111;margin-bottom:6px;">Connexion réussie</div>
-      <div style="font-size:13px;line-height:1.6;">Le module de ramassage arrive à la prochaine étape.<br>Pour l'instant, seul l'accès est en place.</div>
+      <div style="font-size:13px;line-height:1.6;">Le module de ramassage arrive à la prochaine étape.</div>
     </div>
     <div style="background:#fff;border:1.5px solid var(--border);border-radius:14px;padding:14px;box-shadow:var(--shadow);">
       <div class="slabel" style="margin-top:0;">Vérification</div>
@@ -366,6 +439,14 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div class="new-btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></div>
       <div><div style="color:#fff;font-size:15px;font-weight:800;">Créer une nouvelle collecte</div><div style="color:#d4f5e0;font-size:12px;margin-top:2px;">Dimanche ou jour exceptionnel</div></div>
     </button>
+    <div id="btn-france" onclick="ouvrirFrance()" style="background:#006b2d;border:2.5px solid #00461d;border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:13px;cursor:pointer;width:100%;margin-bottom:18px;">
+      <div style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:19px;">🇫🇷</div>
+      <div style="flex:1;">
+        <div style="color:#fff;font-size:15px;font-weight:800;">Ramassage France</div>
+        <div id="france-compteurs" style="color:#d4f5e0;font-size:12px;margin-top:2px;">0 en attente · 0 à Chartres</div>
+      </div>
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
+    </div>
     <div id="home-collectes"></div>
   </div>
     <div class="bottomnav">
@@ -656,11 +737,13 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   </div>
   <div style="display:flex;border-bottom:2px solid #e0e0e0;background:#fff;flex-shrink:0;">
     <button id="admin-tab-equipe" onclick="showAdminTab('equipe')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid #009A44;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#009A44;font-family:var(--font);">👥 Équipe</button>
+    <button id="admin-tab-partenaires" onclick="showAdminTab('partenaires')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid transparent;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">🚚 Partenaires</button>
     <button id="admin-tab-securite" onclick="showAdminTab('securite')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid transparent;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">🔐 Sécurité</button>
     <button id="admin-tab-message" onclick="showAdminTab('message')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid transparent;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">📢 Message</button>
   </div>
   <div class="content" style="padding:0;">
     <div id="admin-section-equipe" style="padding:16px;"></div>
+    <div id="admin-section-partenaires" style="display:none;padding:16px;"></div>
     <div id="admin-section-message" style="display:none;padding:16px;"></div>
     <div id="admin-section-securite" style="display:none;padding:16px;"></div>
   </div>
@@ -802,6 +885,7 @@ function ecouterFrance(){
     franceData.clients  = d.clients  || {};
     franceData.tournees = d.tournees || {};
     franceData.postes   = d.postes   || {};
+    window._glDesactive = !!((d.societes||{}).GL||{}).desactive;
     _franceReady = true;
     _initPostesFrance();
     try{ if(typeof renderFrance==='function') renderFrance(); }catch(e){}
@@ -849,6 +933,64 @@ function majBoutonFrance(){
   if(!el) return;
   var c = compteursFrance();
   el.textContent = c.attente+' en attente · '+c.chartres+' à Chartres';
+}
+
+
+// ═══════════ ZONES DE RAMASSAGE — v3.0.1 ═══════════
+// France métropolitaine hors Corse et Outre-mer + Belgique.
+// L'Ile-de-France est listée mais exclue : elle relève des
+// collectes Paris classiques.
+var REGIONS_FR = {
+ "Auvergne-Rhône-Alpes":{exclue:false,d:{"01":"Ain","03":"Allier","07":"Ardèche","15":"Cantal","26":"Drôme","38":"Isère","42":"Loire","43":"Haute-Loire","63":"Puy-de-Dôme","69":"Rhône","73":"Savoie","74":"Haute-Savoie"}},
+ "Bourgogne-Franche-Comté":{exclue:false,d:{"21":"Côte-d'Or","25":"Doubs","39":"Jura","58":"Nièvre","70":"Haute-Saône","71":"Saône-et-Loire","89":"Yonne","90":"Territoire de Belfort"}},
+ "Bretagne":{exclue:false,d:{"22":"Côtes-d'Armor","29":"Finistère","35":"Ille-et-Vilaine","56":"Morbihan"}},
+ "Centre-Val de Loire":{exclue:false,d:{"18":"Cher","28":"Eure-et-Loir","36":"Indre","37":"Indre-et-Loire","41":"Loir-et-Cher","45":"Loiret"}},
+ "Grand Est":{exclue:false,d:{"08":"Ardennes","10":"Aube","51":"Marne","52":"Haute-Marne","54":"Meurthe-et-Moselle","55":"Meuse","57":"Moselle","67":"Bas-Rhin","68":"Haut-Rhin","88":"Vosges"}},
+ "Hauts-de-France":{exclue:false,d:{"02":"Aisne","59":"Nord","60":"Oise","62":"Pas-de-Calais","80":"Somme"}},
+ "Île-de-France":{exclue:true,d:{"75":"Paris","77":"Seine-et-Marne","78":"Yvelines","91":"Essonne","92":"Hauts-de-Seine","93":"Seine-Saint-Denis","94":"Val-de-Marne","95":"Val-d'Oise"}},
+ "Normandie":{exclue:false,d:{"14":"Calvados","27":"Eure","50":"Manche","61":"Orne","76":"Seine-Maritime"}},
+ "Nouvelle-Aquitaine":{exclue:false,d:{"16":"Charente","17":"Charente-Maritime","19":"Corrèze","23":"Creuse","24":"Dordogne","33":"Gironde","40":"Landes","47":"Lot-et-Garonne","64":"Pyrénées-Atlantiques","79":"Deux-Sèvres","86":"Vienne","87":"Haute-Vienne"}},
+ "Occitanie":{exclue:false,d:{"09":"Ariège","11":"Aude","12":"Aveyron","30":"Gard","31":"Haute-Garonne","32":"Gers","34":"Hérault","46":"Lot","48":"Lozère","65":"Hautes-Pyrénées","66":"Pyrénées-Orientales","81":"Tarn","82":"Tarn-et-Garonne"}},
+ "Pays de la Loire":{exclue:false,d:{"44":"Loire-Atlantique","49":"Maine-et-Loire","53":"Mayenne","72":"Sarthe","85":"Vendée"}},
+ "Provence-Alpes-Côte d'Azur":{exclue:false,d:{"04":"Alpes-de-Haute-Provence","05":"Hautes-Alpes","06":"Alpes-Maritimes","13":"Bouches-du-Rhône","83":"Var","84":"Vaucluse"}}
+};
+var PROVINCES_BE = [
+ {min:1000,max:1299,p:"Bruxelles-Capitale"},{min:1300,max:1499,p:"Brabant wallon"},
+ {min:1500,max:1999,p:"Brabant flamand"},{min:2000,max:2999,p:"Anvers"},
+ {min:3000,max:3499,p:"Brabant flamand"},{min:3500,max:3999,p:"Limbourg"},
+ {min:4000,max:4999,p:"Liège"},{min:5000,max:5999,p:"Namur"},
+ {min:6000,max:6599,p:"Hainaut"},{min:6600,max:6999,p:"Luxembourg"},
+ {min:7000,max:7999,p:"Hainaut"},{min:8000,max:8999,p:"Flandre-Occidentale"},
+ {min:9000,max:9999,p:"Flandre-Orientale"}
+];
+var DEPT_REGION = (function(){
+  var m={};
+  Object.keys(REGIONS_FR).forEach(function(r){
+    Object.keys(REGIONS_FR[r].d).forEach(function(code){
+      m[code]={region:r,nom:REGIONS_FR[r].d[code],exclue:REGIONS_FR[r].exclue};
+    });
+  });
+  return m;
+})();
+
+// CP -> zone. 5 chiffres = France, 4 chiffres = Belgique.
+function zoneDepuisCP(cp){
+  cp = String(cp||'').trim().replace(/\s/g,'');
+  if(/^[0-9]{4}$/.test(cp)){
+    var n=parseInt(cp,10);
+    var t=null;
+    for(var i=0;i<PROVINCES_BE.length;i++){ if(n>=PROVINCES_BE[i].min && n<=PROVINCES_BE[i].max){ t=PROVINCES_BE[i]; break; } }
+    if(!t) return {ok:false,motif:'Code postal belge inconnu'};
+    return {ok:true,pays:'BE',region:t.p,dept:'',nomDept:''};
+  }
+  if(/^[0-9]{5}$/.test(cp)){
+    var pre=cp.substring(0,2);
+    var info=DEPT_REGION[pre];
+    if(!info) return {ok:false,motif:'Département hors périmètre : '+pre};
+    if(info.exclue) return {ok:false,motif:'Île-de-France — à créer dans une collecte Paris'};
+    return {ok:true,pays:'FR',region:info.region,dept:pre,nomDept:info.nom};
+  }
+  return {ok:false,motif:'Code postal invalide'};
 }
 
 function ecouterChangements(){
@@ -1088,8 +1230,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.10.0';
-var APP_UPDATE = '08/08/2026 à 23:45';
+var APP_VERSION = 'v3.0.1';
+var APP_UPDATE = '09/08/2026 à 00:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1953,6 +2095,369 @@ function deconnexionPartenaire(){
   goTo('s-login');
 }
 
+
+// ═══════════════════════════════════════════════════════════
+//  RAMASSAGE FRANCE — écrans DCT (v3.0.1)
+// ═══════════════════════════════════════════════════════════
+var franceTab   = 'suivi';
+var franceFiltre= 'attente';   // attente | planifie | chartres | mitry
+var franceRegion= '';          // '' = toutes
+var franceDept  = '';
+var franceClientId = null;
+var _faPaye = false;
+
+var FR_STATUTS = {
+  attente : {lib:'En attente', badge:'badge-gray'},
+  planifie: {lib:'Planifié',   badge:'badge-blue'},
+  ramasse : {lib:'Ramassé',    badge:'badge-orange'},
+  mitry   : {lib:'Arrivé',     badge:'badge-green'}
+};
+
+function ouvrirFrance(){
+  franceTab='suivi'; franceFiltre='attente'; franceRegion=''; franceDept='';
+  var q=document.getElementById('fr-q'); if(q) q.value='';
+  var a=document.getElementById('fr-av');
+  if(a && currentUser){ a.textContent=currentUser.id; a.style.background=currentUser.bg; a.style.color=currentUser.color; a.style.border='2px solid '+currentUser.color; }
+  switchFranceTab('suivi');
+  goTo('s-france');
+}
+
+function switchFranceTab(t){
+  franceTab=t;
+  var a=document.getElementById('ftab-suivi'), b=document.getElementById('ftab-tournees');
+  if(a) a.className='subtab'+(t==='suivi'?' active':'');
+  if(b) b.className='subtab'+(t==='tournees'?' active':'');
+  var r=document.getElementById('fr-recherche');
+  if(r) r.style.display=(t==='suivi'?'block':'none');
+  var so=document.getElementById('fr-sous');
+  if(so) so.textContent=(t==='suivi'?'Suivi des colis':'Tournées du partenaire');
+  renderFrance();
+}
+
+// ── Liste des clients selon filtre/recherche ──
+function _frClients(){
+  var out=[];
+  Object.keys(franceData.clients||{}).forEach(function(k){
+    var c=franceData.clients[k]; if(!c) return;
+    c._id=k; out.push(c);
+  });
+  return out;
+}
+function _frMatch(c,q){
+  if(!q) return true;
+  q=q.toLowerCase().replace(/\s/g,'');
+  var tel=(c.tel||'').toLowerCase().replace(/\s/g,'');
+  return (c.nom||'').toLowerCase().indexOf(q)>=0
+      || tel.indexOf(q)>=0
+      || (c.ref||'').toLowerCase().indexOf(q)>=0
+      || (c.ville||'').toLowerCase().indexOf(q)>=0;
+}
+function _frDansFiltre(c){
+  if(franceFiltre==='attente')  return c.statut==='attente';
+  if(franceFiltre==='planifie') return c.statut==='planifie'||c.statut==='ramasse';
+  if(franceFiltre==='chartres') return c.lieu==='chartres';
+  if(franceFiltre==='mitry')    return c.lieu==='mitry';
+  return true;
+}
+function _joursDepuis(ts){
+  if(!ts) return 0;
+  return Math.floor((Date.now()-ts)/86400000);
+}
+function _dateFr(ts){
+  if(!ts) return '—';
+  var d=new Date(ts);
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2);
+}
+
+function renderFrance(){
+  majBoutonFrance();
+  var box=document.getElementById('france-content');
+  if(!box) return;
+  if(franceTab==='tournees'){ box.innerHTML=_frTournees(); return; }
+
+  var q=(document.getElementById('fr-q')||{}).value||'';
+  var tous=_frClients();
+  var cpt={attente:0,planifie:0,chartres:0,mitry:0};
+  tous.forEach(function(c){
+    if(c.statut==='attente') cpt.attente++;
+    if(c.statut==='planifie'||c.statut==='ramasse') cpt.planifie++;
+    if(c.lieu==='chartres') cpt.chartres++;
+    if(c.lieu==='mitry') cpt.mitry++;
+  });
+
+  var html='';
+  // Recherche : on ignore les filtres
+  if(q){
+    var res=tous.filter(function(c){ return _frMatch(c,q); });
+    html+='<div class="slabel" style="margin-top:2px;">'+res.length+' résultat'+(res.length>1?'s':'')+' pour « '+q+' »</div>';
+    html+= res.length ? res.map(_frCarte).join('') : _frVide('Aucun client trouvé.');
+    box.innerHTML=html; return;
+  }
+
+  // Puces de statut
+  html+='<div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:12px;">'
+     + _frPuce('attente','En attente',cpt.attente,'#009A44')
+     + _frPuce('planifie','Planifiés',cpt.planifie,'#1a237e')
+     + _frPuce('chartres','📍 Chartres',cpt.chartres,'#92400e')
+     + _frPuce('mitry','📍 Mitry',cpt.mitry,'#006b2d')
+     + '</div>';
+
+  // Bloc Chartres, uniquement s'il y a du stock
+  if(cpt.chartres>0 && franceFiltre!=='chartres'){
+    var plusVieux=0;
+    tous.forEach(function(c){ if(c.lieu==='chartres' && c.depotTs){ var j=_joursDepuis(c.depotTs); if(j>plusVieux) plusVieux=j; } });
+    html+='<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:var(--radius);padding:13px 14px;margin-bottom:14px;cursor:pointer;" onclick="setFranceFiltre(\'chartres\')">'
+       + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+       + '<div style="font-size:14px;font-weight:800;color:#92400e;">📦 En attente à Chartres</div>'
+       + '<span class="badge badge-orange">'+cpt.chartres+' client'+(cpt.chartres>1?'s':'')+'</span></div>'
+       + '<div style="font-size:12px;color:#92400e;margin-top:5px;">Chez Danny'+(plusVieux?' · le plus ancien depuis '+plusVieux+' jour'+(plusVieux>1?'s':''):'')+'</div>'
+       + '</div>';
+  }
+
+  var liste=tous.filter(_frDansFiltre);
+  // Filtres géographiques calculés sur la liste courante
+  html+=_frBarresGeo(liste);
+  if(franceRegion) liste=liste.filter(function(c){ return c.region===franceRegion; });
+  if(franceDept)   liste=liste.filter(function(c){ return c.dept===franceDept; });
+
+  liste.sort(function(a,b){ return (a.creeTs||0)-(b.creeTs||0); });
+
+  html+='<div class="slabel">'+FR_STATUTS[franceFiltre==='planifie'?'planifie':(franceFiltre==='chartres'||franceFiltre==='mitry'?'ramasse':'attente')].lib
+      + ' · '+liste.length+' client'+(liste.length>1?'s':'')+'</div>';
+  html+= liste.length ? liste.map(_frCarte).join('')
+       : _frVide(franceFiltre==='attente'?'Aucun client en attente.<br>Inscrivez le premier avec le bouton en bas.':'Aucun client ici pour le moment.');
+  box.innerHTML=html;
+}
+
+function _frVide(txt){
+  return '<div style="text-align:center;color:#aaa;padding:36px 20px;font-size:13.5px;line-height:1.6;"><div style="font-size:34px;margin-bottom:10px;">📦</div>'+txt+'</div>';
+}
+
+function _frPuce(id,lib,n,col){
+  var on=(franceFiltre===id);
+  return '<span onclick="setFranceFiltre(\''+id+'\')" style="font-size:11.5px;font-weight:700;padding:6px 11px;border-radius:18px;white-space:nowrap;cursor:pointer;'
+       + (on?('background:'+col+';color:#fff;border:1.5px solid '+col+';'):'background:#fff;border:1.5px solid var(--border);color:#555;')
+       + '">'+lib+' · '+n+'</span>';
+}
+function setFranceFiltre(f){ franceFiltre=f; franceRegion=''; franceDept=''; renderFrance(); }
+function setFranceRegion(r){ franceRegion=(franceRegion===r?'':r); franceDept=''; renderFrance(); }
+function setFranceDept(d){ franceDept=(franceDept===d?'':d); renderFrance(); }
+
+// Barres région / département, construites depuis les clients présents
+function _frBarresGeo(liste){
+  if(!liste.length) return '';
+  var regs={}, deps={};
+  liste.forEach(function(c){
+    if(c.region) regs[c.region]=(regs[c.region]||0)+1;
+    if(franceRegion && c.region===franceRegion && c.dept) deps[c.dept]=(deps[c.dept]||0)+1;
+  });
+  var kr=Object.keys(regs);
+  if(kr.length<2 && !franceRegion) return '';
+  kr.sort(function(a,b){ return regs[b]-regs[a] || a.localeCompare(b); });
+  var h='<div class="slabel" style="margin-top:4px;">Région</div><div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;">';
+  h+=_chip('Toute la zone · '+liste.length, franceRegion==='', "setFranceRegion('')", '#009A44');
+  kr.forEach(function(r){
+    var lib=(_frPaysRegion(r)==='BE'?'🇧🇪 ':'')+r+' · '+regs[r];
+    h+=_chip(lib, franceRegion===r, "setFranceRegion('"+r.replace(/'/g,"\\'")+"')", '#009A44');
+  });
+  h+='</div>';
+  var kd=Object.keys(deps);
+  if(franceRegion && kd.length>1){
+    kd.sort();
+    h+='<div class="slabel" style="margin-top:4px;">Département</div><div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;">';
+    h+=_chip('Tous', franceDept==='', "setFranceDept('')", '#5c6bc0');
+    kd.forEach(function(d){
+      var nom=(DEPT_REGION[d]||{}).nom||'';
+      h+=_chip(d+' '+nom+' · '+deps[d], franceDept===d, "setFranceDept('"+d+"')", '#5c6bc0');
+    });
+    h+='</div>';
+  }
+  return h;
+}
+function _frPaysRegion(r){ return REGIONS_FR[r] ? 'FR' : 'BE'; }
+function _chip(lib,on,action,col){
+  return '<span onclick="'+action+'" style="font-size:11.5px;font-weight:'+(on?700:600)+';padding:5px 10px;border-radius:18px;white-space:nowrap;cursor:pointer;'
+       + (on?('background:'+col+';color:#fff;border:1.5px solid '+col+';'):'background:#fff;border:1.5px solid var(--border);color:#555;')+'">'+lib+'</span>';
+}
+
+function _frCarte(c){
+  var st=FR_STATUTS[c.statut]||FR_STATUTS.attente;
+  var lieu='';
+  if(c.lieu==='chartres') lieu='<span class="badge badge-orange">📍 Chartres</span>';
+  else if(c.lieu==='mitry') lieu='<span class="badge badge-green">📍 Mitry</span>';
+  else lieu='<span class="badge '+st.badge+'">'+st.lib+'</span>';
+  var j=_joursDepuis(c.creeTs);
+  var vieux=(c.statut==='attente' && j>=14);
+  return '<div onclick="ouvrirFicheFrance(\''+c._id+'\')" style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);cursor:pointer;">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
+    +   '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div>'+lieu+'</div>'
+    + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+(c.cp?(' · '+c.cp+' '+(c.ville||'')):'')+'</div>'
+    + '<div style="font-size:11.5px;color:#555;margin-top:5px;"><span style="font-family:ui-monospace,monospace;">'+(c.ref||'')+'</span> · 📦 '+(c.nb||1)+' colis</div>'
+    + '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)
+    +   ' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></div>'
+    + '</div>';
+}
+
+function _frTournees(){
+  var t=franceData.tournees||{};
+  var ks=Object.keys(t);
+  if(!ks.length) return _frVide("Aucune tournée pour l'instant.<br>Danny les créera depuis son espace.");
+  return ks.map(function(k){
+    var to=t[k];
+    return '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:13px 14px;margin-bottom:10px;">'
+      +'<div style="font-size:14px;font-weight:700;">'+(to.dateLib||k)+'</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+((to.clients||[]).length)+' client(s)</div></div>';
+  }).join('');
+}
+
+// ── Inscription ──
+function ouvrirAjoutFrance(){
+  ['fa-prenom','fa-nom','fa-tel','fa-adresse','fa-infos','fa-cp','fa-ville','fa-colis','fa-prix'].forEach(function(id){
+    var e=document.getElementById(id); if(e) e.value='';
+  });
+  var nb=document.getElementById('fa-nb'); if(nb) nb.value='1';
+  _faPaye=false; _majPayeFrance();
+  var z=document.getElementById('fa-zone');
+  if(z){ z.textContent='Zone — saisissez le code postal'; z.style.background='#f0f0f0'; z.style.color='#888'; }
+  var by=document.getElementById('fadd-by'); if(by) by.textContent=(currentUser||{}).name||'';
+  goTo('s-france-add');
+}
+function togglePayeFrance(){ _faPaye=!_faPaye; _majPayeFrance(); }
+function _majPayeFrance(){
+  var c=document.getElementById('fa-paye-check');
+  var b=document.getElementById('fa-paye-box');
+  if(!c) return;
+  c.style.background=_faPaye?'#009A44':'#fff';
+  c.style.borderColor=_faPaye?'#009A44':'#ccc';
+  c.textContent=_faPaye?'✓':'';
+  if(b) b.style.borderColor=_faPaye?'#009A44':'var(--border)';
+}
+function majZoneFrance(){
+  var cp=(document.getElementById('fa-cp')||{}).value||'';
+  var z=document.getElementById('fa-zone');
+  if(!z) return;
+  if(cp.length<4){ z.textContent='Zone — saisissez le code postal'; z.style.background='#f0f0f0'; z.style.color='#888'; return; }
+  var r=zoneDepuisCP(cp);
+  if(r.ok){
+    z.textContent=(r.pays==='BE'?'🇧🇪 ':'📍 ')+r.region+(r.nomDept?(' · '+r.dept+' '+r.nomDept):'');
+    z.style.background='#d4f0e0'; z.style.color='#006b2d';
+  } else {
+    z.textContent='⚠️ '+r.motif;
+    z.style.background='#fde0e0'; z.style.color='#992020';
+  }
+}
+function _nouvelleRefFrance(){
+  var n=1;
+  Object.keys(franceData.clients||{}).forEach(function(k){
+    var m=/^FR-(\d+)$/.exec((franceData.clients[k]||{}).ref||'');
+    if(m){ var v=parseInt(m[1],10); if(v>=n) n=v+1; }
+  });
+  return 'FR-'+('000'+n).slice(-4);
+}
+function saveClientFrance(){
+  var g=function(id){ return ((document.getElementById(id)||{}).value||'').trim(); };
+  var prenom=g('fa-prenom'), nom=g('fa-nom'), tel=g('fa-tel'), cp=g('fa-cp');
+  if(!prenom && !nom){ showToastNew('⚠️ Indiquez au moins un nom.'); return; }
+  if(!tel){ showToastNew('⚠️ Le téléphone est obligatoire.'); return; }
+  var z=zoneDepuisCP(cp);
+  if(!z.ok){ showToastNew('⚠️ '+z.motif); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+
+  var id='c'+Date.now();
+  var obj={
+    ref:_nouvelleRefFrance(),
+    nom:(prenom+' '+nom).trim(),
+    tel:tel,
+    adresse:g('fa-adresse'),
+    infos:g('fa-infos'),
+    cp:cp, ville:g('fa-ville'),
+    pays:z.pays, region:z.region, dept:z.dept||'',
+    nb:parseInt(g('fa-nb')||'1',10)||1,
+    colis:g('fa-colis'),
+    prix:parseInt(g('fa-prix')||'0',10)||0,
+    paye:!!_faPaye,
+    statut:'attente', lieu:'',
+    creePar:(currentUser||{}).name||'', creeTs:Date.now(),
+    hist:[{q:(currentUser||{}).name||'', a:'a créé la fiche', ts:Date.now()}]
+  };
+  var maj={}; maj[id]=obj;
+  db.ref('france/clients').update(maj).then(function(){
+    showToastNew('✅ '+obj.ref+' — client inscrit');
+    try{ addActivity((currentUser||{}).name||'', 'a inscrit '+obj.nom+' au ramassage France'); }catch(e){}
+    goTo('s-france');
+  }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
+}
+
+// ── Fiche client ──
+function ouvrirFicheFrance(id){
+  franceClientId=id;
+  _renderFicheFrance();
+  goTo('s-france-client');
+}
+function _renderFicheFrance(){
+  var c=(franceData.clients||{})[franceClientId];
+  var box=document.getElementById('fc-content');
+  if(!box) return;
+  if(!c){ box.innerHTML=_frVide('Fiche introuvable.'); return; }
+  var e=document.getElementById('fc-nom'); if(e) e.textContent=c.nom||'';
+  e=document.getElementById('fc-lieu');
+  if(e){
+    e.textContent = c.lieu==='chartres' ? '📍 Chartres' : (c.lieu==='mitry' ? '📍 Mitry-Mory' : (FR_STATUTS[c.statut]||{}).lib||'');
+    e.style.color = c.lieu==='chartres' ? '#92400e' : '#009A44';
+  }
+  var kv=function(k,v){ return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text3);flex-shrink:0;">'+k+'</span><span style="font-weight:600;text-align:right;">'+v+'</span></div>'; };
+  var html='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:6px 14px 10px;margin-bottom:10px;box-shadow:var(--shadow);">'
+    + kv('Référence','<span style="font-family:ui-monospace,monospace;">'+(c.ref||'')+'</span>')
+    + kv('Inscrit le', _dateFr(c.creeTs)+' · par '+(c.creePar||'—'))
+    + kv('Téléphone','<a href="tel:'+(c.tel||'')+'" style="color:#009A44;font-weight:700;">'+(c.tel||'')+'</a>')
+    + kv('Adresse',(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||''))
+    + (c.infos?kv('Infos',c.infos):'')
+    + kv('Zone',(c.pays==='BE'?'🇧🇪 ':'')+(c.region||'')+(c.dept?(' ('+c.dept+')'):''))
+    + kv('Colis',(c.nb||1)+(c.colis?(' · '+c.colis):''))
+    + kv('Montant',(c.prix||0)+' € '+(c.paye?'<span class="badge badge-green">Payé</span>':'<span class="badge badge-red">Non payé</span>'))
+    + '</div>';
+
+  // Suivi
+  var et=[
+    {t:'Inscrit', ok:true, meta:(c.creePar||'')+' · '+_dateFr(c.creeTs)},
+    {t:'Planifié', ok:(c.statut==='planifie'||c.statut==='ramasse'||c.lieu), meta:c.dateLib?('Passage '+c.dateLib):'en attente de Danny'},
+    {t:'Ramassé',  ok:(c.statut==='ramasse'||c.lieu==='chartres'||c.lieu==='mitry'), meta:c.ramassePar?(c.ramassePar+' · '+_dateFr(c.ramasseTs)):''},
+    {t:'Arrivé à Mitry-Mory', ok:(c.lieu==='mitry'), meta:c.lieu==='chartres'?'en attente à Chartres':''}
+  ];
+  var tl='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:4px 14px 10px;margin-bottom:10px;box-shadow:var(--shadow);"><div class="slabel">Suivi</div><div style="position:relative;padding-left:26px;">'
+       + '<div style="position:absolute;left:8px;top:6px;bottom:16px;width:2px;background:var(--border);"></div>';
+  et.forEach(function(x){
+    tl+='<div style="position:relative;padding-bottom:15px;">'
+      + '<div style="position:absolute;left:-26px;top:1px;width:18px;height:18px;border-radius:50%;border:2px solid '+(x.ok?'#009A44':'#ddd')+';background:'+(x.ok?'#009A44':'#fff')+';color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;">'+(x.ok?'✓':'')+'</div>'
+      + '<div style="font-size:13.5px;font-weight:700;color:'+(x.ok?'var(--text)':'#bbb')+';">'+x.t+'</div>'
+      + (x.meta?'<div style="font-size:11px;color:var(--text3);margin-top:3px;">'+x.meta+'</div>':'')
+      + '</div>';
+  });
+  tl+='</div></div>';
+  html+=tl;
+
+  // Historique
+  var h=(c.hist||[]).slice().reverse();
+  html+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:4px 14px 12px;margin-bottom:10px;box-shadow:var(--shadow);"><div class="slabel">Historique</div>'
+     + '<div style="font-size:12px;color:#555;line-height:1.9;">'
+     + (h.length?h.map(function(x){ return _dateFr(x.ts)+' — <b>'+x.q+'</b> '+x.a; }).join('<br>'):'—')
+     + '</div></div>';
+
+  // Actions
+  html+='<button class="btn btn-gray" onclick="supprimerClientFrance()" style="background:#fde0e0;color:#992020;border:1.5px solid #c0392b;">🗑️ Supprimer cette fiche</button>';
+  box.innerHTML=html;
+}
+function supprimerClientFrance(){
+  if(!franceClientId || !db) return;
+  var c=(franceData.clients||{})[franceClientId]||{};
+  if(c.statut!=='attente'){ showToastNew('⚠️ Impossible : le colis est déjà engagé.'); return; }
+  if(!confirm('Supprimer la fiche de '+(c.nom||'ce client')+' ?')) return;
+  db.ref('france/clients/'+franceClientId).remove().then(function(){
+    showToastNew('🗑️ Fiche supprimée');
+    goTo('s-france');
+  });
+}
+
 function majPastilleSuivi(){
   var actif=false;
   try{ actif = _suiviCamionsEnRoute()>0; }catch(e){}
@@ -1976,6 +2481,13 @@ function updateNotifBadge(){
 
 function login(id){
   var collab = getProfil(id)||COLLABS[0];
+  // Société partenaire désactivée par l'admin
+  if(collab.societe && window._glDesactive===true){
+    showToastNew('🔒 Accès suspendu. Contactez Dakar City Transport.');
+    return;
+  }
+  // Poste chauffeur : place partagée, pas de code (choix v3.0.1)
+  if(collab.role === 'poste'){ finalisLogin(collab); return; }
   if(collab.admin){
     document.getElementById('admin-pin-input').value = '';
     document.getElementById('admin-pin-error').style.display = 'none';
@@ -6138,7 +6650,7 @@ function _sauvegarderModifCollab(modal, PALETTE){
 var _selectedColorIdx = 0;
 
 function showAdminTab(tab){
-  ['equipe','securite','message'].forEach(function(t){
+  ['equipe','partenaires','securite','message'].forEach(function(t){
     var sec = document.getElementById('admin-section-'+t);
     var btn = document.getElementById('admin-tab-'+t);
     if(sec) sec.style.display = t === tab ? 'block' : 'none';
@@ -6148,8 +6660,95 @@ function showAdminTab(tab){
     }
   });
   if(tab === 'equipe') renderAdminEquipe();
+  else if(tab === 'partenaires') renderAdminPartenaires();
   else if(tab === 'securite') renderAdminSecurite();
   else if(tab === 'message') renderAdminMessage();
+}
+
+
+// ─── ONGLET PARTENAIRES — v3.0.1 ───
+function renderAdminPartenaires(){
+  var sec=document.getElementById('admin-section-partenaires');
+  if(!sec) return;
+  var actif = !(window._glDesactive===true);
+  var postes = PARTENAIRES.filter(function(p){ return p.role==='poste'; });
+  var sortis = postes.filter(function(p){ var st=(franceData.postes||{})[p.id]; return st && st.libre===false; });
+  var c = compteursFrance();
+
+  var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🚚 Sociétés partenaires</div>';
+
+  // Carte société
+  h+='<div style="background:#fff;border:2px solid '+(actif?'#1a237e':'#ccc')+';border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:var(--shadow);'+(actif?'':'opacity:.6;')+'">'
+   + '<div style="display:flex;align-items:center;gap:12px;">'
+   +   '<div style="width:46px;height:46px;border-radius:50%;background:#e8eaf6;border:2px solid #1a237e;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+_logoGL(32)+'</div>'
+   +   '<div style="flex:1;"><div style="font-size:16px;font-weight:800;">Global Logistique</div>'
+   +   '<div style="font-size:12px;color:#888;">Danny Diop · '+postes.length+' postes</div></div>'
+   +   '<span class="badge '+(actif?'badge-green':'badge-gray')+'">'+(actif?'Actif':'Désactivé')+'</span>'
+   + '</div>'
+   + '<div style="display:flex;gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid #eee;">'
+   +   '<div style="flex:1;text-align:center;"><div style="font-size:19px;font-weight:800;color:#1a237e;">'+sortis.length+'</div><div style="font-size:11px;color:#888;">en tournée</div></div>'
+   +   '<div style="flex:1;text-align:center;"><div style="font-size:19px;font-weight:800;color:#92400e;">'+c.chartres+'</div><div style="font-size:11px;color:#888;">à Chartres</div></div>'
+   +   '<div style="flex:1;text-align:center;"><div style="font-size:19px;font-weight:800;color:#006b2d;">'+c.mitry+'</div><div style="font-size:11px;color:#888;">à Mitry</div></div>'
+   + '</div>'
+   + '<button class="btn '+(actif?'btn-gray':'btn-green')+'" style="margin-top:12px;'+(actif?'background:#fde0e0;color:#992020;border:1.5px solid #c0392b;':'')+'" onclick="basculerSocietePartenaire()">'
+   +   (actif?'🔒 Désactiver la société':'✅ Réactiver la société')+'</button>'
+   + '</div>';
+
+  // Danny
+  h+='<div class="slabel">Responsable</div>';
+  h+='<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid #1a237e;border-radius:14px;padding:13px 14px;margin-bottom:10px;box-shadow:var(--shadow);">'
+   + '<div style="display:flex;align-items:center;gap:12px;">'
+   +   '<div class="av" style="background:#e8eaf6;width:40px;height:40px;border:2px solid #1a237e;">'+_logoGL(28)+'</div>'
+   +   '<div style="flex:1;"><div style="font-size:15px;font-weight:700;">Danny Diop</div>'
+   +   '<div style="font-size:12px;color:#888;">Accès par code personnel</div></div></div>'
+   + '<button class="btn btn-gray" style="margin-top:10px;" onclick="reinitPinPartenaire(\'DD\')">🔑 Réinitialiser son code</button>'
+   + '</div>';
+
+  // Postes
+  h+='<div class="slabel">Postes chauffeur — sans code</div>';
+  postes.forEach(function(p){
+    var st=(franceData.postes||{})[p.id]||{};
+    var occ=(st.libre===false);
+    h+='<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid '+(occ?'#92400e':'#ccc')+';border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);">'
+     + '<div style="display:flex;align-items:center;gap:12px;">'
+     +   '<div class="av" style="background:'+(occ?'#fef3c7':'#f2f3f5')+';color:'+(occ?'#92400e':'#aaa')+';width:38px;height:38px;font-size:16px;border:2px solid '+(occ?'#92400e':'#ddd')+';">🚚</div>'
+     +   '<div style="flex:1;"><div style="font-size:14.5px;font-weight:700;">'+p.name+'</div>'
+     +   '<div style="font-size:12px;color:'+(occ?'#92400e':'#888')+';">'+(occ?(st.chauffeur||'occupé')+' · en tournée':'Libre')+'</div></div>'
+     +   (occ?'<button class="btn-back" style="color:#992020;font-size:12px;" onclick="libererPoste(\''+p.id+'\')">Libérer</button>':'')
+     + '</div></div>';
+  });
+
+  h+='<div style="font-size:11.5px;color:#888;line-height:1.6;margin-top:6px;">Les postes s\'ouvrent sans code : le chauffeur saisit seulement son nom, qui reste attaché à chaque colis qu\'il ramasse.</div>';
+  sec.innerHTML=h;
+}
+
+function basculerSocietePartenaire(){
+  if(!db) return;
+  var actif = !(window._glDesactive===true);
+  var v=!actif;
+  db.ref('france/societes/GL').update({desactive:!actif}).then(function(){
+    window._glDesactive=!actif;
+    showToastNew(actif?'🔒 Global Logistique désactivée':'✅ Global Logistique réactivée');
+    renderAdminPartenaires();
+  });
+}
+function reinitPinPartenaire(id){
+  if(!db) return;
+  var p=getProfil(id)||{};
+  if(!confirm('Réinitialiser le code de '+(p.name||id)+' ?\nIl devra en créer un nouveau à sa prochaine connexion.')) return;
+  db.ref('dct_config/pins/'+id).remove().then(function(){
+    localStorage.setItem('dct_pin_attempts_'+id,'0');
+    db.ref('dct_config/pins_blocked/'+id).remove();
+    showToastNew('🔑 Code réinitialisé');
+  });
+}
+function libererPoste(id){
+  if(!db) return;
+  if(!confirm('Libérer ce poste ?\nLa tournée en cours restera enregistrée.')) return;
+  db.ref('france/postes/'+id).update({libre:true,chauffeur:'',tourneeId:''}).then(function(){
+    showToastNew('✅ Poste libéré');
+    renderAdminPartenaires();
+  });
 }
 
 function renderAdminPanel(){
