@@ -423,6 +423,21 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 
 <!-- POSTE : OUVERTURE -->
+<div class="screen" id="s-poste-choix">
+  <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
+    <span>&#128666; GLOBAL LOGISTIQUE</span><span id="pc-poste" style="opacity:0.75;"></span>
+  </div>
+  <div class="header">
+    <button class="btn-back" style="color:#1a237e;" onclick="deconnexionPartenaire()">&#8592; Quitter</button>
+    <div style="text-align:center;">
+      <div class="h-title">Choisir une tourn&#233;e</div>
+      <div class="h-sub" style="color:#1a237e;">Premi&#232;re prise, premi&#232;re servie</div>
+    </div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content" id="pc-content" style="background:#F2F3F5;"></div>
+</div>
+
 <div class="screen" id="s-poste-ouverture">
   <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
     <span>&#128666; GLOBAL LOGISTIQUE</span><span id="po-poste" style="opacity:0.75;"></span>
@@ -434,7 +449,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   </div>
   <div class="content" id="po-content" style="background:#F2F3F5;"></div>
   <div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
-    <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="demarrerTournee()">D&#233;marrer la tourn&#233;e</button>
+    <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" id="po-btn" onclick="demarrerTournee()">D&#233;marrer la tourn&#233;e</button>
   </div>
 </div>
 
@@ -1346,8 +1361,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.2.0';
-var APP_UPDATE = '09/08/2026 à 04:15';
+var APP_VERSION = 'v3.3.0';
+var APP_UPDATE = '09/08/2026 à 05:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2265,6 +2280,18 @@ function _htmlVivierDanny(){
     });
     h+='</div>';
   }
+  // Une tournée = une seule région. Dès le premier client coché,
+  // la liste se restreint à sa région.
+  var regionVerrou='';
+  if(dannySel.length){
+    var prem=(franceData.clients||{})[dannySel[0]];
+    if(prem) regionVerrou=prem.region||'';
+  }
+  if(regionVerrou){
+    h='<div style="background:#e8eaf6;border:1.5px solid #c5cae9;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
+     +'📍 Tournée en <b>'+regionVerrou+'</b><br><span style="opacity:.8;">Une tournée couvre une seule région. Videz la sélection pour changer.</span></div>';
+    dannyRegion=regionVerrou;
+  }
   var liste=tous.slice();
   if(dannyRegion) liste=liste.filter(function(c){ return c.region===dannyRegion; });
   if(dannyRegion){
@@ -2340,14 +2367,9 @@ function _renderCreationTournee(){
   var h='';
   h+='<div class="fg"><label class="fl">Jour de passage</label><input class="fi" type="date" id="dt-date" value="'+_dtDate+'" onchange="_dtSetDate(this.value)"></div>';
 
-  h+='<div class="slabel">Chauffeur affecté</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">';
-  h+=_chipD('Je conduis', _dtPoste==='DD', "_dtSetPoste('DD')");
-  PARTENAIRES.filter(function(p){ return p.role==='poste'; }).forEach(function(p){
-    var st=(franceData.postes||{})[p.id]||{};
-    var occ=(st.libre===false);
-    h+=_chipD(p.name+(occ?' · occupé':''), _dtPoste===p.id, "_dtSetPoste('"+p.id+"')");
-  });
-  h+='</div>';
+  var regT=_regionDeSelection();
+  h+='<div style="background:#e8eaf6;border:1.5px solid #c5cae9;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
+   +'📍 <b>'+(regT||'Région')+'</b><br><span style="opacity:.8;">La tournée sera proposée aux chauffeurs, qui la prendront eux-mêmes.</span></div>';
 
   var manquants=dannySel.filter(function(id){ return _dtConfirmes.indexOf(id)<0; }).length;
   h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;box-shadow:var(--shadow);">'
@@ -2409,22 +2431,24 @@ function _libelleDate(iso){
 function validerTourneeDanny(){
   if(!_dtDate){ showToastNew('⚠️ Choisissez le jour de passage.'); return; }
   if(!dannySel.length){ showToastNew('⚠️ Aucun client.'); return; }
-  if(!_dtPoste){ showToastNew('⚠️ Choisissez qui conduit.'); return; }
+
   var manquants=dannySel.filter(function(id){ return _dtConfirmes.indexOf(id)<0; });
   if(manquants.length){ showToastNew('⚠️ '+manquants.length+' client(s) non confirmé(s).'); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
 
   var tid='T'+Date.now();
-  var poste=getProfil(_dtPoste)||{};
   var lib=_libelleDate(_dtDate);
+  var reg=_regionDeSelection();
+  var deps={};
+  dannySel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c&&c.dept) deps[c.dept]=1; });
   var maj={};
   maj['tournees/'+tid]={
     id:tid, dateIso:_dtDate, dateLib:lib,
-    posteId:_dtPoste, posteNom:poste.name||'',
-    chauffeur:(_dtPoste==='DD'?'Danny Diop':''),
+    region:reg, depts:Object.keys(deps).sort().join(' · '),
+    posteId:'', posteNom:'', chauffeur:'',
     creePar:(currentUser||{}).name||'', creeTs:Date.now(),
     clients:dannySel.slice(), creneaux:_dtCreneaux,
-    confirmes:_dtConfirmes.slice(), statut:'planifiee'
+    confirmes:_dtConfirmes.slice(), statut:'a_prendre'
   };
   dannySel.forEach(function(id){
     var c=(franceData.clients||{})[id]||{};
@@ -2437,7 +2461,6 @@ function validerTourneeDanny(){
     maj['clients/'+id+'/planifieTs']=Date.now();
     maj['clients/'+id+'/hist']=hist;
   });
-  if(_dtPoste!=='DD'){ maj['postes/'+_dtPoste+'/tourneeId']=tid; }
 
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Tournée du '+lib+' créée');
@@ -2461,19 +2484,56 @@ function _htmlTourneesDanny(){
     var colis=0;
     (to.clients||[]).forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
     var fini=(to.statut==='terminee');
+    var libre=(to.statut==='a_prendre');
+    var badge = fini?'<span class="badge badge-gray">Terminée</span>'
+              : (libre?'<span class="badge badge-blue">À prendre</span>'
+                     :'<span class="badge badge-orange">En cours</span>');
     h+='<div style="background:#fff;border:'+(fini?'1.5px solid var(--border)':'2.5px solid #1a237e')+';border-radius:var(--radius);margin-bottom:10px;overflow:hidden;'+(fini?'opacity:.65;':'')+'box-shadow:var(--shadow);">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 8px;">'
-      +  '<div style="font-size:14px;font-weight:700;">'+(to.dateLib||'')+'</div>'
-      +  '<span class="badge '+(fini?'badge-gray':'badge-blue')+'">'+(fini?'Terminée':'Planifiée')+'</span></div>'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px;gap:8px;">'
+      +  '<div style="font-size:15px;font-weight:800;color:#1a237e;">'+(to.region||'Tournée')+'</div>'+badge+'</div>'
       +'<div style="padding:0 14px 13px;">'
-      +  '<div style="font-size:12px;color:var(--text3);">👤 '+(to.chauffeur||to.posteNom||'poste non ouvert')+'</div>'
-      +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis</div>'
+      +  '<div style="font-size:13.5px;font-weight:700;">'+(to.dateLib||'')+'</div>'
+      +  '<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis'+(to.depts?(' · '+to.depts):'')+'</div>'
+      +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">👤 '+(to.chauffeur||'pas encore prise')+'</div>'
+      +  (libre?('<div style="display:flex;gap:7px;margin-top:10px;">'
+      +     '<div onclick="choisirTournee(\''+to.id+'\')" style="flex:2;text-align:center;background:#1a237e;color:#fff;border-radius:10px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;">Je la prends</div>'
+      +     '<div onclick="annulerTournee(\''+to.id+'\')" style="flex:1;text-align:center;background:#fde0e0;color:#992020;border-radius:10px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;">Annuler</div></div>'):'')
+      +  ((!libre && !fini)?('<div onclick="_reprendreTournee(\''+to.id+'\')" style="margin-top:10px;text-align:center;background:#f0f0f0;color:#333;border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;cursor:pointer;">Voir l\'avancement</div>'):'')
       +'</div></div>';
   });
   return h;
 }
 
 // ── Vue d'un poste (lot 4 à venir) ──
+// Danny annule une tournée non prise : les clients repartent au vivier
+function annulerTournee(tid){
+  var to=(franceData.tournees||{})[tid];
+  if(!to || !db) return;
+  if(to.statut!=='a_prendre'){ showToastNew('⚠️ Tournée déjà prise.'); return; }
+  if(!confirm('Annuler la tournée '+_titreTournee(to)+' ?\n\nLes '+(to.clients||[]).length+' client(s) repartent dans le vivier.')) return;
+  var maj={};
+  (to.clients||[]).forEach(function(id){
+    maj['clients/'+id+'/statut']='attente';
+    maj['clients/'+id+'/tourneeId']='';
+    maj['clients/'+id+'/dateLib']='';
+    maj['clients/'+id+'/creneau']='';
+  });
+  maj['tournees/'+tid]=null;
+  db.ref('france').update(maj).then(function(){
+    showToastNew('🗑️ Tournée annulée');
+    renderDanny();
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+// Danny ouvre une tournée en cours pour en suivre l'avancement
+function _reprendreTournee(tid){
+  var to=(franceData.tournees||{})[tid];
+  if(!to) return;
+  _posteTourneeId=tid;
+  renderPosteTournee();
+  goTo('s-poste-tournee');
+}
+
 function _htmlPoste(){
   var p=currentUser||{};
   var t=franceData.tournees||{};
@@ -2882,9 +2942,27 @@ function _tourneeDuPoste(posteId){
   var t=franceData.tournees||{}, out=null;
   Object.keys(t).forEach(function(k){
     var to=t[k];
-    if(to && to.posteId===posteId && to.statut!=='terminee') out=to;
+    if(to && to.posteId===posteId && to.statut==='en_cours') out=to;
   });
   return out;
+}
+// Tournées préparées par Danny, encore libres
+function _tourneesAPrendre(){
+  var t=franceData.tournees||{}, out=[];
+  Object.keys(t).forEach(function(k){
+    var to=t[k];
+    if(to && to.statut==='a_prendre' && !to.posteId) out.push(to);
+  });
+  out.sort(function(a,b){ return (a.dateIso||'').localeCompare(b.dateIso||''); });
+  return out;
+}
+function _regionDeSelection(){
+  if(!dannySel.length) return '';
+  var c=(franceData.clients||{})[dannySel[0]];
+  return (c&&c.region)||'';
+}
+function _titreTournee(to){
+  return (to.region||'Tournée')+' · '+(to.dateLib||'');
 }
 function _tourneeCourante(){ return (franceData.tournees||{})[_posteTourneeId]||null; }
 
@@ -2892,10 +2970,46 @@ function _tourneeCourante(){ return (franceData.tournees||{})[_posteTourneeId]||
 function ouvrirPoste(){
   var p=currentUser||{};
   var to=_tourneeDuPoste(p.id);
-  if(!to){ renderDanny(); goTo('s-partenaire'); return; }
-  _posteTourneeId=to.id;
-  var st=(franceData.postes||{})[p.id]||{};
-  if(to.statut==='en_cours' && st.libre===false){ renderPosteTournee(); goTo('s-poste-tournee'); return; }
+  if(to){ _posteTourneeId=to.id; renderPosteTournee(); goTo('s-poste-tournee'); return; }
+  _posteTourneeId='';
+  _renderChoixTournee();
+  goTo('s-poste-choix');
+}
+
+// ── Le chauffeur choisit sa tournée ──
+function _renderChoixTournee(){
+  var p=currentUser||{};
+  var e=document.getElementById('pc-poste'); if(e) e.textContent=p.name||'';
+  var libres=_tourneesAPrendre();
+  var h='';
+  if(!libres.length){
+    h='<div style="text-align:center;color:#aaa;padding:44px 20px;font-size:13.5px;line-height:1.6;"><div style="font-size:34px;margin-bottom:10px;">📭</div>Aucune tournée disponible.<br>Danny les prépare depuis son espace.</div>';
+  } else {
+    h='<div class="slabel" style="margin-top:2px;">'+libres.length+' tournée'+(libres.length>1?'s':'')+' à prendre</div>';
+    libres.forEach(function(to){
+      var n=(to.clients||[]).length, colis=0;
+      (to.clients||[]).forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
+      h+='<div onclick="choisirTournee(\''+to.id+'\')" style="background:#fff;border:2.5px solid #1a237e;border-radius:var(--radius);padding:13px 14px;margin-bottom:10px;box-shadow:var(--shadow);cursor:pointer;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+        +  '<div style="font-size:15px;font-weight:800;color:#1a237e;">'+(to.region||'Tournée')+'</div>'
+        +  '<span class="badge badge-blue">À prendre</span></div>'
+        +'<div style="font-size:13px;font-weight:700;margin-top:5px;">'+(to.dateLib||'')+'</div>'
+        +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis'+(to.depts?(' · '+to.depts):'')+'</div>'
+        +'<div style="margin-top:10px;text-align:center;background:#1a237e;color:#fff;border-radius:10px;padding:10px;font-size:13px;font-weight:800;">Prendre cette tournée</div>'
+        +'</div>';
+    });
+  }
+  var box=document.getElementById('pc-content'); if(box) box.innerHTML=h;
+}
+
+function choisirTournee(tid){
+  var to=(franceData.tournees||{})[tid];
+  if(!to){ showToastNew('⚠️ Tournée introuvable.'); return; }
+  if(to.posteId || to.statut!=='a_prendre'){
+    showToastNew('🔒 Cette tournée vient d\'être prise.');
+    _renderChoixTournee(); return;
+  }
+  _posteTourneeId=tid;
   _renderOuverturePoste(to);
   goTo('s-poste-ouverture');
 }
@@ -2921,10 +3035,11 @@ function _renderOuverturePoste(to){
     });
     h+='</div>';
   }
-  h+='<div class="slabel">Tournée affectée à ce poste</div>'
+  h+='<div class="slabel">Tournée choisie</div>'
    + '<div style="background:#fff;border:2.5px solid #1a237e;border-radius:var(--radius);padding:13px 14px;box-shadow:var(--shadow);">'
-   +   '<div style="font-size:15px;font-weight:800;">'+(to.dateLib||'')+'</div>'
-   +   '<div style="font-size:12px;color:var(--text3);margin-top:5px;line-height:1.5;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis<br>Affectée par '+(to.creePar||'Danny')+'</div>'
+   +   '<div style="font-size:15px;font-weight:800;color:#1a237e;">'+(to.region||'')+'</div>'
+   +   '<div style="font-size:13.5px;font-weight:700;margin-top:3px;">'+(to.dateLib||'')+'</div>'
+   +   '<div style="font-size:12px;color:var(--text3);margin-top:5px;line-height:1.5;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis<br>Préparée par '+(to.creePar||'Danny')+'</div>'
    + '</div>'
    + '<div style="font-size:11.5px;color:#888;text-align:center;margin-top:16px;line-height:1.6;">Le poste se referme tout seul<br>une fois le dépôt déclaré.</div>';
   var box=document.getElementById('po-content'); if(box) box.innerHTML=h;
@@ -2944,22 +3059,48 @@ function demarrerTournee(){
   var nom=((document.getElementById('po-nom')||{}).value||'').trim();
   if(nom.length<3){ showToastNew('⚠️ Indiquez le nom du chauffeur.'); return; }
   var to=_tourneeCourante();
-  if(!to){ showToastNew('⚠️ Aucune tournée affectée.'); return; }
+  if(!to){ showToastNew('⚠️ Aucune tournée sélectionnée.'); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var p=currentUser||{};
-  var maj={};
-  maj['tournees/'+to.id+'/chauffeur']=nom;
-  maj['tournees/'+to.id+'/statut']='en_cours';
-  maj['tournees/'+to.id+'/demarreTs']=Date.now();
-  maj['postes/'+p.id+'/libre']=false;
-  maj['postes/'+p.id+'/chauffeur']=nom;
-  maj['postes/'+p.id+'/tourneeId']=to.id;
-  maj['postes/'+p.id+'/ouvertLe']=Date.now();
-  db.ref('france').update(maj).then(function(){
-    showToastNew('🚚 Bonne tournée, '+nom.split(' ')[0]+' !');
-    renderPosteTournee();
-    goTo('s-poste-tournee');
-  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+  var btn=document.getElementById('po-btn');
+  if(btn){ btn.textContent='Réservation…'; btn.style.opacity='.6'; }
+
+  // Verrou : deux chauffeurs peuvent taper en même temps.
+  // La transaction garantit qu'un seul décroche la tournée.
+  db.ref('france/tournees/'+to.id).transaction(function(t){
+    if(!t) return t;
+    if(t.posteId || t.statut!=='a_prendre') return;   // déjà prise -> on abandonne
+    t.posteId   = p.id;
+    t.posteNom  = p.name||'';
+    t.chauffeur = nom;
+    t.statut    = 'en_cours';
+    t.demarreTs = Date.now();
+    return t;
+  }, function(err, commis, snap){
+    if(btn){ btn.textContent='Démarrer la tournée'; btn.style.opacity='1'; }
+    if(err){ showToastNew('❌ '+(err.message||'échec')); return; }
+    if(!commis){
+      showToastNew('🔒 Trop tard, cette tournée vient d\'être prise.');
+      _posteTourneeId='';
+      _renderChoixTournee();
+      goTo('s-poste-choix');
+      return;
+    }
+    var maj={};
+    if(p.role==='poste'){
+      maj['postes/'+p.id+'/libre']=false;
+      maj['postes/'+p.id+'/chauffeur']=nom;
+      maj['postes/'+p.id+'/tourneeId']=to.id;
+      maj['postes/'+p.id+'/ouvertLe']=Date.now();
+    }
+    var fin=function(){
+      showToastNew('🚚 Bonne tournée, '+nom.split(' ')[0]+' !');
+      renderPosteTournee();
+      goTo('s-poste-tournee');
+    };
+    if(Object.keys(maj).length) db.ref('france').update(maj).then(fin).catch(fin);
+    else fin();
+  });
 }
 
 // ── La journée ──
@@ -2972,7 +3113,7 @@ function renderPosteTournee(){
   if(!to) return;
   var e;
   e=document.getElementById('pt-qui');  if(e) e.textContent=_chauffeurCourant();
-  e=document.getElementById('pt-date'); if(e) e.textContent=to.dateLib||'Tournée';
+  e=document.getElementById('pt-date'); if(e) e.textContent=to.region||to.dateLib||'Tournée';
   var ram=(to.ramasses||[]), nonR=(to.nonRamasses||{});
   var clients=(to.clients||[]);
   var traites=ram.length+Object.keys(nonR).length;
@@ -2980,7 +3121,7 @@ function renderPosteTournee(){
   e=document.getElementById('pt-ok');    if(e) e.textContent=ram.length;
   e=document.getElementById('pt-reste'); if(e) e.textContent=Math.max(0, clients.length-traites);
   e=document.getElementById('pt-sous');
-  if(e) e.textContent=(to.posteNom||'')+(to.chauffeur?' · '+to.chauffeur:'');
+  if(e) e.textContent=(to.dateLib||'')+(to.chauffeur?' · '+to.chauffeur:'');
 
   var aFaire=clients.filter(function(id){ return ram.indexOf(id)<0 && !nonR[id]; });
   var faits =clients.filter(function(id){ return ram.indexOf(id)>=0 || nonR[id]; });
