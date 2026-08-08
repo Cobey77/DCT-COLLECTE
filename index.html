@@ -321,13 +321,13 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   </div>
 </div>
 
-<!-- RAMASSAGE FRANCE — v3.0.1 -->
+<!-- RAMASSAGE FRANCE -->
 <div class="screen" id="s-france">
   <div class="header">
     <button class="btn-back" onclick="goTo('s-home')">← Accueil</button>
     <div style="text-align:center;">
       <div class="h-title">🇫🇷 Ramassage France</div>
-      <div class="h-sub" id="fr-sous">Suivi des colis</div>
+      <div class="h-sub" id="fr-sous" style="color:#1a237e;">Suivi des colis</div>
     </div>
     <div id="fr-av" class="av" style="width:30px;height:30px;font-size:10px;"></div>
   </div>
@@ -348,7 +348,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div class="screen" id="s-france-add">
   <div class="header">
     <button class="btn-back" onclick="goTo('s-france')">← Retour</button>
-    <div class="h-title" id="fadd-titre">Inscrire un client</div>
+    <div class="h-title">Inscrire un client</div>
     <div style="width:60px;"></div>
   </div>
   <div class="content">
@@ -408,16 +408,33 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     </div>
     <div id="part-av" class="av" style="width:30px;height:30px;font-size:10px;"></div>
   </div>
-  <div class="content" style="background:#F2F3F5;">
-    <div style="text-align:center;padding:40px 20px;color:#888;">
-      <div style="font-size:40px;margin-bottom:14px;">🚚</div>
-      <div style="font-size:16px;font-weight:800;color:#111;margin-bottom:6px;">Connexion réussie</div>
-      <div style="font-size:13px;line-height:1.6;">Le module de ramassage arrive à la prochaine étape.</div>
+  <div class="subtabs" id="part-subtabs">
+    <div class="subtab active" id="dtab-vivier" onclick="switchDannyTab('vivier')">📋 Disponibles</div>
+    <div class="subtab" id="dtab-tournees" onclick="switchDannyTab('tournees')">📅 Mes tournées</div>
+  </div>
+  <div class="content" id="part-content" style="background:#F2F3F5;"></div>
+  <div id="part-barre" style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;display:none;">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:8px;">
+      <span id="dsel-info"></span>
+      <span onclick="viderSelectionDanny()" style="color:#1a237e;font-weight:700;cursor:pointer;">Annuler</span>
     </div>
-    <div style="background:#fff;border:1.5px solid var(--border);border-radius:14px;padding:14px;box-shadow:var(--shadow);">
-      <div class="slabel" style="margin-top:0;">Vérification</div>
-      <div id="part-debug" style="font-size:12px;color:#555;line-height:1.9;"></div>
-    </div>
+    <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="ouvrirCreationTournee()">Créer une tournée</button>
+  </div>
+</div>
+
+<!-- CRÉATION DE TOURNÉE (Danny) -->
+<div class="screen" id="s-danny-tournee">
+  <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
+    <span>🚚 GLOBAL LOGISTIQUE</span><span style="opacity:0.75;">Danny Diop</span>
+  </div>
+  <div class="header">
+    <button class="btn-back" style="color:#1a237e;" onclick="goTo('s-partenaire')">← Retour</button>
+    <div class="h-title">Nouvelle tournée</div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content" id="dt-content" style="background:#F2F3F5;"></div>
+  <div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
+    <button class="btn" id="dt-btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="validerTourneeDanny()">Valider la tournée</button>
   </div>
 </div>
 
@@ -439,11 +456,11 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div class="new-btn-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg></div>
       <div><div style="color:#fff;font-size:15px;font-weight:800;">Créer une nouvelle collecte</div><div style="color:#d4f5e0;font-size:12px;margin-top:2px;">Dimanche ou jour exceptionnel</div></div>
     </button>
-    <div id="btn-france" onclick="ouvrirFrance()" style="background:#006b2d;border:2.5px solid #00461d;border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:13px;cursor:pointer;width:100%;margin-bottom:18px;">
+    <div id="btn-france" onclick="ouvrirFrance()" style="background:#1a237e;border:2.5px solid #0d1444;border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:13px;cursor:pointer;width:100%;margin-bottom:18px;">
       <div style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:19px;">🇫🇷</div>
       <div style="flex:1;">
         <div style="color:#fff;font-size:15px;font-weight:800;">Ramassage France</div>
-        <div id="france-compteurs" style="color:#d4f5e0;font-size:12px;margin-top:2px;">0 en attente · 0 à Chartres</div>
+        <div id="france-compteurs" style="color:#c5cae9;font-size:12px;margin-top:2px;">0 en attente · 0 à Chartres</div>
       </div>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
     </div>
@@ -860,6 +877,8 @@ function initFirebase(){
     // Écouter les changements en temps réel
     ecouterChangements();
     ecouterFrance();
+    ecouterAlertes();
+    ecouterCodesEspaces();
   } catch(e) {
     console.log("Firebase non disponible:", e);
     firebaseReady = false;
@@ -885,10 +904,19 @@ function ecouterFrance(){
     franceData.clients  = d.clients  || {};
     franceData.tournees = d.tournees || {};
     franceData.postes   = d.postes   || {};
+    var _avant = window._glDesactive;
     window._glDesactive = !!((d.societes||{}).GL||{}).desactive;
+    if(_avant !== window._glDesactive){
+      try{ var _sc=document.querySelector('.screen.active');
+           if(_sc && _sc.id==='s-login') retourEspaces(); }catch(e){}
+      try{ var _sp=document.getElementById('admin-section-partenaires');
+           if(_sp && _sp.style.display!=='none') renderAdminPartenaires(); }catch(e){}
+    }
     _franceReady = true;
     _initPostesFrance();
     try{ if(typeof renderFrance==='function') renderFrance(); }catch(e){}
+    try{ var sc=document.querySelector('.screen.active');
+         if(sc && sc.id==='s-partenaire' && typeof renderDanny==='function') renderDanny(); }catch(e){}
     try{ majBoutonFrance(); }catch(e){}
   });
 }
@@ -1230,8 +1258,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.0.1';
-var APP_UPDATE = '09/08/2026 à 00:30';
+var APP_VERSION = 'v3.1.1';
+var APP_UPDATE = '09/08/2026 à 03:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1959,12 +1987,13 @@ function retourEspaces(){
   esp.style.display='block';
   var html='';
   SOCIETES.forEach(function(so){
-    html += '<div class="login-card" style="border-top:5px solid '+so.color+';border-left:2px solid var(--border);align-items:center;" onclick="ouvrirEspace(\''+so.id+'\')">'
+    var susp=_societeSuspendue(so.id);
+    html += '<div class="login-card" style="border-top:5px solid '+(susp?'#c0392b':so.color)+';border-left:2px solid var(--border);align-items:center;'+(susp?'opacity:.55;':'')+'" onclick="'+(susp?'showToastNew(\'🔒 Accès suspendu par Dakar City Transport.\')':'ouvrirEspaceProtege(\''+so.id+'\')')+'">'
          +   _visuelSociete(so)
          +   '<div style="flex:1;">'
          +     '<div class="login-name">'+so.nom+'</div>'
          +     '<div class="login-role">'+so.sous+'</div>'
-         +     '<div style="display:inline-block;font-size:11px;font-weight:700;color:'+so.color+';background:'+so.bgd+';padding:3px 9px;border-radius:20px;margin-top:6px;">'+_detailSociete(so.id)+'</div>'
+         +     '<div style="display:inline-block;font-size:11px;font-weight:700;color:'+so.color+';background:'+so.bgd+';padding:3px 9px;border-radius:20px;margin-top:6px;">'+(_espaceProtege(so.id)?'🔒 ':'')+_detailSociete(so.id)+'</div>'
          +   '</div>'
          +   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+so.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>'
          + '</div>';
@@ -1993,7 +2022,9 @@ function _logoGL(t){
     +'<circle cx="42" cy="86" r="3" fill="#1a1a1a"/><circle cx="60" cy="86" r="3" fill="#1a1a1a"/></svg>';
 }
 
+function _societeSuspendue(id){ return id==='GL' && window._glDesactive===true; }
 function _detailSociete(id){
+  if(_societeSuspendue(id)) return '🔒 Accès suspendu';
   if(id==='DCT'){
     var n=COLLABS.filter(function(c){return !c.admin;}).length;
     return n+' collaborateur'+(n>1?'s':'');
@@ -2056,43 +2087,327 @@ function _sousTitreProfil(c){
   return 'Collaborateur';
 }
 
+// ═══════════════════════════════════════════════════════════
+//  ESPACE DANNY — v3.1.0
+//  Il pioche dans le vivier, appelle les clients, pose la date
+//  et affecte la tournée à un poste. Aucun montant visible.
+// ═══════════════════════════════════════════════════════════
+var dannyTab='vivier';
+var dannySel=[];            // clients cochés
+var dannyRegion='', dannyDept='';
+var _dtDate='', _dtPoste='', _dtCreneaux={}, _dtConfirmes=[];
+
+function _estDanny(){ return currentUser && currentUser.role==='responsable'; }
+
 function _finalisLoginPartenaire(p){
   var so = SOCIETES.find(function(x){ return x.id===p.societe; }) || {nom:p.societe};
   var e;
-  e=document.getElementById('part-societe'); if(e) e.textContent='🚚 '+so.nom.toUpperCase();
+  e=document.getElementById('part-societe'); if(e) e.textContent='🚚 '+(so.nom||'').toUpperCase();
   e=document.getElementById('part-nom');     if(e) e.textContent=p.name;
   e=document.getElementById('part-role');    if(e) e.textContent=(p.role==='responsable'?'Responsable':'Poste chauffeur');
   e=document.getElementById('part-qui');     if(e) e.textContent=p.name;
   e=document.getElementById('part-av');
   if(e){ e.textContent=(p.role==='poste'?'🚚':p.id); e.style.background=p.bg; e.style.color=p.color; e.style.border='2px solid '+p.color; }
-  e=document.getElementById('part-debug');
-  if(e){
-    var c=compteursFrance();
-    var st=(franceData.postes||{})[p.id];
-    e.innerHTML='Profil : <b>'+p.id+' — '+p.name+'</b><br>'
-      +'Société : <b>'+so.nom+'</b><br>'
-      +'Rôle : <b>'+(p.role==='responsable'?'Responsable':'Poste chauffeur')+'</b><br>'
-      +'Noeud france/ : <b>'+(_franceReady?'connecté':'en attente')+'</b><br>'
-      +'Postes créés : <b>'+Object.keys(franceData.postes||{}).length+'</b><br>'
-      +(p.role==='poste'?('État du poste : <b>'+(st&&st.libre===false?('occupé — '+st.chauffeur):'libre')+'</b><br>'):'')
-      +'Clients France : <b>'+Object.keys(franceData.clients||{}).length+'</b> ('+c.attente+' en attente)';
-  }
-  // Trace de connexion, comme pour l'équipe
   if(firebaseReady && db){
     var now=new Date();
     db.ref('dct_connexions').push({
-      who:p.name+' — '+so.nom, id:p.id, bg:p.bg, color:p.color,
+      who:p.name+' — '+(so.nom||''), id:p.id, bg:p.bg, color:p.color,
       date:now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
       ts:Date.now()
     });
   }
+  dannySel=[]; dannyRegion=''; dannyDept=''; dannyTab='vivier';
+  var st=document.getElementById('part-subtabs');
+  if(st) st.style.display=_estDanny()?'flex':'none';
+  switchDannyTab('vivier');
   goTo('s-partenaire');
 }
 
 function deconnexionPartenaire(){
   currentUser = COLLABS[0];
+  dannySel=[];
   buildLogin();
   goTo('s-login');
+}
+
+function switchDannyTab(t){
+  dannyTab=t;
+  var a=document.getElementById('dtab-vivier'), b=document.getElementById('dtab-tournees');
+  if(a) a.className='subtab'+(t==='vivier'?' active':'');
+  if(b) b.className='subtab'+(t==='tournees'?' active':'');
+  renderDanny();
+}
+
+function renderDanny(){
+  var box=document.getElementById('part-content');
+  if(!box) return;
+  if(!_estDanny()){ box.innerHTML=_htmlPoste(); _majBarreDanny(); return; }
+  box.innerHTML = (dannyTab==='vivier') ? _htmlVivierDanny() : _htmlTourneesDanny();
+  _majBarreDanny();
+}
+
+// ── Le vivier ──
+function _clientsDispo(){
+  var out=[];
+  Object.keys(franceData.clients||{}).forEach(function(k){
+    var c=franceData.clients[k];
+    if(c && c.statut==='attente'){ c._id=k; out.push(c); }
+  });
+  out.sort(function(a,b){ return (a.creeTs||0)-(b.creeTs||0); });
+  return out;
+}
+
+function _htmlVivierDanny(){
+  var tous=_clientsDispo();
+  if(!tous.length){
+    return '<div style="text-align:center;color:#aaa;padding:44px 20px;font-size:13.5px;line-height:1.6;"><div style="font-size:34px;margin-bottom:10px;">📭</div>Aucun client en attente.<br>Dakar City les inscrit depuis son espace.</div>';
+  }
+  var regs={};
+  tous.forEach(function(c){ if(c.region) regs[c.region]=(regs[c.region]||0)+1; });
+  var kr=Object.keys(regs).sort(function(a,b){ return regs[b]-regs[a]||a.localeCompare(b); });
+
+  var h='';
+  if(kr.length>1){
+    h+='<div class="slabel" style="margin-top:2px;">Région</div><div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;">';
+    h+=_chipD('Toute la zone · '+tous.length, dannyRegion==='', "setDannyRegion('')");
+    kr.forEach(function(r){
+      var lib=(REGIONS_FR[r]?'':'🇧🇪 ')+r+' · '+regs[r];
+      h+=_chipD(lib, dannyRegion===r, "setDannyRegion('"+r.replace(/'/g,"\\'")+"')");
+    });
+    h+='</div>';
+  }
+  var liste=tous.slice();
+  if(dannyRegion) liste=liste.filter(function(c){ return c.region===dannyRegion; });
+  if(dannyRegion){
+    var deps={};
+    liste.forEach(function(c){ if(c.dept) deps[c.dept]=(deps[c.dept]||0)+1; });
+    var kd=Object.keys(deps).sort();
+    if(kd.length>1){
+      h+='<div class="slabel">Département</div><div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:8px;">';
+      h+=_chipD('Tous', dannyDept==='', "setDannyDept('')", '#5c6bc0');
+      kd.forEach(function(d){
+        var nom=(DEPT_REGION[d]||{}).nom||'';
+        h+=_chipD(d+' '+nom+' · '+deps[d], dannyDept===d, "setDannyDept('"+d+"')", '#5c6bc0');
+      });
+      h+='</div>';
+    }
+  }
+  if(dannyDept) liste=liste.filter(function(c){ return c.dept===dannyDept; });
+
+  h+='<div class="slabel">'+liste.length+' client'+(liste.length>1?'s':'')+' à ramasser</div>';
+  liste.forEach(function(c){
+    var on=dannySel.indexOf(c._id)>=0;
+    var j=_joursDepuis(c.creeTs);
+    var vieux=j>=14;
+    h+='<div onclick="toggleSelDanny(\''+c._id+'\')" style="background:'+(on?'#f5f6fc':'#fff')+';border:1.5px solid '+(on?'#1a237e':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:9px;display:flex;gap:11px;align-items:flex-start;cursor:pointer;box-shadow:var(--shadow);">'
+      +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'#1a237e':'#ccc')+';background:'+(on?'#1a237e':'#fff')+';color:#fff;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">'+(on?'✓':'')+'</div>'
+      +'<div style="flex:1;min-width:0;">'
+      +  '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div>'
+      +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
+      +  '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
+      +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></div>'
+      +'</div></div>';
+  });
+  return h;
+}
+function _chipD(lib,on,action,col){
+  col=col||'#1a237e';
+  return '<span onclick="event.stopPropagation();'+action+'" style="font-size:11.5px;font-weight:'+(on?700:600)+';padding:5px 10px;border-radius:18px;white-space:nowrap;cursor:pointer;'
+    +(on?('background:'+col+';color:#fff;border:1.5px solid '+col+';'):'background:#fff;border:1.5px solid var(--border);color:#555;')+'">'+lib+'</span>';
+}
+function setDannyRegion(r){ dannyRegion=(dannyRegion===r?'':r); dannyDept=''; renderDanny(); }
+function setDannyDept(d){ dannyDept=(dannyDept===d?'':d); renderDanny(); }
+function toggleSelDanny(id){
+  var i=dannySel.indexOf(id);
+  if(i>=0) dannySel.splice(i,1); else dannySel.push(id);
+  renderDanny();
+}
+function viderSelectionDanny(){ dannySel=[]; renderDanny(); }
+function _majBarreDanny(){
+  var b=document.getElementById('part-barre');
+  if(!b) return;
+  var actif=_estDanny() && dannyTab==='vivier' && dannySel.length>0;
+  b.style.display = actif ? 'block' : 'none';
+  if(actif){
+    var colis=0;
+    dannySel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
+    var i=document.getElementById('dsel-info');
+    if(i) i.innerHTML='<b style="color:#111;">'+dannySel.length+' client'+(dannySel.length>1?'s':'')+'</b> · '+colis+' colis';
+  }
+}
+
+// ── Création de tournée ──
+function ouvrirCreationTournee(){
+  if(!dannySel.length) return;
+  var d=new Date(Date.now()+86400000);
+  _dtDate=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  _dtPoste=''; _dtCreneaux={}; _dtConfirmes=[];
+  _renderCreationTournee();
+  goTo('s-danny-tournee');
+}
+function _renderCreationTournee(){
+  var box=document.getElementById('dt-content');
+  if(!box) return;
+  var h='';
+  h+='<div class="fg"><label class="fl">Jour de passage</label><input class="fi" type="date" id="dt-date" value="'+_dtDate+'" onchange="_dtSetDate(this.value)"></div>';
+
+  h+='<div class="slabel">Chauffeur affecté</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">';
+  h+=_chipD('Je conduis', _dtPoste==='DD', "_dtSetPoste('DD')");
+  PARTENAIRES.filter(function(p){ return p.role==='poste'; }).forEach(function(p){
+    var st=(franceData.postes||{})[p.id]||{};
+    var occ=(st.libre===false);
+    h+=_chipD(p.name+(occ?' · occupé':''), _dtPoste===p.id, "_dtSetPoste('"+p.id+"')");
+  });
+  h+='</div>';
+
+  var manquants=dannySel.filter(function(id){ return _dtConfirmes.indexOf(id)<0; }).length;
+  h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;box-shadow:var(--shadow);">'
+   + '<div style="font-size:12.5px;color:#555;line-height:1.5;">📞 <b style="color:#111;">Appelle chaque client, puis coche « Confirmé ».</b><br>La tournée ne se valide que si tout le monde a confirmé.</div>'
+   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:12px;"><span style="color:#888;">Confirmations</span>'
+   + '<span class="badge '+(manquants?'badge-orange':'badge-green')+'">'+(dannySel.length-manquants)+' sur '+dannySel.length+'</span></div></div>';
+
+  h+='<div class="slabel">'+dannySel.length+' client'+(dannySel.length>1?'s':'')+'</div>';
+  dannySel.forEach(function(id){
+    var c=(franceData.clients||{})[id]; if(!c) return;
+    var ok=_dtConfirmes.indexOf(id)>=0;
+    var cr=_dtCreneaux[id]||'';
+    h+='<div style="background:'+(ok?'#f2fbf5':'#fffbeb')+';border:1.5px solid '+(ok?'#009A44':'#fcd34d')+';border-radius:var(--radius);padding:12px;margin-bottom:9px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+      +  '<div style="font-size:14.5px;font-weight:700;">'+(c.nom||'')+'</div>'
+      +  '<span class="badge '+(ok?'badge-green':'badge-orange')+'">'+(ok?'✓ Confirmé':'En attente')+'</span></div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
+      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis</div>'
+      +'<div style="display:flex;gap:6px;margin-top:8px;">'
+      +  _segD('Matin',cr==='m',"_dtSetCreneau('"+id+"','m')")
+      +  _segD('Après-midi',cr==='a',"_dtSetCreneau('"+id+"','a')")
+      +  _segD('Journée',cr==='',"_dtSetCreneau('"+id+"','')")
+      +'</div>'
+      +'<div style="display:flex;gap:7px;margin-top:9px;">'
+      +  '<a href="tel:'+(c.tel||'')+'" style="flex:2;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
+      +  '<div onclick="_dtToggleConfirme(\''+id+'\')" style="flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;background:'+(ok?'#009A44':'#d4f0e0')+';color:'+(ok?'#fff':'#006b2d')+';">'+(ok?'✓ Confirmé':'Confirmer')+'</div>'
+      +'</div>'
+      +'<div onclick="_dtRetirer(\''+id+'\')" style="margin-top:7px;text-align:center;font-size:12.5px;font-weight:700;color:#992020;background:#fde0e0;border-radius:9px;padding:9px;cursor:pointer;">✕ Retirer de la tournée</div>'
+      +'</div>';
+  });
+  box.innerHTML=h;
+}
+function _segD(lib,on,action){
+  return '<div onclick="'+action+'" style="flex:1;text-align:center;font-size:12px;font-weight:700;padding:9px 3px;border-radius:9px;cursor:pointer;background:'+(on?'#1a237e':'#fff')+';color:'+(on?'#fff':'#555')+';border:1.5px solid '+(on?'#1a237e':'var(--border)')+';">'+lib+'</div>';
+}
+function _dtSetDate(v){ _dtDate=v; }
+function _dtSetPoste(p){ _dtPoste=(_dtPoste===p?'':p); _renderCreationTournee(); }
+function _dtSetCreneau(id,c){ _dtCreneaux[id]=c; _renderCreationTournee(); }
+function _dtToggleConfirme(id){
+  var i=_dtConfirmes.indexOf(id);
+  if(i>=0) _dtConfirmes.splice(i,1); else _dtConfirmes.push(id);
+  _renderCreationTournee();
+}
+function _dtRetirer(id){
+  var i=dannySel.indexOf(id); if(i>=0) dannySel.splice(i,1);
+  var j=_dtConfirmes.indexOf(id); if(j>=0) _dtConfirmes.splice(j,1);
+  delete _dtCreneaux[id];
+  if(!dannySel.length){ goTo('s-partenaire'); renderDanny(); return; }
+  _renderCreationTournee();
+}
+function _libelleDate(iso){
+  var p=(iso||'').split('-');
+  if(p.length!==3) return iso||'';
+  var d=new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+  var jours=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  var mois=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  return jours[d.getDay()]+' '+d.getDate()+' '+mois[d.getMonth()];
+}
+function validerTourneeDanny(){
+  if(!_dtDate){ showToastNew('⚠️ Choisissez le jour de passage.'); return; }
+  if(!dannySel.length){ showToastNew('⚠️ Aucun client.'); return; }
+  if(!_dtPoste){ showToastNew('⚠️ Choisissez qui conduit.'); return; }
+  var manquants=dannySel.filter(function(id){ return _dtConfirmes.indexOf(id)<0; });
+  if(manquants.length){ showToastNew('⚠️ '+manquants.length+' client(s) non confirmé(s).'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+
+  var tid='T'+Date.now();
+  var poste=getProfil(_dtPoste)||{};
+  var lib=_libelleDate(_dtDate);
+  var maj={};
+  maj['tournees/'+tid]={
+    id:tid, dateIso:_dtDate, dateLib:lib,
+    posteId:_dtPoste, posteNom:poste.name||'',
+    chauffeur:(_dtPoste==='DD'?'Danny Diop':''),
+    creePar:(currentUser||{}).name||'', creeTs:Date.now(),
+    clients:dannySel.slice(), creneaux:_dtCreneaux,
+    confirmes:_dtConfirmes.slice(), statut:'planifiee'
+  };
+  dannySel.forEach(function(id){
+    var c=(franceData.clients||{})[id]||{};
+    var hist=(c.hist||[]).slice();
+    hist.push({q:(currentUser||{}).name||'', a:'a planifié le passage — '+lib, ts:Date.now()});
+    maj['clients/'+id+'/statut']='planifie';
+    maj['clients/'+id+'/tourneeId']=tid;
+    maj['clients/'+id+'/dateLib']=lib;
+    maj['clients/'+id+'/creneau']=_dtCreneaux[id]||'';
+    maj['clients/'+id+'/planifieTs']=Date.now();
+    maj['clients/'+id+'/hist']=hist;
+  });
+  if(_dtPoste!=='DD'){ maj['postes/'+_dtPoste+'/tourneeId']=tid; }
+
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ Tournée du '+lib+' créée');
+    dannySel=[]; _dtCreneaux={}; _dtConfirmes=[]; _dtPoste='';
+    switchDannyTab('tournees');
+    goTo('s-partenaire');
+  }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
+}
+
+// ── Mes tournées ──
+function _htmlTourneesDanny(){
+  var t=franceData.tournees||{};
+  var ks=Object.keys(t).sort(function(a,b){ return (t[b].creeTs||0)-(t[a].creeTs||0); });
+  if(!ks.length){
+    return '<div style="text-align:center;color:#aaa;padding:44px 20px;font-size:13.5px;line-height:1.6;"><div style="font-size:34px;margin-bottom:10px;">📅</div>Aucune tournée.<br>Choisis des clients dans l\'onglet Disponibles.</div>';
+  }
+  var h='';
+  ks.forEach(function(k){
+    var to=t[k]||{};
+    var n=(to.clients||[]).length;
+    var colis=0;
+    (to.clients||[]).forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
+    var fini=(to.statut==='terminee');
+    h+='<div style="background:#fff;border:'+(fini?'1.5px solid var(--border)':'2.5px solid #1a237e')+';border-radius:var(--radius);margin-bottom:10px;overflow:hidden;'+(fini?'opacity:.65;':'')+'box-shadow:var(--shadow);">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 8px;">'
+      +  '<div style="font-size:14px;font-weight:700;">'+(to.dateLib||'')+'</div>'
+      +  '<span class="badge '+(fini?'badge-gray':'badge-blue')+'">'+(fini?'Terminée':'Planifiée')+'</span></div>'
+      +'<div style="padding:0 14px 13px;">'
+      +  '<div style="font-size:12px;color:var(--text3);">👤 '+(to.chauffeur||to.posteNom||'poste non ouvert')+'</div>'
+      +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis</div>'
+      +'</div></div>';
+  });
+  return h;
+}
+
+// ── Vue d'un poste (lot 4 à venir) ──
+function _htmlPoste(){
+  var p=currentUser||{};
+  var t=franceData.tournees||{};
+  var mienne=null;
+  Object.keys(t).forEach(function(k){ if(t[k] && t[k].posteId===p.id && t[k].statut!=='terminee') mienne=t[k]; });
+  if(!mienne){
+    return '<div style="text-align:center;color:#aaa;padding:44px 20px;font-size:13.5px;line-height:1.6;"><div style="font-size:34px;margin-bottom:10px;">🚚</div>Aucune tournée affectée à ce poste.<br>Danny te l\'attribuera depuis son espace.</div>';
+  }
+  var n=(mienne.clients||[]).length;
+  var h='<div style="background:#fff;border:2.5px solid #1a237e;border-radius:var(--radius);padding:14px;margin-bottom:12px;box-shadow:var(--shadow);">'
+    +'<div style="font-size:16px;font-weight:800;">'+(mienne.dateLib||'')+'</div>'
+    +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+n+' client'+(n>1?'s':'')+' · affectée par '+(mienne.creePar||'Danny')+'</div></div>';
+  (mienne.clients||[]).forEach(function(id){
+    var c=(franceData.clients||{})[id]; if(!c) return;
+    var cr=(mienne.creneaux||{})[id];
+    h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
+      +'<div style="font-size:14.5px;font-weight:700;">'+(c.nom||'')+'</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
+      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis'+(cr==='m'?' · matin':(cr==='a'?' · après-midi':''))+'</div>'
+      +'</div>';
+  });
+  h+='<div style="text-align:center;color:#aaa;padding:16px 20px;font-size:12.5px;line-height:1.6;">Les boutons « Ramassé » arrivent à la prochaine étape.</div>';
+  return h;
 }
 
 
@@ -2616,6 +2931,7 @@ function _validerPinCollab(){
       var attempts = parseInt(localStorage.getItem('dct_pin_attempts_'+id)||'0') + 1;
       localStorage.setItem('dct_pin_attempts_'+id, attempts);
       var restants = 5 - attempts;
+      journaliserCodeErrone(id, attempts, attempts>=5);
       if(attempts >= 5){
         db.ref('dct_config/pins_blocked/'+id).set(true);
         var collab2 = getProfil(id);
@@ -6661,7 +6977,7 @@ function showAdminTab(tab){
   });
   if(tab === 'equipe') renderAdminEquipe();
   else if(tab === 'partenaires') renderAdminPartenaires();
-  else if(tab === 'securite') renderAdminSecurite();
+  else if(tab === 'securite'){ renderAdminSecurite(); marquerAlertesVues(); }
   else if(tab === 'message') renderAdminMessage();
 }
 
@@ -6676,6 +6992,11 @@ function renderAdminPartenaires(){
   var c = compteursFrance();
 
   var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🚚 Sociétés partenaires</div>';
+  if(!actif){
+    h+='<div style="background:#fde0e0;border:2px solid #c0392b;border-radius:14px;padding:13px 14px;margin-bottom:14px;">'
+      +'<div style="font-size:14px;font-weight:800;color:#992020;">🔒 Accès suspendu</div>'
+      +'<div style="font-size:12px;color:#992020;margin-top:4px;line-height:1.5;">Personne de chez Global Logistique ne peut se connecter. Les tournées et les colis restent enregistrés.</div></div>';
+  }
 
   // Carte société
   h+='<div style="background:#fff;border:2px solid '+(actif?'#1a237e':'#ccc')+';border-radius:14px;padding:14px;margin-bottom:14px;box-shadow:var(--shadow);'+(actif?'':'opacity:.6;')+'">'
@@ -6723,13 +7044,23 @@ function renderAdminPartenaires(){
 }
 
 function basculerSocietePartenaire(){
-  if(!db) return;
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var actif = !(window._glDesactive===true);
-  var v=!actif;
-  db.ref('france/societes/GL').update({desactive:!actif}).then(function(){
-    window._glDesactive=!actif;
-    showToastNew(actif?'🔒 Global Logistique désactivée':'✅ Global Logistique réactivée');
+  var msg = actif
+    ? "Suspendre Global Logistique ?\n\nDanny et les 4 postes ne pourront plus se connecter.\nLes données et les tournées sont conservées."
+    : "Réactiver Global Logistique ?\n\nDanny et les postes pourront de nouveau se connecter.";
+  if(!confirm(msg)) return;
+  db.ref('france/societes/GL').update({
+    desactive : actif,
+    parQui    : (currentUser||{}).name||'',
+    quandTs   : Date.now()
+  }).then(function(){
+    window._glDesactive = actif;
+    showToastNew(actif?'🔒 Global Logistique suspendue':'✅ Global Logistique réactivée');
     renderAdminPartenaires();
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
+    console.log('basculerSocietePartenaire:', e);
   });
 }
 function reinitPinPartenaire(id){
@@ -6749,6 +7080,233 @@ function libererPoste(id){
     showToastNew('✅ Poste libéré');
     renderAdminPartenaires();
   });
+}
+
+
+// ═══════════ ALERTES DE CONNEXION — v3.0.3 ═══════════
+// Journalise chaque code erroné, quel que soit le profil visé.
+// Noeud racine dct_alertes/ : hors de dct/, comme l'activité.
+function journaliserCodeErrone(id, essais, bloque){
+  if(!db || !firebaseReady) return;
+  var p = getProfil(id) || {name:id};
+  var now = new Date();
+  db.ref('dct_alertes').push({
+    profilId : id,
+    profil   : p.name || id,
+    societe  : p.societe ? 'Global Logistique' : 'Dakar City Transport',
+    essais   : essais,
+    bloque   : !!bloque,
+    date     : now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})
+               +' à '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+    ts       : Date.now()
+  });
+}
+
+var _alertes = [];
+function ecouterAlertes(){
+  if(!db) return;
+  db.ref('dct_alertes').limitToLast(50).on('value', function(snap){
+    var v = snap.val() || {};
+    _alertes = Object.keys(v).map(function(k){ var o=v[k]||{}; o._id=k; return o; })
+                 .sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
+    majPastilleAlertes();
+    try{
+      var sec=document.getElementById('admin-section-securite');
+      if(sec && sec.style.display!=='none') renderAdminSecurite();
+    }catch(e){}
+  });
+}
+
+function _alertesVuesTs(){ return parseInt(localStorage.getItem('dct_alertes_vues')||'0'); }
+function nbAlertesNouvelles(){
+  var vu=_alertesVuesTs();
+  return _alertes.filter(function(a){ return (a.ts||0) > vu; }).length;
+}
+function majPastilleAlertes(){
+  var n = nbAlertesNouvelles();
+  var b = document.getElementById('btn-admin-panel');
+  if(!b) return;
+  var d = document.getElementById('admin-alert-dot');
+  if(n>0){
+    if(!d){
+      b.style.position='relative';
+      d=document.createElement('span');
+      d.id='admin-alert-dot';
+      d.style.cssText='position:absolute;top:-5px;right:-5px;background:#E31B23;color:#fff;border-radius:50%;min-width:18px;height:18px;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid #fff;font-family:var(--font);padding:0 3px;';
+      b.appendChild(d);
+    }
+    d.textContent = n>9 ? '9+' : String(n);
+    d.style.display='flex';
+  } else if(d){ d.style.display='none'; }
+}
+function marquerAlertesVues(){
+  localStorage.setItem('dct_alertes_vues', String(Date.now()));
+  majPastilleAlertes();
+}
+function effacerAlertes(){
+  if(!db) return;
+  if(!confirm('Effacer tout le journal des tentatives ?')) return;
+  db.ref('dct_alertes').remove().then(function(){
+    _alertes=[]; marquerAlertesVues(); renderAdminSecurite();
+    showToastNew('🗑️ Journal effacé');
+  });
+}
+
+function _htmlAlertes(){
+  var vu=_alertesVuesTs();
+  var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">🔔 Tentatives de connexion</div>'
+      + '<div style="font-size:12px;color:#888;margin-bottom:12px;">Chaque code erroné est enregistré ici, avec le profil visé.</div>';
+  if(!_alertes.length){
+    return h + '<div style="background:#d4f0e0;border:1.5px solid #009A44;border-radius:14px;padding:14px;font-size:13px;color:#006b2d;font-weight:600;margin-bottom:22px;">✅ Aucune tentative échouée.</div>';
+  }
+  _alertes.slice(0,30).forEach(function(a){
+    var neuf = (a.ts||0) > vu;
+    var col  = a.bloque ? '#c0392b' : (neuf ? '#E31B23' : '#ccc');
+    h+='<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid '+col+';border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+      +  '<div style="font-size:14px;font-weight:700;">'+(neuf?'🔴 ':'')+'Profil '+(a.profil||'?')+'</div>'
+      +  '<span class="badge '+(a.bloque?'badge-red':'badge-orange')+'">'+(a.bloque?'Bloqué':(a.essais||1)+((a.essais||1)>1?' essais':' essai'))+'</span>'
+      +'</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+(a.societe||'')+'</div>'
+      +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">🕐 '+(a.date||'')+'</div>'
+      +'</div>';
+  });
+  h+='<button class="btn btn-gray" style="background:#fde0e0;color:#992020;border:1.5px solid #c0392b;margin-bottom:22px;" onclick="effacerAlertes()">🗑️ Effacer le journal</button>';
+  return h;
+}
+
+
+// ═══════════ CODE D'ESPACE — v3.0.4 ═══════════
+// Un code commun garde la porte du carré. Une fois franchie,
+// le collaborateur choisit son profil et entre directement.
+var _codesEspaces = {};
+var _espacesOuverts = {};
+
+function ecouterCodesEspaces(){
+  if(!db) return;
+  db.ref('dct_config/codes_espaces').on('value', function(snap){
+    _codesEspaces = snap.val() || {};
+    try{ if(document.querySelector('.screen.active') &&
+            document.querySelector('.screen.active').id==='s-login') retourEspaces(); }catch(e){}
+    try{ var sec=document.getElementById('admin-section-securite');
+         if(sec && sec.style.display!=='none') renderAdminSecurite(); }catch(e){}
+  });
+}
+
+// Seul le carré Dakar City peut être gardé par un code.
+// Global Logistique entre librement : Danny a son code personnel,
+// et les postes chauffeur sont des places partagées.
+var ESPACES_AVEC_CODE = ['DCT'];
+function _espaceProtege(socId){
+  if(ESPACES_AVEC_CODE.indexOf(socId)<0) return false;
+  var c=_codesEspaces[socId];
+  return !!(c && String(c).length>=4);
+}
+
+function ouvrirEspaceProtege(socId){
+  if(!_espaceProtege(socId) || _espacesOuverts[socId]){ ouvrirEspace(socId); return; }
+  var so=SOCIETES.find(function(x){ return x.id===socId; })||{};
+  var e;
+  e=document.getElementById('ce-espace'); if(e) e.value=socId;
+  e=document.getElementById('ce-input');  if(e){ e.value=''; e.style.borderColor=so.color||'#009A44'; }
+  e=document.getElementById('ce-error');  if(e){ e.style.display='none'; e.textContent=''; }
+  e=document.getElementById('ce-titre');  if(e) e.textContent=so.nom||'';
+  e=document.getElementById('ce-sous');   if(e) e.textContent="Entrez le code de l'espace.";
+  e=document.getElementById('ce-btn');    if(e) e.style.background=so.color||'#009A44';
+  var v=document.getElementById('ce-visuel');
+  if(v){
+    v.style.borderColor=so.color||'#009A44';
+    if(socId==='DCT'){
+      var lg=document.getElementById('dct-logo');
+      v.innerHTML='<img src="'+(lg?lg.getAttribute('src'):'')+'" style="width:60px;height:60px;object-fit:cover;">';
+    } else if(socId==='GL'){ v.innerHTML=_logoGL(42); }
+    else { v.innerHTML='<span style="font-size:28px;">🔐</span>'; }
+  }
+  openModal('modal-code-espace');
+  var inp=document.getElementById('ce-input');
+  setTimeout(function(){ if(inp) inp.focus(); },300);
+}
+
+function validerCodeEspace(){
+  var socId=(document.getElementById('ce-espace')||{}).value||'';
+  var saisi=((document.getElementById('ce-input')||{}).value||'').trim();
+  var err=document.getElementById('ce-error');
+  var attendu=String(_codesEspaces[socId]||'');
+  if(saisi.length<4){
+    if(err){ err.textContent='⚠️ Entrez le code (4 chiffres minimum).'; err.style.display='block'; }
+    return;
+  }
+  if(saisi===attendu){
+    _espacesOuverts[socId]=true;
+    localStorage.setItem('dct_espace_essais_'+socId,'0');
+    closeModal('modal-code-espace');
+    ouvrirEspace(socId);
+    return;
+  }
+  var n=parseInt(localStorage.getItem('dct_espace_essais_'+socId)||'0')+1;
+  localStorage.setItem('dct_espace_essais_'+socId,n);
+  journaliserCodeEspace(socId,n);
+  if(err){ err.textContent='❌ Code incorrect.'; err.style.display='block'; }
+  var i=document.getElementById('ce-input'); if(i) i.value='';
+}
+
+function journaliserCodeEspace(socId,essais){
+  if(!db || !firebaseReady) return;
+  var so=SOCIETES.find(function(x){ return x.id===socId; })||{nom:socId};
+  var now=new Date();
+  db.ref('dct_alertes').push({
+    profilId:'ESPACE-'+socId,
+    profil:'Espace '+(so.nom||socId),
+    societe:"Code d'espace",
+    essais:essais, bloque:false,
+    date:now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})
+        +' à '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+    ts:Date.now()
+  });
+}
+
+function definirCodeEspace(socId){
+  var inp=document.getElementById('adm-code-'+socId);
+  var v=((inp||{}).value||'').trim();
+  if(!/^[0-9]{4,6}$/.test(v)){ showToastNew('⚠️ 4 à 6 chiffres.'); return; }
+  var maj={}; maj[socId]=v;
+  db.ref('dct_config/codes_espaces').update(maj).then(function(){
+    if(inp) inp.value='';
+    _espacesOuverts={};
+    showToastNew('✅ Code enregistré');
+    renderAdminSecurite();
+  });
+}
+function reinitCodeEspace(socId){
+  var so=SOCIETES.find(function(x){ return x.id===socId; })||{};
+  if(!confirm("Supprimer le code de l'espace "+(so.nom||socId)+" ?\nIl redeviendra accessible sans code.")) return;
+  db.ref('dct_config/codes_espaces/'+socId).remove().then(function(){
+    _espacesOuverts={};
+    showToastNew('🔓 Code supprimé');
+    renderAdminSecurite();
+  });
+}
+
+function _htmlCodesEspaces(){
+  var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">🚪 Codes des espaces</div>'
+      + '<div style="font-size:12px;color:#888;margin-bottom:12px;">Un code commun à l\'entrée du carré Dakar City, puis chacun garde son code personnel sur son profil. L\'espace partenaire, lui, entre librement.</div>';
+  SOCIETES.forEach(function(so){
+    if(ESPACES_AVEC_CODE.indexOf(so.id)<0) return;
+    var actuel=_codesEspaces[so.id];
+    h+='<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid '+so.color+';border-radius:14px;padding:13px 14px;margin-bottom:10px;box-shadow:var(--shadow);">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+      +  '<div style="font-size:14.5px;font-weight:700;">'+so.nom+'</div>'
+      +  '<span class="badge '+(actuel?'badge-green':'badge-gray')+'">'+(actuel?'Code : '+actuel:'Sans code')+'</span>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;margin-top:10px;">'
+      +  '<input id="adm-code-'+so.id+'" type="text" inputmode="numeric" maxlength="6" placeholder="Nouveau code" style="flex:1;padding:11px;border:1.5px solid '+so.color+';border-radius:9px;font-size:15px;font-family:var(--font);letter-spacing:3px;text-align:center;">'
+      +  '<button onclick="definirCodeEspace(\''+so.id+'\')" style="padding:11px 14px;background:'+so.color+';color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:800;cursor:pointer;font-family:var(--font);">Définir</button>'
+      +'</div>'
+      +(actuel?'<button class="btn btn-gray" style="margin-top:8px;background:#fde0e0;color:#992020;border:1.5px solid #c0392b;" onclick="reinitCodeEspace(\''+so.id+'\')">🔓 Réinitialiser (retirer le code)</button>':'')
+      +'</div>';
+  });
+  h+='<div style="height:22px;"></div>';
+  return h;
 }
 
 function renderAdminPanel(){
@@ -6964,7 +7522,8 @@ function renderAdminActivite(){
 function renderAdminSecurite(){
   var sec = document.getElementById('admin-section-securite');
   if(!sec) return;
-  sec.innerHTML = '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🔐 Code PIN administrateur</div>'
+  sec.innerHTML = _htmlCodesEspaces() + _htmlAlertes()
+    + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🔐 Code PIN administrateur</div>'
     + '<p style="font-size:12px;color:#888;margin-bottom:12px;">Code actuel : '+(localStorage.getItem('dct_admin_pin')||'1010')+'</p>'
     + '<div style="display:flex;gap:8px;">'
     + '<input id="new-pin-input" type="password" inputmode="numeric" maxlength="6" placeholder="Nouveau code (min 4 chiffres)" style="flex:1;padding:12px;border:1.5px solid #1a237e;border-radius:8px;font-size:16px;font-family:var(--font);letter-spacing:4px;">'
@@ -7294,6 +7853,22 @@ setTimeout(function(){
   <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:12px;font-weight:700;margin-bottom:10px;padding:8px;background:#fde0e0;border-radius:8px;"></div>
   <button id="collab-pin-btn" onclick="collab_pin_action()" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;"></button>
   <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:11px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
+</div>
+</div>
+</div>
+
+<div id="modal-code-espace" class="modal-overlay">
+<div class="modal-sheet" style="max-width:320px;margin:auto;">
+<div style="padding:24px 20px;text-align:center;">
+  <div id="ce-visuel" style="width:60px;height:60px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;background:#fff;border:2px solid #009A44;overflow:hidden;"></div>
+  <div id="ce-titre" style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">Dakar City Transport</div>
+  <div id="ce-sous" style="font-size:12px;color:#888;margin-bottom:16px;">Entrez le code de l'espace.</div>
+  <input type="hidden" id="ce-espace">
+  <input id="ce-input" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
+    style="width:100%;padding:14px;border:2.5px solid #009A44;border-radius:10px;font-size:32px;color:#111;text-align:center;letter-spacing:12px;margin-bottom:10px;box-sizing:border-box;font-family:var(--font);">
+  <div id="ce-error" style="display:none;color:#c0392b;font-size:12px;font-weight:700;margin-bottom:10px;padding:8px;background:#fde0e0;border-radius:8px;"></div>
+  <button id="ce-btn" onclick="validerCodeEspace()" style="width:100%;padding:13px;background:#009A44;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;">→ Entrer</button>
+  <button onclick="closeModal('modal-code-espace')" style="width:100%;padding:11px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
 </div>
 </div>
 </div>
