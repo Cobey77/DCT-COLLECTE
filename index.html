@@ -306,8 +306,45 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div id="app-version" style="font-size:11px;color:#aaa;font-weight:600;background:#f0f0f0;padding:3px 12px;border-radius:20px;display:inline-block;">v1.0.0</div>
     <div id="app-update" style="font-size:10px;color:#bbb;font-weight:500;margin-bottom:16px;"></div>
     <div id="admin-message-login" style="display:none;margin-bottom:16px;"></div>
-    <div style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:14px;font-weight:600;">Qui êtes-vous ?</div>
+    <div id="login-titre" style="font-size:11px;color:#aaa;text-transform:uppercase;letter-spacing:0.7px;margin-bottom:14px;font-weight:600;">Choisissez votre espace</div>
+    <div id="login-espaces" style="width:100%;"></div>
+    <div id="login-retour" style="display:none;width:100%;margin-bottom:14px;">
+      <div onclick="retourEspaces()" style="display:flex;align-items:center;gap:10px;cursor:pointer;">
+        <div style="width:34px;height:34px;border-radius:10px;background:#fff;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;color:#555;">‹</div>
+        <div style="text-align:left;">
+          <div id="login-soc-nom" style="font-size:16px;font-weight:800;color:var(--text);line-height:1.2;"></div>
+          <div id="login-soc-sous" style="font-size:11.5px;color:var(--text3);"></div>
+        </div>
+      </div>
+    </div>
     <div id="login-cards" style="width:100%;"></div>
+  </div>
+</div>
+
+<!-- ESPACE PARTENAIRE — v2.10.0 -->
+<div class="screen" id="s-partenaire">
+  <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
+    <span id="part-societe">🚚 GLOBAL LOGISTIQUE</span>
+    <span id="part-qui" style="opacity:0.75;"></span>
+  </div>
+  <div class="header">
+    <button class="btn-back" style="color:#1a237e;" onclick="deconnexionPartenaire()">← Quitter</button>
+    <div style="text-align:center;">
+      <div class="h-title" id="part-nom">Espace partenaire</div>
+      <div class="h-sub" id="part-role" style="color:#1a237e;"></div>
+    </div>
+    <div id="part-av" class="av" style="width:30px;height:30px;font-size:10px;"></div>
+  </div>
+  <div class="content" style="background:#F2F3F5;">
+    <div style="text-align:center;padding:40px 20px;color:#888;">
+      <div style="font-size:40px;margin-bottom:14px;">🚚</div>
+      <div style="font-size:16px;font-weight:800;color:#111;margin-bottom:6px;">Connexion réussie</div>
+      <div style="font-size:13px;line-height:1.6;">Le module de ramassage arrive à la prochaine étape.<br>Pour l'instant, seul l'accès est en place.</div>
+    </div>
+    <div style="background:#fff;border:1.5px solid var(--border);border-radius:14px;padding:14px;box-shadow:var(--shadow);">
+      <div class="slabel" style="margin-top:0;">Vérification</div>
+      <div id="part-debug" style="font-size:12px;color:#555;line-height:1.9;"></div>
+    </div>
   </div>
 </div>
 
@@ -739,10 +776,79 @@ function initFirebase(){
     });
     // Écouter les changements en temps réel
     ecouterChangements();
+    ecouterFrance();
   } catch(e) {
     console.log("Firebase non disponible:", e);
     firebaseReady = false;
   }
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  RAMASSAGE FRANCE — v2.10.0
+//  Noeud racine séparé : france/
+//  Volontairement HORS de dct/ pour que les écritures du
+//  ramassage ne déclenchent pas le listener des collectes,
+//  et inversement. Même principe que activite_items/.
+// ═══════════════════════════════════════════════════════════
+var franceData = { clients:{}, tournees:{}, postes:{} };
+var _franceTimeout = null;
+var _franceReady = false;
+
+function ecouterFrance(){
+  if(!db) return;
+  db.ref('france').on('value', function(snap){
+    var d = snap.val() || {};
+    franceData.clients  = d.clients  || {};
+    franceData.tournees = d.tournees || {};
+    franceData.postes   = d.postes   || {};
+    _franceReady = true;
+    _initPostesFrance();
+    try{ if(typeof renderFrance==='function') renderFrance(); }catch(e){}
+    try{ majBoutonFrance(); }catch(e){}
+  });
+}
+
+// Crée les 4 postes au premier lancement, sans écraser l'existant
+function _initPostesFrance(){
+  if(!db) return;
+  var maj = {};
+  PARTENAIRES.filter(function(p){ return p.role==='poste'; }).forEach(function(p){
+    if(!franceData.postes[p.id]){
+      maj[p.id] = { libre:true, chauffeur:'', tourneeId:'', ouvertLe:0 };
+    }
+  });
+  if(Object.keys(maj).length){
+    db.ref('france/postes').update(maj);
+  }
+}
+
+// Écriture ciblée : on n'écrase jamais le noeud entier
+function sauvegarderFrance(chemin, valeur){
+  if(!db || !firebaseReady) return;
+  db.ref('france/'+chemin).update(valeur).catch(function(e){
+    console.log('Erreur sync france:', e);
+  });
+}
+
+// Compteurs pour le bouton d'accueil
+function compteursFrance(){
+  var attente=0, chartres=0, mitry=0, planifies=0;
+  Object.keys(franceData.clients||{}).forEach(function(k){
+    var c = franceData.clients[k]; if(!c) return;
+    if(c.statut==='attente') attente++;
+    else if(c.statut==='planifie' || c.statut==='ramasse') planifies++;
+    if(c.lieu==='chartres') chartres++;
+    else if(c.lieu==='mitry') mitry++;
+  });
+  return { attente:attente, planifies:planifies, chartres:chartres, mitry:mitry };
+}
+
+function majBoutonFrance(){
+  var el = document.getElementById('france-compteurs');
+  if(!el) return;
+  var c = compteursFrance();
+  el.textContent = c.attente+' en attente · '+c.chartres+' à Chartres';
 }
 
 function ecouterChangements(){
@@ -982,8 +1088,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v2.9.2';
-var APP_UPDATE = '01/08/2026 à 16:25';
+var APP_VERSION = 'v2.10.0';
+var APP_UPDATE = '08/08/2026 à 23:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -992,6 +1098,32 @@ var COLLABS = [
   {id:'BO',name:'Boubacar',  bg:'#FEF3C7',color:'#92400e'},
   {id:'AD',name:'Administrateur', bg:'#1a1a2e',color:'#ffffff', admin:true}
 ];
+
+// ═══════════ PARTENAIRES — v2.10.0 ═══════════
+// Profils externes, droits restreints.
+// Un "poste" n'est pas une personne : c'est une place que le
+// chauffeur du jour occupe en saisissant son nom.
+var PARTENAIRES = [
+  {id:'DD',name:'Danny Diop', bg:'#e8eaf6',color:'#1a237e', societe:'GL', role:'responsable'},
+  {id:'P1',name:'Poste 1',    bg:'#eef0fa',color:'#5c6bc0', societe:'GL', role:'poste'},
+  {id:'P2',name:'Poste 2',    bg:'#eef0fa',color:'#5c6bc0', societe:'GL', role:'poste'},
+  {id:'P3',name:'Poste 3',    bg:'#eef0fa',color:'#5c6bc0', societe:'GL', role:'poste'},
+  {id:'P4',name:'Poste 4',    bg:'#eef0fa',color:'#5c6bc0', societe:'GL', role:'poste'}
+];
+
+// Les trois espaces de l'écran d'accueil
+var SOCIETES = [
+  {id:'DCT', nom:'Dakar City Transport', sous:'Équipe interne',          color:'#009A44', bgd:'#d4f0e0'},
+  {id:'GL',  nom:'Global Logistique',    sous:'Transporteur partenaire', color:'#1a237e', bgd:'#e8eaf6'},
+  {id:'ADM', nom:'Administration',       sous:'Accès complet',           color:'#1a1a2e', bgd:'#ececf2'}
+];
+
+// Cherche un profil dans les deux annuaires
+function getProfil(id){
+  var c = COLLABS.find(function(x){ return x.id===id; });
+  if(c) return c;
+  return PARTENAIRES.find(function(x){ return x.id===id; }) || null;
+}
 var TRUCK_COLORS = {
   A:{bg:'#e3f2fd',color:'#0d47a1',bar:'#1565c0'},
   B:{bg:'#fff8e1',color:'#e65100',bar:'#ef6c00'},
@@ -1664,24 +1796,163 @@ function closeModal(id){var el=document.getElementById(id);if(el)el.classList.re
 
 // LOGIN
 function buildLogin(){
-  var html='';
-  // Afficher d'abord les non-admins, puis l'admin en dernier
-  var nonAdmins = COLLABS.filter(function(c){ return !c.admin; });
-  var admins = COLLABS.filter(function(c){ return c.admin; });
-  var ordered = nonAdmins.concat(admins);
-  ordered.forEach(function(c){
-    html+='<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')"><div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:13px;border:2px solid '+c.color+';">'+c.id+'</div><div><div class="login-name">'+c.name+'</div>'+(c.admin?'':'<div class="login-role">Collaborateur</div>')+'</div><svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg></div>';
-  });
-  var lc=document.getElementById('login-cards');
-  if(lc) lc.innerHTML=html;
-  else console.error('login-cards introuvable!');
+  retourEspaces();
   var v=document.getElementById('app-version');
   if(v)v.textContent=APP_VERSION;
   var u=document.getElementById('app-update');
   if(u)u.textContent='Mise à jour : '+APP_UPDATE;
-  // Charger le message admin depuis Firebase
   chargerMessageAdmin();
 }
+
+// ── Niveau 1 : les trois espaces ──
+function retourEspaces(){
+  var esp=document.getElementById('login-espaces');
+  var cards=document.getElementById('login-cards');
+  var ret=document.getElementById('login-retour');
+  var titre=document.getElementById('login-titre');
+  if(titre) titre.textContent='Choisissez votre espace';
+  if(ret) ret.style.display='none';
+  if(cards){ cards.innerHTML=''; cards.style.display='none'; }
+  if(!esp) return;
+  esp.style.display='block';
+  var html='';
+  SOCIETES.forEach(function(so){
+    html += '<div class="login-card" style="border-top:5px solid '+so.color+';border-left:2px solid var(--border);align-items:center;" onclick="ouvrirEspace(\''+so.id+'\')">'
+         +   _visuelSociete(so)
+         +   '<div style="flex:1;">'
+         +     '<div class="login-name">'+so.nom+'</div>'
+         +     '<div class="login-role">'+so.sous+'</div>'
+         +     '<div style="display:inline-block;font-size:11px;font-weight:700;color:'+so.color+';background:'+so.bgd+';padding:3px 9px;border-radius:20px;margin-top:6px;">'+_detailSociete(so.id)+'</div>'
+         +   '</div>'
+         +   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+so.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>'
+         + '</div>';
+  });
+  esp.innerHTML=html;
+}
+
+function _visuelSociete(so){
+  var cadre='width:56px;height:56px;border-radius:50%;background:#fff;border:2px solid '+so.color+';display:flex;align-items:center;justify-content:center;flex-shrink:0;overflow:hidden;';
+  if(so.id==='DCT'){
+    var lg=document.getElementById('dct-logo');
+    var src=lg?lg.getAttribute('src'):'';
+    return '<div style="'+cadre+'"><img src="'+src+'" style="width:56px;height:56px;object-fit:cover;"></div>';
+  }
+  if(so.id==='GL') return '<div style="'+cadre+'">'+_logoGL(40)+'</div>';
+  return '<div style="'+cadre+'font-size:26px;">🔐</div>';
+}
+
+// Logo Global Logistique (SVG inline, en attendant le fichier réel)
+function _logoGL(t){
+  return '<svg width="'+t+'" height="'+t+'" viewBox="0 0 100 100">'
+    +'<circle cx="50" cy="50" r="38" fill="none" stroke="#4CAF50" stroke-width="9" stroke-dasharray="120 300" transform="rotate(120 50 50)"/>'
+    +'<circle cx="50" cy="50" r="38" fill="none" stroke="#1565C0" stroke-width="9" stroke-dasharray="120 300" transform="rotate(-60 50 50)"/>'
+    +'<text x="50" y="59" text-anchor="middle" font-size="32" font-weight="700" fill="#4CAF50" font-family="Arial">DD</text>'
+    +'<rect x="36" y="74" width="20" height="10" rx="2" fill="#1a1a1a"/><rect x="56" y="77" width="9" height="7" rx="1.5" fill="#1a1a1a"/>'
+    +'<circle cx="42" cy="86" r="3" fill="#1a1a1a"/><circle cx="60" cy="86" r="3" fill="#1a1a1a"/></svg>';
+}
+
+function _detailSociete(id){
+  if(id==='DCT'){
+    var n=COLLABS.filter(function(c){return !c.admin;}).length;
+    return n+' collaborateur'+(n>1?'s':'');
+  }
+  if(id==='GL'){
+    var postes=PARTENAIRES.filter(function(p){return p.role==='poste';});
+    var sortis=postes.filter(function(p){
+      var st=(franceData.postes||{})[p.id];
+      return st && st.libre===false;
+    }).length;
+    return 'Danny + '+postes.length+' postes · '+sortis+' en tournée';
+  }
+  var ad=COLLABS.find(function(c){return c.admin;});
+  return ad?ad.name:'Accès complet';
+}
+
+// ── Niveau 2 : les profils de l'espace choisi ──
+function ouvrirEspace(socId){
+  var so=SOCIETES.find(function(x){return x.id===socId;});
+  if(!so) return;
+  var esp=document.getElementById('login-espaces');
+  var cards=document.getElementById('login-cards');
+  var ret=document.getElementById('login-retour');
+  var titre=document.getElementById('login-titre');
+  if(esp) esp.style.display='none';
+  if(titre) titre.textContent='Qui êtes-vous ?';
+  if(ret){
+    ret.style.display='block';
+    document.getElementById('login-soc-nom').textContent=so.nom;
+    document.getElementById('login-soc-sous').textContent=so.sous;
+  }
+  var liste=[];
+  if(socId==='DCT') liste=COLLABS.filter(function(c){return !c.admin;});
+  else if(socId==='ADM') liste=COLLABS.filter(function(c){return c.admin;});
+  else liste=PARTENAIRES.filter(function(p){return p.societe===socId;});
+
+  var html='';
+  liste.forEach(function(c){
+    var sous=_sousTitreProfil(c);
+    var avat = (c.id==='DD')
+      ? '<div class="av" style="background:'+c.bg+';width:46px;height:46px;border:2px solid '+c.color+';display:flex;align-items:center;justify-content:center;">'+_logoGL(32)+'</div>'
+      : '<div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:'+(c.role==='poste'?'17px':'13px')+';border:2px solid '+c.color+';">'+(c.role==='poste'?'🚚':c.id)+'</div>';
+    html += '<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')">'
+         + avat
+         + '<div style="flex:1;"><div class="login-name">'+c.name+'</div>'+(sous?'<div class="login-role">'+sous+'</div>':'')+'</div>'
+         + '<svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>'
+         + '</div>';
+  });
+  if(cards){ cards.style.display='block'; cards.innerHTML=html; }
+}
+
+function _sousTitreProfil(c){
+  if(c.admin) return '';
+  if(c.role==='responsable') return 'Responsable';
+  if(c.role==='poste'){
+    var st=(franceData.postes||{})[c.id];
+    if(st && st.libre===false && st.chauffeur) return st.chauffeur+' · en tournée';
+    return 'Libre';
+  }
+  return 'Collaborateur';
+}
+
+function _finalisLoginPartenaire(p){
+  var so = SOCIETES.find(function(x){ return x.id===p.societe; }) || {nom:p.societe};
+  var e;
+  e=document.getElementById('part-societe'); if(e) e.textContent='🚚 '+so.nom.toUpperCase();
+  e=document.getElementById('part-nom');     if(e) e.textContent=p.name;
+  e=document.getElementById('part-role');    if(e) e.textContent=(p.role==='responsable'?'Responsable':'Poste chauffeur');
+  e=document.getElementById('part-qui');     if(e) e.textContent=p.name;
+  e=document.getElementById('part-av');
+  if(e){ e.textContent=(p.role==='poste'?'🚚':p.id); e.style.background=p.bg; e.style.color=p.color; e.style.border='2px solid '+p.color; }
+  e=document.getElementById('part-debug');
+  if(e){
+    var c=compteursFrance();
+    var st=(franceData.postes||{})[p.id];
+    e.innerHTML='Profil : <b>'+p.id+' — '+p.name+'</b><br>'
+      +'Société : <b>'+so.nom+'</b><br>'
+      +'Rôle : <b>'+(p.role==='responsable'?'Responsable':'Poste chauffeur')+'</b><br>'
+      +'Noeud france/ : <b>'+(_franceReady?'connecté':'en attente')+'</b><br>'
+      +'Postes créés : <b>'+Object.keys(franceData.postes||{}).length+'</b><br>'
+      +(p.role==='poste'?('État du poste : <b>'+(st&&st.libre===false?('occupé — '+st.chauffeur):'libre')+'</b><br>'):'')
+      +'Clients France : <b>'+Object.keys(franceData.clients||{}).length+'</b> ('+c.attente+' en attente)';
+  }
+  // Trace de connexion, comme pour l'équipe
+  if(firebaseReady && db){
+    var now=new Date();
+    db.ref('dct_connexions').push({
+      who:p.name+' — '+so.nom, id:p.id, bg:p.bg, color:p.color,
+      date:now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+      ts:Date.now()
+    });
+  }
+  goTo('s-partenaire');
+}
+
+function deconnexionPartenaire(){
+  currentUser = COLLABS[0];
+  buildLogin();
+  goTo('s-login');
+}
+
 function majPastilleSuivi(){
   var actif=false;
   try{ actif = _suiviCamionsEnRoute()>0; }catch(e){}
@@ -1704,7 +1975,7 @@ function updateNotifBadge(){
 }
 
 function login(id){
-  var collab = COLLABS.find(function(c){return c.id===id;})||COLLABS[0];
+  var collab = getProfil(id)||COLLABS[0];
   if(collab.admin){
     document.getElementById('admin-pin-input').value = '';
     document.getElementById('admin-pin-error').style.display = 'none';
@@ -1792,7 +2063,7 @@ function _creerPinCollab(){
     if(!e){
       localStorage.setItem('dct_pin_attempts_'+id, '0');
       closeModal('modal-collab-pin');
-      var collab = COLLABS.find(function(c){ return c.id===id; });
+      var collab = getProfil(id);
       if(collab){
         // Notification PIN supprimée
         finalisLogin(collab);
@@ -1827,7 +2098,7 @@ function _validerPinCollab(){
     if(pin === stored){
       localStorage.setItem('dct_pin_attempts_'+id, '0');
       closeModal('modal-collab-pin');
-      var collab = COLLABS.find(function(c){ return c.id===id; });
+      var collab = getProfil(id);
       if(collab) finalisLogin(collab);
     } else {
       var attempts = parseInt(localStorage.getItem('dct_pin_attempts_'+id)||'0') + 1;
@@ -1835,7 +2106,7 @@ function _validerPinCollab(){
       var restants = 5 - attempts;
       if(attempts >= 5){
         db.ref('dct_config/pins_blocked/'+id).set(true);
-        var collab2 = COLLABS.find(function(c){ return c.id===id; });
+        var collab2 = getProfil(id);
         if(collab2) _ouvrirModalPinCollab(collab2, true);
       } else {
         if(err){ err.textContent = '❌ PIN incorrect — '+restants+' essai'+(restants>1?'s':'')+' restant'+(restants>1?'s':'')+'.'; err.style.display = 'block'; }
@@ -1851,7 +2122,7 @@ function validerPinAdmin(){
   var id  = document.getElementById('admin-pin-id').value;
   if(pin === '1010'){
     closeModal('modal-admin-pin');
-    var collab = COLLABS.find(function(c){return c.id===id;})||COLLABS[0];
+    var collab = getProfil(id)||COLLABS[0];
     finalisLogin(collab);
   } else {
     document.getElementById('admin-pin-error').style.display = 'block';
@@ -1922,6 +2193,8 @@ function finalisLogin(collab){
 
 function _finalisLoginCore(collab){
   currentUser = collab;
+  // Profil partenaire : parcours séparé, aucun accès aux collectes
+  if(collab.societe){ _finalisLoginPartenaire(collab); return; }
   // Enregistrer la connexion (visible uniquement par l'admin)
   if(!collab.admin){
     var now = new Date();
