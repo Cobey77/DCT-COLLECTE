@@ -423,21 +423,6 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 
 <!-- POSTE : OUVERTURE -->
-<div class="screen" id="s-poste-choix">
-  <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
-    <span>&#128666; GLOBAL LOGISTIQUE</span><span id="pc-poste" style="opacity:0.75;"></span>
-  </div>
-  <div class="header">
-    <button class="btn-back" style="color:#1a237e;" onclick="deconnexionPartenaire()">&#8592; Quitter</button>
-    <div style="text-align:center;">
-      <div class="h-title">Choisir une tourn&#233;e</div>
-      <div class="h-sub" style="color:#1a237e;">Premi&#232;re prise, premi&#232;re servie</div>
-    </div>
-    <div style="width:60px;"></div>
-  </div>
-  <div class="content" id="pc-content" style="background:#F2F3F5;"></div>
-</div>
-
 <div class="screen" id="s-poste-ouverture">
   <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
     <span>&#128666; GLOBAL LOGISTIQUE</span><span id="po-poste" style="opacity:0.75;"></span>
@@ -996,7 +981,7 @@ function initFirebase(){
 //  ramassage ne déclenchent pas le listener des collectes,
 //  et inversement. Même principe que activite_items/.
 // ═══════════════════════════════════════════════════════════
-var franceData = { clients:{}, tournees:{}, postes:{} };
+var franceData = { clients:{}, tournees:{}, postes:{}, lots:{} };
 var _franceTimeout = null;
 var _franceReady = false;
 
@@ -1007,6 +992,7 @@ function ecouterFrance(){
     franceData.clients  = d.clients  || {};
     franceData.tournees = d.tournees || {};
     franceData.postes   = d.postes   || {};
+    franceData.lots     = d.lots     || {};
     var _avant = window._glDesactive;
     window._glDesactive = !!((d.societes||{}).GL||{}).desactive;
     if(_avant !== window._glDesactive){
@@ -1361,8 +1347,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.3.0';
-var APP_UPDATE = '09/08/2026 à 05:00';
+var APP_VERSION = 'v3.4.0';
+var APP_UPDATE = '09/08/2026 à 06:15';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2280,17 +2266,13 @@ function _htmlVivierDanny(){
     });
     h+='</div>';
   }
-  // Une tournée = une seule région. Dès le premier client coché,
-  // la liste se restreint à sa région.
-  var regionVerrou='';
-  if(dannySel.length){
-    var prem=(franceData.clients||{})[dannySel[0]];
-    if(prem) regionVerrou=prem.region||'';
-  }
-  if(regionVerrou){
-    h='<div style="background:#e8eaf6;border:1.5px solid #c5cae9;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
-     +'📍 Tournée en <b>'+regionVerrou+'</b><br><span style="opacity:.8;">Une tournée couvre une seule région. Videz la sélection pour changer.</span></div>';
-    dannyRegion=regionVerrou;
+  // Danny reste libre de mélanger : on l'informe, on ne l'empêche pas.
+  var regs_sel=_regionsDeSelection();
+  if(regs_sel.length){
+    var multi=(regs_sel.length>1);
+    h='<div style="background:'+(multi?'#fef3c7':'#e8eaf6')+';border:1.5px solid '+(multi?'#fcd34d':'#c5cae9')+';border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:'+(multi?'#92400e':'#1a237e')+';line-height:1.5;">'
+     +(multi?'⚠️ Tournée sur <b>'+regs_sel.length+' régions</b><br>':'📍 Tournée en <b>'+regs_sel[0]+'</b><br>')
+     +'<span style="opacity:.85;">'+regs_sel.join(' · ')+'</span></div>';
   }
   var liste=tous.slice();
   if(dannyRegion) liste=liste.filter(function(c){ return c.region===dannyRegion; });
@@ -2367,9 +2349,12 @@ function _renderCreationTournee(){
   var h='';
   h+='<div class="fg"><label class="fl">Jour de passage</label><input class="fi" type="date" id="dt-date" value="'+_dtDate+'" onchange="_dtSetDate(this.value)"></div>';
 
-  var regT=_regionDeSelection();
-  h+='<div style="background:#e8eaf6;border:1.5px solid #c5cae9;border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
-   +'📍 <b>'+(regT||'Région')+'</b><br><span style="opacity:.8;">La tournée sera proposée aux chauffeurs, qui la prendront eux-mêmes.</span></div>';
+  var regs_c=_regionsDeSelection();
+  var multi_c=(regs_c.length>1);
+  h+='<div style="background:'+(multi_c?'#fef3c7':'#e8eaf6')+';border:1.5px solid '+(multi_c?'#fcd34d':'#c5cae9')+';border-radius:var(--radius);padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:'+(multi_c?'#92400e':'#1a237e')+';line-height:1.5;">'
+   +(multi_c?'⚠️ <b>'+regs_c.length+' régions</b> — '+regs_c.join(' · ')
+            :'📍 <b>'+(regs_c[0]||'Région')+'</b>')
+   +'<br><span style="opacity:.85;">La tournée sera proposée aux chauffeurs, qui la prendront eux-mêmes.</span></div>';
 
   var manquants=dannySel.filter(function(id){ return _dtConfirmes.indexOf(id)<0; }).length;
   h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:12px;box-shadow:var(--shadow);">'
@@ -2436,6 +2421,10 @@ function validerTourneeDanny(){
   if(manquants.length){ showToastNew('⚠️ '+manquants.length+' client(s) non confirmé(s).'); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
 
+  var regs=_regionsDeSelection();
+  if(regs.length>1){
+    if(!confirm('Cette tournée couvre '+regs.length+' régions :\n\n'+regs.join('\n')+'\n\nContinuer ?')) return;
+  }
   var tid='T'+Date.now();
   var lib=_libelleDate(_dtDate);
   var reg=_regionDeSelection();
@@ -2444,7 +2433,7 @@ function validerTourneeDanny(){
   var maj={};
   maj['tournees/'+tid]={
     id:tid, dateIso:_dtDate, dateLib:lib,
-    region:reg, depts:Object.keys(deps).sort().join(' · '),
+    region:reg, regions:regs, depts:Object.keys(deps).sort().join(' · '),
     posteId:'', posteNom:'', chauffeur:'',
     creePar:(currentUser||{}).name||'', creeTs:Date.now(),
     clients:dannySel.slice(), creneaux:_dtCreneaux,
@@ -2956,10 +2945,18 @@ function _tourneesAPrendre(){
   out.sort(function(a,b){ return (a.dateIso||'').localeCompare(b.dateIso||''); });
   return out;
 }
+function _regionsDeSelection(){
+  var vues={}, out=[];
+  dannySel.forEach(function(id){
+    var c=(franceData.clients||{})[id];
+    if(c && c.region && !vues[c.region]){ vues[c.region]=1; out.push(c.region); }
+  });
+  return out;
+}
 function _regionDeSelection(){
-  if(!dannySel.length) return '';
-  var c=(franceData.clients||{})[dannySel[0]];
-  return (c&&c.region)||'';
+  var r=_regionsDeSelection();
+  if(!r.length) return '';
+  return r.length===1 ? r[0] : (r[0]+' +'+(r.length-1));
 }
 function _titreTournee(to){
   return (to.region||'Tournée')+' · '+(to.dateLib||'');
@@ -3405,6 +3402,152 @@ function fermerPoste(){
     showToastNew('✅ Tournée archivée');
     _posteTourneeId='';
     deconnexionPartenaire();
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+
+// ═══════════════════════════════════════════════════════════
+//  LOT CHARTRES DANS LE DISPATCH — v3.4.0
+//  Chartres n'est pas un client : c'est un lot de références
+//  France qu'on affecte à un camion, comme on affecte un client.
+//  Stocké sous france/lots/ pour ne pas toucher au noeud dct/.
+// ═══════════════════════════════════════════════════════════
+function _refsChartres(){
+  var out=[];
+  Object.keys(franceData.clients||{}).forEach(function(k){
+    var c=franceData.clients[k];
+    if(c && c.lieu==='chartres'){ c._id=k; out.push(c); }
+  });
+  out.sort(function(a,b){ return (a.depotTs||0)-(b.depotTs||0); });
+  return out;
+}
+function _lotCollecte(colId){ return (franceData.lots||{})[colId||currentCollecteId] || null; }
+function _lotDuCamion(k){
+  var l=_lotCollecte();
+  return (l && l.camion===k) ? l : null;
+}
+
+// Bloc affiché dans l'onglet Dispatch
+function _htmlLotChartres(){
+  var refs=_refsChartres();
+  if(!refs.length) return '';
+  var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
+  var l=_lotCollecte();
+  var trks=(typeof getTrucks==='function')?getTrucks():{};
+  var nomCam = (l && trks[l.camion]) ? trks[l.camion].name : (l?l.camion:'');
+  var h='<div class="slabel">Lot France — à récupérer</div>'
+   + '<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:var(--radius);padding:13px 14px;margin-bottom:14px;">'
+   +   '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+   +     '<div style="font-size:14px;font-weight:800;color:#111;">🏭 Entrepôt Chartres</div>'
+   +     (l?'<span class="badge badge-orange">Affecté au '+nomCam+'</span>':'<span class="badge badge-gray">Non affecté</span>')
+   +   '</div>'
+   +   '<div style="font-size:12px;color:#92400e;margin-top:5px;line-height:1.5;">'+refs.length+' référence'+(refs.length>1?'s':'')+' · '+colis+' colis<br>12 rue de l\'Industrie · 28000 Chartres</div>';
+  if(Object.keys(trks).length){
+    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">';
+    Object.keys(trks).forEach(function(k){
+      var on=(l && l.camion===k);
+      h+='<span onclick="affecterLotChartres(\''+k+'\')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:18px;cursor:pointer;'
+        +(on?'background:#b45309;color:#fff;border:1.5px solid #b45309;':'background:#fff;border:1.5px solid #fcd34d;color:#92400e;')
+        +'">'+(trks[k].name||('Camion '+k))+'</span>';
+    });
+    if(l) h+='<span onclick="affecterLotChartres(\'\')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:18px;cursor:pointer;background:#fff;border:1.5px solid #ccc;color:#777;">Retirer</span>';
+    h+='</div>';
+  } else {
+    h+='<div style="font-size:11.5px;color:#92400e;margin-top:9px;">Créez un camion pour pouvoir affecter ce lot.</div>';
+  }
+  h+='</div>';
+  return h;
+}
+
+function affecterLotChartres(k){
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  if(!currentCollecteId){ showToastNew('⚠️ Aucune collecte ouverte.'); return; }
+  var maj={};
+  if(!k){
+    maj['lots/'+currentCollecteId]=null;
+  } else {
+    maj['lots/'+currentCollecteId]={
+      camion:k, par:(currentUser||{}).name||'', ts:Date.now()
+    };
+  }
+  db.ref('france').update(maj).then(function(){
+    showToastNew(k?'🏭 Lot Chartres affecté':'Lot retiré');
+    try{ renderDispatchTab(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+// ── Chargement depuis la feuille de route du camion ──
+var _chargeSel=[];
+function _htmlArretChartres(k){
+  var l=_lotDuCamion(k);
+  if(!l) return '';
+  var refs=_refsChartres();
+  if(!refs.length) return '';
+  var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
+  var h='<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:var(--radius);padding:13px 14px;margin-bottom:12px;">'
+   + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+   +   '<div style="font-size:14px;font-weight:800;">🏭 Entrepôt Chartres</div>'
+   +   '<span class="badge badge-orange">Lot France</span></div>'
+   + '<div style="font-size:12px;color:#92400e;margin-top:5px;line-height:1.5;">12 rue de l\'Industrie · 28000 Chartres<br>'+refs.length+' référence'+(refs.length>1?'s':'')+' · '+colis+' colis</div>'
+   + '<a href="https://waze.com/ul?q='+encodeURIComponent('12 rue de l\'Industrie 28000 Chartres')+'&navigate=yes" target="_blank" style="display:block;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #fcd34d;color:#92400e;border-radius:10px;padding:9px;font-size:12.5px;font-weight:700;margin-top:10px;">🧭 Itinéraire</a>'
+   + '</div>'
+   + '<div class="slabel">Lot France · à charger</div>';
+  refs.forEach(function(c){
+    var on=_chargeSel.indexOf(c._id)>=0;
+    var jours=_joursDepuis(c.depotTs);
+    h+='<div onclick="_toggleCharge(\''+c._id+'\')" style="background:'+(on?'#f2fbf5':'#fff')+';border:1.5px solid '+(on?'#009A44':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;display:flex;gap:11px;align-items:flex-start;cursor:pointer;">'
+     +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'#009A44':'#ccc')+';background:'+(on?'#009A44':'#fff')+';color:#fff;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">'+(on?'✓':'')+'</div>'
+     +'<div style="flex:1;"><div style="font-family:ui-monospace,monospace;font-size:12px;font-weight:700;">'+(c.ref||'')+'</div>'
+     +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.nom||'')+' · '+(c.ville||'')+' ('+(c.dept||'')+')</div>'
+     +'<div style="font-size:11.5px;color:#555;margin-top:3px;">📦 '+(c.nb||1)+' colis · à Chartres depuis '+jours+' j</div></div></div>';
+  });
+  var nb=_chargeSel.length, cs=0;
+  _chargeSel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) cs+=(c.nb||1); });
+  h+='<div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin:4px 2px 8px;">'
+   + '<span><b style="color:#111;">'+nb+'</b> sur '+refs.length+' · '+cs+' colis</span>'
+   + '<span onclick="_toutCharger()" style="color:#009A44;font-weight:700;cursor:pointer;">Tout cocher</span></div>'
+   + '<button class="btn btn-green" style="margin-bottom:16px;" onclick="validerChargementChartres()">✓ Valider le chargement</button>';
+  return h;
+}
+function _toggleCharge(id){
+  var i=_chargeSel.indexOf(id);
+  if(i>=0) _chargeSel.splice(i,1); else _chargeSel.push(id);
+  if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+}
+function _toutCharger(){
+  var refs=_refsChartres();
+  _chargeSel = (_chargeSel.length===refs.length) ? [] : refs.map(function(c){ return c._id; });
+  if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+}
+function validerChargementChartres(){
+  if(!_chargeSel.length){ showToastNew('⚠️ Cochez au moins une référence.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  var noms=_chargeSel.map(function(id){
+    var c=(franceData.clients||{})[id]||{};
+    return '· '+(c.ref||'')+' — '+(c.nom||'');
+  }).join('\n');
+  if(!confirm('Charger '+_chargeSel.length+' référence(s) ?\n\n'+noms+'\n\nElles passeront en 📍 Mitry-Mory.')) return;
+  var qui=(currentUser||{}).name||'';
+  var maj={};
+  _chargeSel.forEach(function(id){
+    var c=(franceData.clients||{})[id]||{};
+    var hist=(c.hist||[]).slice();
+    hist.push({q:qui, a:'chargé à Chartres — arrivé à Mitry-Mory', ts:Date.now()});
+    maj['clients/'+id+'/lieu']='mitry';
+    maj['clients/'+id+'/statut']='mitry';
+    maj['clients/'+id+'/mitryTs']=Date.now();
+    maj['clients/'+id+'/mitryPar']=qui;
+    maj['clients/'+id+'/collecteId']=currentCollecteId||'';
+    maj['clients/'+id+'/hist']=hist;
+  });
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ '+_chargeSel.length+' référence(s) à Mitry-Mory');
+    try{ addActivity(qui, 'a chargé '+_chargeSel.length+' colis France à Chartres'); }catch(e){}
+    _chargeSel=[];
+    if(!_refsChartres().length && currentCollecteId){
+      db.ref('france/lots/'+currentCollecteId).remove();
+    }
+    if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
 
@@ -4017,6 +4160,10 @@ function renderDispatchTab(){
     +'<div style="flex:1;background:#d4f0e0;border:1.5px solid #009A44;border-radius:10px;padding:10px;text-align:center;"><div style="font-size:11px;color:#006b2d;font-weight:600;">Affectés</div><div style="font-size:20px;font-weight:800;color:#006b2d;">'+aff+'</div></div>'
     +'<div style="flex:1;background:#fde0e0;border:1.5px solid #c0392b;border-radius:10px;padding:10px;text-align:center;"><div style="font-size:11px;color:#992020;font-weight:600;">Restants</div><div style="font-size:20px;font-weight:800;color:#992020;">'+rem+'</div></div>';
   container.appendChild(stats);
+  try{
+    var lotHtml=_htmlLotChartres();
+    if(lotHtml){ var lb=document.createElement('div'); lb.innerHTML=lotHtml; container.appendChild(lb); }
+  }catch(e){}
   var sl=document.createElement('div');sl.className='slabel';sl.textContent='Camions — tap pour ouvrir la tournée';container.appendChild(sl);
   Object.keys(trks).forEach(function(k){
     var tc=getTc(k),tk=trks[k];
@@ -6032,8 +6179,11 @@ function renderCamion(k){
     return tk.clients.indexOf(a)-tk.clients.indexOf(b);
   });
   var route=document.getElementById('camion-route');if(!route)return;
-  if(!tk.clients.length){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
+  var _chartresHtml='';
+  try{ _chartresHtml=_htmlArretChartres(k); }catch(e){}
+  if(!tk.clients.length && !_chartresHtml){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
   route.innerHTML='';
+  if(_chartresHtml){ var _cb=document.createElement('div'); _cb.innerHTML=_chartresHtml; route.appendChild(_cb); }
   sorted.forEach(function(id,idx){
     var c=cls[id];if(!c)return;
     var cancelled=tk.cancelled||[];var reported=tk.reported||[];var isVal=validated.includes(id),isRef=refused.includes(id),isAnn=cancelled.includes(id),isRep=reported.includes(id),heure=hours[id]||'';
