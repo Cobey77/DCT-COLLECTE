@@ -1391,8 +1391,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.7.2';
-var APP_UPDATE = '09/08/2026 à 13:20';
+var APP_VERSION = 'v3.7.3';
+var APP_UPDATE = '09/08/2026 à 13:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1419,7 +1419,7 @@ var PARTENAIRES = [
 var SOCIETES = [
   {id:'DCT', nom:'Dakar City Transport', sous:'Équipe interne',          color:'#009A44', bgd:'#d4f0e0'},
   {id:'GL',  nom:'Global Logistique',    sous:'Transporteur partenaire', color:'#1a237e', bgd:'#e8eaf6'},
-  {id:'ADM', nom:'Administration',       sous:'Accès complet',           color:'#1a1a2e', bgd:'#ececf2'}
+  {id:'ADM', nom:'Administration',       sous:'',                        color:'#1a1a2e', bgd:'#ececf2'}
 ];
 
 // Cherche un profil dans les deux annuaires
@@ -2132,8 +2132,11 @@ function retourEspaces(){
          +   _visuelSociete(so)
          +   '<div style="flex:1;">'
          +     '<div class="login-name">'+so.nom+'</div>'
-         +     '<div class="login-role">'+so.sous+'</div>'
-         +     '<div style="display:inline-block;font-size:11px;font-weight:700;color:'+so.color+';background:'+so.bgd+';padding:3px 9px;border-radius:20px;margin-top:6px;">'+(_espaceProtege(so.id)?'🔒 ':'')+_detailSociete(so.id)+'</div>'
+         +     (so.sous?('<div class="login-role">'+so.sous+'</div>'):'')
+         +     (function(){
+                 var d=_detailSociete(so.id), v=(_espaceProtege(so.id)?'🔒 ':'')+d;
+                 return v.trim() ? '<div style="display:inline-block;font-size:11px;font-weight:700;color:'+so.color+';background:'+so.bgd+';padding:3px 9px;border-radius:20px;margin-top:6px;">'+v+'</div>' : '';
+               })()
          +   '</div>'
          +   '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="'+so.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>'
          + '</div>';
@@ -2177,9 +2180,8 @@ function _detailSociete(id){
     }).length;
     return 'Danny + '+postes.length+' postes · '+sortis+' en tournée';
   }
-  // Pas de prénom sur l'écran de connexion : juste le nombre
-  var n=COLLABS.filter(function(c){ return c.admin; }).length;
-  return n+' administrateur'+(n>1?'s':'');
+  // Rien du tout : ni prénom, ni nombre. La discrétion est voulue.
+  return '';
 }
 
 // ── Niveau 2 : les profils de l'espace choisi ──
