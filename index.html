@@ -371,10 +371,6 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div class="fg"><label class="fl">Prix (€)</label><input class="fi" id="fa-prix" type="number" min="0" placeholder="0"></div>
     </div>
     <div class="fg"><label class="fl">Description du colis</label><textarea class="fi" id="fa-colis" rows="3" placeholder="ex : 1 valise + 2 cartons" style="resize:none;"></textarea></div>
-    <div class="modal-option" onclick="togglePayeFrance()" id="fa-paye-box">
-      <div id="fa-paye-check" style="width:24px;height:24px;border-radius:7px;border:2px solid #ccc;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;"></div>
-      <div style="font-size:14px;font-weight:700;">Client déjà payé</div>
-    </div>
     <div style="margin-top:10px;">
       <button class="btn btn-green" onclick="saveClientFrance()">✅ Enregistrer</button>
       <button class="btn btn-gray" onclick="goTo('s-france')">✕ Annuler</button>
@@ -397,6 +393,10 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
 <!-- ESPACE PARTENAIRE -->
 <div class="screen" id="s-partenaire">
+  <div id="bandeau-vue-admin" style="display:none;background:#1a1a2e;color:#fff;padding:8px 12px;font-size:11px;font-weight:700;flex-shrink:0;justify-content:space-between;align-items:center;">
+    <span>&#128065; VUE ADMINISTRATEUR &#183; LECTURE SEULE</span>
+    <span onclick="quitterVuePartenaire()" style="background:rgba(255,255,255,0.2);padding:3px 9px;border-radius:10px;cursor:pointer;">Quitter</span>
+  </div>
   <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
     <span id="part-societe">🚚 GLOBAL LOGISTIQUE</span>
     <span id="part-qui" style="opacity:0.75;"></span>
@@ -567,7 +567,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div id="btn-france" onclick="ouvrirFrance()" style="background:#1a237e;border:2.5px solid #0d1444;border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:13px;cursor:pointer;width:100%;margin-bottom:18px;">
       <div style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:19px;">🇫🇷</div>
       <div style="flex:1;">
-        <div style="color:#fff;font-size:15px;font-weight:800;">Ramassage France</div>
+        <div style="color:#fff;font-size:15px;font-weight:800;">Ramassage France &amp; Europe</div>
         <div id="france-compteurs" style="color:#c5cae9;font-size:12px;margin-top:2px;">0 en attente · 0 à Chartres</div>
       </div>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -1391,8 +1391,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.7.0';
-var APP_UPDATE = '09/08/2026 à 12:40';
+var APP_VERSION = 'v3.7.2';
+var APP_UPDATE = '09/08/2026 à 13:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2595,7 +2595,6 @@ var franceFiltre= 'attente';   // attente | planifie | chartres | mitry
 var franceRegion= '';          // '' = toutes
 var franceDept  = '';
 var franceClientId = null;
-var _faPaye = false;
 
 var FR_STATUTS = {
   attente : {lib:'En attente', badge:'badge-gray'},
@@ -2895,21 +2894,10 @@ function ouvrirAjoutFrance(){
   var nb=document.getElementById('fa-nb'); if(nb) nb.value='1';
   _faPays='FR'; _renderPaysChoix();
   var _cp=document.getElementById('fa-cp'); if(_cp) _cp.placeholder='33200';
-  _faPaye=false; _majPayeFrance();
   var z=document.getElementById('fa-zone');
   if(z){ z.textContent='Zone — saisissez le code postal'; z.style.background='#f0f0f0'; z.style.color='#888'; }
   var by=document.getElementById('fadd-by'); if(by) by.textContent=(currentUser||{}).name||'';
   goTo('s-france-add');
-}
-function togglePayeFrance(){ _faPaye=!_faPaye; _majPayeFrance(); }
-function _majPayeFrance(){
-  var c=document.getElementById('fa-paye-check');
-  var b=document.getElementById('fa-paye-box');
-  if(!c) return;
-  c.style.background=_faPaye?'#009A44':'#fff';
-  c.style.borderColor=_faPaye?'#009A44':'#ccc';
-  c.textContent=_faPaye?'✓':'';
-  if(b) b.style.borderColor=_faPaye?'#009A44':'var(--border)';
 }
 
 // ── Choix du pays sur la fiche client ──
@@ -2980,7 +2968,6 @@ function saveClientFrance(){
     nb:parseInt(g('fa-nb')||'1',10)||1,
     colis:g('fa-colis'),
     prix:parseInt(g('fa-prix')||'0',10)||0,
-    paye:!!_faPaye,
     statut:'attente', lieu:'',
     creePar:(currentUser||{}).name||'', creeTs:Date.now(),
     hist:[{q:(currentUser||{}).name||'', a:'a créé la fiche', ts:Date.now()}]
@@ -3019,7 +3006,7 @@ function _renderFicheFrance(){
     + (c.infos?kv('Infos',c.infos):'')
     + kv('Zone',(c.pays&&c.pays!=='FR'?getPays(c.pays).drapeau+' ':'')+(c.region||'')+(c.dept?(' ('+c.dept+')'):''))
     + kv('Colis',(c.nb||1)+(c.colis?(' · '+c.colis):''))
-    + kv('Montant',(c.prix||0)+' € '+(c.paye?'<span class="badge badge-green">Payé</span>':'<span class="badge badge-red">Non payé</span>'))
+    + kv('Montant',(c.prix||0)+' €')
     + '</div>';
 
   // Suivi
