@@ -1347,8 +1347,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.4.0';
-var APP_UPDATE = '09/08/2026 à 06:15';
+var APP_VERSION = 'v3.4.1';
+var APP_UPDATE = '09/08/2026 à 06:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2461,39 +2461,29 @@ function validerTourneeDanny(){
 
 // ── Mes tournées ──
 function _htmlTourneesDanny(){
-  var t=franceData.tournees||{};
-  var ks=Object.keys(t).sort(function(a,b){ return (t[b].creeTs||0)-(t[a].creeTs||0); });
-  if(!ks.length){
+  var g=_trierTournees();
+  if(!g.enCours.length && !g.aPrendre.length && !g.finies.length){
     return '<div style="text-align:center;color:#aaa;padding:44px 20px;font-size:13.5px;line-height:1.6;"><div style="font-size:34px;margin-bottom:10px;">📅</div>Aucune tournée.<br>Choisis des clients dans l\'onglet Disponibles.</div>';
   }
   var h='';
-  ks.forEach(function(k){
-    var to=t[k]||{};
-    var n=(to.clients||[]).length;
-    var colis=0;
-    (to.clients||[]).forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
-    var fini=(to.statut==='terminee');
-    var libre=(to.statut==='a_prendre');
-    var badge = fini?'<span class="badge badge-gray">Terminée</span>'
-              : (libre?'<span class="badge badge-blue">À prendre</span>'
-                     :'<span class="badge badge-orange">En cours</span>');
-    h+='<div style="background:#fff;border:'+(fini?'1.5px solid var(--border)':'2.5px solid #1a237e')+';border-radius:var(--radius);margin-bottom:10px;overflow:hidden;'+(fini?'opacity:.65;':'')+'box-shadow:var(--shadow);">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px;gap:8px;">'
-      +  '<div style="font-size:15px;font-weight:800;color:#1a237e;">'+(to.region||'Tournée')+'</div>'+badge+'</div>'
-      +'<div style="padding:0 14px 13px;">'
-      +  '<div style="font-size:13.5px;font-weight:700;">'+(to.dateLib||'')+'</div>'
-      +  '<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis'+(to.depts?(' · '+to.depts):'')+'</div>'
-      +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">👤 '+(to.chauffeur||'pas encore prise')+'</div>'
-      +  (libre?('<div style="display:flex;gap:7px;margin-top:10px;">'
-      +     '<div onclick="choisirTournee(\''+to.id+'\')" style="flex:2;text-align:center;background:#1a237e;color:#fff;border-radius:10px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;">Je la prends</div>'
-      +     '<div onclick="annulerTournee(\''+to.id+'\')" style="flex:1;text-align:center;background:#fde0e0;color:#992020;border-radius:10px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;">Annuler</div></div>'):'')
-      +  ((!libre && !fini)?('<div onclick="_reprendreTournee(\''+to.id+'\')" style="margin-top:10px;text-align:center;background:#f0f0f0;color:#333;border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;cursor:pointer;">Voir l\'avancement</div>'):'')
-      +'</div></div>';
-  });
+  if(g.enCours.length){
+    h+='<div class="slabel" style="margin-top:2px;">En cours</div>';
+    g.enCours.forEach(function(to){ h+=_carteTournee(to,true); });
+  }
+  if(g.aPrendre.length){
+    h+='<div class="slabel">À venir</div>';
+    g.aPrendre.forEach(function(to){
+      h+=_carteTournee(to,false)
+       + '<div style="display:flex;gap:7px;margin:-4px 0 12px;">'
+       +   '<div onclick="choisirTournee(\'' + to.id + '\')" style="flex:2;text-align:center;background:#1a237e;color:#fff;border-radius:10px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;">Je la prends</div>'
+       +   '<div onclick="annulerTournee(\'' + to.id + '\')" style="flex:1;text-align:center;background:#fde0e0;color:#992020;border-radius:10px;padding:10px;font-size:12.5px;font-weight:800;cursor:pointer;">Annuler</div>'
+       + '</div>';
+    });
+  }
+  h+=_blocHistoriqueTournees(g.finies, false, 'gl_hist_fr');
   return h;
 }
 
-// ── Vue d'un poste (lot 4 à venir) ──
 // Danny annule une tournée non prise : les clients repartent au vivier
 function annulerTournee(tid){
   var to=(franceData.tournees||{})[tid];
@@ -2751,16 +2741,95 @@ function _frCarte(c){
     + '</div>';
 }
 
-function _frTournees(){
+// Même présentation que les collectes de Dakar : sections
+// En cours / À venir, puis un historique repliable avec sa flèche.
+function _carteTournee(to, cliquable){
+  var n=(to.clients||[]).length, colis=0, ram=(to.ramasses||[]).length;
+  (to.clients||[]).forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
+  var fini=(to.statut==='terminee'), libre=(to.statut==='a_prendre');
+  var bord = fini ? '1.5px solid #ccc' : (libre ? '2.5px solid #1a237e' : '2.5px solid var(--green)');
+  var bad  = fini ? 'badge-gray' : (libre ? 'badge-blue' : 'badge-green');
+  var lab  = fini ? 'Terminée' : (libre ? 'À prendre' : 'En cours');
+  var dep  = (to.depots||{});
+  var mit=0, cha=0;
+  Object.keys(dep).forEach(function(id){ if(dep[id]==='mitry') mit++; else if(dep[id]==='chartres') cha++; });
+  var pastilles='';
+  if(mit) pastilles+='<span class="badge badge-green" style="margin-right:5px;">📍 Mitry · '+mit+'</span>';
+  if(cha) pastilles+='<span class="badge badge-orange">📍 Chartres · '+cha+'</span>';
+  var ouvre = cliquable ? ' onclick="_reprendreTournee(\''+to.id+'\')" style="cursor:pointer;' : ' style="';
+  return '<div'+ouvre+'background:#fff;border:'+bord+';border-radius:var(--radius);margin-bottom:10px;overflow:hidden;'+(fini?'opacity:.6;background:#f5f5f5;filter:grayscale(30%);':'')+'">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px;gap:8px;">'
+    +   '<div style="font-size:14px;font-weight:700;color:var(--text);">'+(to.region||'Tournée')+(fini?' 🔒':'')+'</div>'
+    +   '<span class="badge '+bad+'">'+lab+'</span></div>'
+    + '<div style="padding:0 14px 13px;">'
+    +   '<div style="font-size:13px;font-weight:700;color:var(--text);">'+(to.dateLib||'')+'</div>'
+    +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:5px;">'
+    +     '<div style="font-size:12px;color:var(--text3);"><b style="color:var(--text);">'+n+'</b> client'+(n!==1?'s':'')+'</div>'
+    +     '<div style="font-size:12px;color:var(--text3);"><b style="color:var(--text);">'+colis+'</b> colis</div>'
+    +     (to.depts?'<div style="font-size:12px;color:var(--text3);">'+to.depts+'</div>':'')
+    +   '</div>'
+    +   '<div style="font-size:12px;color:var(--text3);margin-top:4px;">👤 '+(to.chauffeur||'pas encore prise')+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')+'</div>'
+    +   (pastilles?'<div style="margin-top:7px;">'+pastilles+'</div>':'')
+    + '</div></div>';
+}
+
+function _blocHistoriqueTournees(finies, cliquable, cle){
+  if(!finies.length) return '';
+  var ouvert = localStorage.getItem(cle)==='1';
+  var h='<div onclick="_toggleHistTournees(\''+cle+'\')" style="display:flex;align-items:center;justify-content:space-between;padding:12px 4px;cursor:pointer;user-select:none;">'
+   + '<span class="slabel" style="margin:0;">Historique</span>'
+   + '<span style="display:flex;align-items:center;gap:8px;">'
+   +   '<span style="background:#f0f0f0;color:#555;font-size:12px;font-weight:700;padding:3px 10px;border-radius:20px;">'+finies.length+' tournée'+(finies.length>1?'s':'')+'</span>'
+   +   '<span id="'+cle+'-arrow" style="font-size:14px;">'+(ouvert?'▲':'▼')+'</span>'
+   + '</span></div>'
+   + '<div id="'+cle+'-box" style="display:'+(ouvert?'block':'none')+';">';
+  finies.forEach(function(to){ h+=_carteTournee(to, cliquable); });
+  return h+'</div>';
+}
+function _toggleHistTournees(cle){
+  // localStorage fait foi : l'état survit au re-rendu de la liste
+  var ouvert = localStorage.getItem(cle)==='1';
+  var nouveau = !ouvert;
+  localStorage.setItem(cle, nouveau ? '1' : '0');
+  var box=document.getElementById(cle+'-box');
+  if(box) box.style.display = nouveau ? 'block' : 'none';
+  var fl=document.getElementById(cle+'-arrow');
+  if(fl) fl.textContent = nouveau ? '▲' : '▼';
+}
+
+function _trierTournees(){
   var t=franceData.tournees||{};
-  var ks=Object.keys(t);
-  if(!ks.length) return _frVide("Aucune tournée pour l'instant.<br>Danny les créera depuis son espace.");
-  return ks.map(function(k){
-    var to=t[k];
-    return '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:13px 14px;margin-bottom:10px;">'
-      +'<div style="font-size:14px;font-weight:700;">'+(to.dateLib||k)+'</div>'
-      +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+((to.clients||[]).length)+' client(s)</div></div>';
-  }).join('');
+  var enCours=[], aPrendre=[], finies=[];
+  Object.keys(t).forEach(function(k){
+    var to=t[k]; if(!to) return;
+    if(to.statut==='terminee') finies.push(to);
+    else if(to.statut==='a_prendre') aPrendre.push(to);
+    else enCours.push(to);
+  });
+  var parDate=function(asc){ return function(a,b){
+    var r=(a.dateIso||'').localeCompare(b.dateIso||'');
+    return asc?r:-r;
+  };};
+  enCours.sort(parDate(true)); aPrendre.sort(parDate(true)); finies.sort(parDate(false));
+  return {enCours:enCours, aPrendre:aPrendre, finies:finies};
+}
+
+function _frTournees(){
+  var g=_trierTournees();
+  if(!g.enCours.length && !g.aPrendre.length && !g.finies.length){
+    return _frVide("Aucune tournée pour l'instant.<br>Danny les prépare depuis son espace.");
+  }
+  var h='';
+  if(g.enCours.length){
+    h+='<div class="slabel" style="margin-top:2px;">En cours</div>';
+    g.enCours.forEach(function(to){ h+=_carteTournee(to,false); });
+  }
+  if(g.aPrendre.length){
+    h+='<div class="slabel">À venir</div>';
+    g.aPrendre.forEach(function(to){ h+=_carteTournee(to,false); });
+  }
+  h+=_blocHistoriqueTournees(g.finies, false, 'dct_hist_fr');
+  return h;
 }
 
 // ── Inscription ──
