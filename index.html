@@ -423,6 +423,21 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 
 <!-- POSTE : OUVERTURE -->
+<div class="screen" id="s-poste-choix">
+  <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
+    <span>&#128666; GLOBAL LOGISTIQUE</span><span id="pc-poste" style="opacity:0.75;"></span>
+  </div>
+  <div class="header">
+    <button class="btn-back" style="color:#1a237e;" onclick="deconnexionPartenaire()">&#8592; Quitter</button>
+    <div style="text-align:center;">
+      <div class="h-title">Choisir une tourn&#233;e</div>
+      <div class="h-sub" style="color:#1a237e;">Premi&#232;re prise, premi&#232;re servie</div>
+    </div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content" id="pc-content" style="background:#F2F3F5;"></div>
+</div>
+
 <div class="screen" id="s-poste-ouverture">
   <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
     <span>&#128666; GLOBAL LOGISTIQUE</span><span id="po-poste" style="opacity:0.75;"></span>
@@ -1003,6 +1018,7 @@ function ecouterFrance(){
     }
     _franceReady = true;
     _initPostesFrance();
+    try{ _nettoyerPostes(); }catch(e){}
     try{ if(typeof renderFrance==='function') renderFrance(); }catch(e){}
     try{ var sc=document.querySelector('.screen.active');
          if(sc && sc.id==='s-partenaire' && typeof renderDanny==='function') renderDanny(); }catch(e){}
@@ -1347,8 +1363,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.4.1';
-var APP_UPDATE = '09/08/2026 à 06:45';
+var APP_VERSION = 'v3.4.2';
+var APP_UPDATE = '09/08/2026 à 07:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1638,9 +1654,15 @@ function charger(){
 
 // NAVIGATION
 function goTo(id){
-  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
   var el=document.getElementById(id);
-  if(el)el.classList.add('active');
+  if(!el){
+    // Écran introuvable : on ne désactive rien, sinon page blanche.
+    console.error('goTo : écran introuvable → '+id);
+    try{ showToastNew('⚠️ Écran indisponible ('+id+')'); }catch(e){}
+    return;
+  }
+  document.querySelectorAll('.screen').forEach(function(s){s.classList.remove('active');});
+  el.classList.add('active');
 }
 function setNav(tab){
   if(tab!=='suivi') _suiviStopTimer();
@@ -2169,8 +2191,10 @@ function _sousTitreProfil(c){
   if(c.admin) return '';
   if(c.role==='responsable') return 'Responsable';
   if(c.role==='poste'){
-    var st=(franceData.postes||{})[c.id];
-    if(st && st.libre===false && st.chauffeur) return st.chauffeur+' · en tournée';
+    var st=(franceData.postes||{})[c.id]||{};
+    var to=(franceData.tournees||{})[st.tourneeId];
+    var vraimentOccupe = (st.libre===false && to && to.statut==='en_cours' && to.posteId===c.id);
+    if(vraimentOccupe) return (st.chauffeur||'occupé')+' · '+(to.region||'en tournée');
     return 'Libre';
   }
   return 'Collaborateur';
@@ -3035,11 +3059,34 @@ function _tourneeCourante(){ return (franceData.tournees||{})[_posteTourneeId]||
 // Aiguillage à la connexion d'un poste
 function ouvrirPoste(){
   var p=currentUser||{};
+  _libererPosteFantome(p.id);
   var to=_tourneeDuPoste(p.id);
   if(to){ _posteTourneeId=to.id; renderPosteTournee(); goTo('s-poste-tournee'); return; }
   _posteTourneeId='';
   _renderChoixTournee();
   goTo('s-poste-choix');
+}
+
+// Un poste marqué occupé dont la tournée n'existe plus ou est terminée
+// reste bloqué pour toujours. On le libère tout seul.
+function _libererPosteFantome(posteId){
+  var st=(franceData.postes||{})[posteId];
+  if(!st || st.libre!==false) return false;
+  var to=(franceData.tournees||{})[st.tourneeId];
+  if(to && to.statut==='en_cours' && to.posteId===posteId) return false;
+  if(db && firebaseReady){
+    db.ref('france/postes/'+posteId).update({libre:true,chauffeur:'',tourneeId:''});
+  }
+  st.libre=true; st.chauffeur=''; st.tourneeId='';
+  return true;
+}
+// Passe en revue les quatre postes — appelé à chaque mise à jour Firebase
+function _nettoyerPostes(){
+  var n=0;
+  PARTENAIRES.filter(function(p){ return p.role==='poste'; }).forEach(function(p){
+    if(_libererPosteFantome(p.id)) n++;
+  });
+  return n;
 }
 
 // ── Le chauffeur choisit sa tournée ──
