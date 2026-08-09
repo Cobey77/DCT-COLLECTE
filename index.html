@@ -450,6 +450,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="content" id="po-content" style="background:#F2F3F5;"></div>
   <div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
     <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" id="po-btn" onclick="demarrerTournee()">D&#233;marrer la tourn&#233;e</button>
+    <button class="btn btn-gray" style="margin-top:8px;" onclick="retourChoixTournee()">&#8592; Choisir une autre tourn&#233;e</button>
   </div>
 </div>
 
@@ -473,6 +474,9 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="content" id="pt-content" style="background:#F2F3F5;"></div>
   <div id="pt-barre" style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;display:none;">
     <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="ouvrirDepot()">&#128205; D&#233;clarer le d&#233;p&#244;t</button>
+  </div>
+  <div id="pt-rendre" style="background:#fff;border-top:1px solid var(--border);padding:8px 14px 14px;flex-shrink:0;">
+    <button class="btn btn-gray" style="margin:0;" onclick="rendreTournee()">&#8617; Changer de tourn&#233;e</button>
   </div>
 </div>
 
@@ -1363,8 +1367,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.4.2';
-var APP_UPDATE = '09/08/2026 à 07:20';
+var APP_VERSION = 'v3.4.5';
+var APP_UPDATE = '09/08/2026 à 08:35';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2208,7 +2212,7 @@ function _sousTitreProfil(c){
 var dannyTab='vivier';
 var dannySel=[];            // clients cochés
 var dannyRegion='', dannyDept='';
-var _dtDate='', _dtPoste='', _dtCreneaux={}, _dtConfirmes=[];
+var _dtDate='', _dtPoste='', _dtConfirmes=[];
 
 function _estDanny(){ return currentUser && currentUser.role==='responsable'; }
 
@@ -2363,7 +2367,7 @@ function ouvrirCreationTournee(){
   if(!dannySel.length) return;
   var d=new Date(Date.now()+86400000);
   _dtDate=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
-  _dtPoste=''; _dtCreneaux={}; _dtConfirmes=[];
+  _dtPoste=''; _dtConfirmes=[];
   _renderCreationTournee();
   goTo('s-danny-tournee');
 }
@@ -2390,18 +2394,12 @@ function _renderCreationTournee(){
   dannySel.forEach(function(id){
     var c=(franceData.clients||{})[id]; if(!c) return;
     var ok=_dtConfirmes.indexOf(id)>=0;
-    var cr=_dtCreneaux[id]||'';
     h+='<div style="background:'+(ok?'#f2fbf5':'#fffbeb')+';border:1.5px solid '+(ok?'#009A44':'#fcd34d')+';border-radius:var(--radius);padding:12px;margin-bottom:9px;">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
       +  '<div style="font-size:14.5px;font-weight:700;">'+(c.nom||'')+'</div>'
       +  '<span class="badge '+(ok?'badge-green':'badge-orange')+'">'+(ok?'✓ Confirmé':'En attente')+'</span></div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis</div>'
-      +'<div style="display:flex;gap:6px;margin-top:8px;">'
-      +  _segD('Matin',cr==='m',"_dtSetCreneau('"+id+"','m')")
-      +  _segD('Après-midi',cr==='a',"_dtSetCreneau('"+id+"','a')")
-      +  _segD('Journée',cr==='',"_dtSetCreneau('"+id+"','')")
-      +'</div>'
       +'<div style="display:flex;gap:7px;margin-top:9px;">'
       +  '<a href="tel:'+(c.tel||'')+'" style="flex:2;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
       +  '<div onclick="_dtToggleConfirme(\''+id+'\')" style="flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;background:'+(ok?'#009A44':'#d4f0e0')+';color:'+(ok?'#fff':'#006b2d')+';">'+(ok?'✓ Confirmé':'Confirmer')+'</div>'
@@ -2411,12 +2409,8 @@ function _renderCreationTournee(){
   });
   box.innerHTML=h;
 }
-function _segD(lib,on,action){
-  return '<div onclick="'+action+'" style="flex:1;text-align:center;font-size:12px;font-weight:700;padding:9px 3px;border-radius:9px;cursor:pointer;background:'+(on?'#1a237e':'#fff')+';color:'+(on?'#fff':'#555')+';border:1.5px solid '+(on?'#1a237e':'var(--border)')+';">'+lib+'</div>';
-}
 function _dtSetDate(v){ _dtDate=v; }
 function _dtSetPoste(p){ _dtPoste=(_dtPoste===p?'':p); _renderCreationTournee(); }
-function _dtSetCreneau(id,c){ _dtCreneaux[id]=c; _renderCreationTournee(); }
 function _dtToggleConfirme(id){
   var i=_dtConfirmes.indexOf(id);
   if(i>=0) _dtConfirmes.splice(i,1); else _dtConfirmes.push(id);
@@ -2425,7 +2419,6 @@ function _dtToggleConfirme(id){
 function _dtRetirer(id){
   var i=dannySel.indexOf(id); if(i>=0) dannySel.splice(i,1);
   var j=_dtConfirmes.indexOf(id); if(j>=0) _dtConfirmes.splice(j,1);
-  delete _dtCreneaux[id];
   if(!dannySel.length){ goTo('s-partenaire'); renderDanny(); return; }
   _renderCreationTournee();
 }
@@ -2460,7 +2453,7 @@ function validerTourneeDanny(){
     region:reg, regions:regs, depts:Object.keys(deps).sort().join(' · '),
     posteId:'', posteNom:'', chauffeur:'',
     creePar:(currentUser||{}).name||'', creeTs:Date.now(),
-    clients:dannySel.slice(), creneaux:_dtCreneaux,
+    clients:dannySel.slice(),
     confirmes:_dtConfirmes.slice(), statut:'a_prendre'
   };
   dannySel.forEach(function(id){
@@ -2470,14 +2463,13 @@ function validerTourneeDanny(){
     maj['clients/'+id+'/statut']='planifie';
     maj['clients/'+id+'/tourneeId']=tid;
     maj['clients/'+id+'/dateLib']=lib;
-    maj['clients/'+id+'/creneau']=_dtCreneaux[id]||'';
     maj['clients/'+id+'/planifieTs']=Date.now();
     maj['clients/'+id+'/hist']=hist;
   });
 
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Tournée du '+lib+' créée');
-    dannySel=[]; _dtCreneaux={}; _dtConfirmes=[]; _dtPoste='';
+    dannySel=[]; _dtConfirmes=[]; _dtPoste='';
     switchDannyTab('tournees');
     goTo('s-partenaire');
   }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
@@ -2519,7 +2511,6 @@ function annulerTournee(tid){
     maj['clients/'+id+'/statut']='attente';
     maj['clients/'+id+'/tourneeId']='';
     maj['clients/'+id+'/dateLib']='';
-    maj['clients/'+id+'/creneau']='';
   });
   maj['tournees/'+tid]=null;
   db.ref('france').update(maj).then(function(){
@@ -2551,11 +2542,10 @@ function _htmlPoste(){
     +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+n+' client'+(n>1?'s':'')+' · affectée par '+(mienne.creePar||'Danny')+'</div></div>';
   (mienne.clients||[]).forEach(function(id){
     var c=(franceData.clients||{})[id]; if(!c) return;
-    var cr=(mienne.creneaux||{})[id];
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
       +'<div style="font-size:14.5px;font-weight:700;">'+(c.nom||'')+'</div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
-      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis'+(cr==='m'?' · matin':(cr==='a'?' · après-midi':''))+'</div>'
+      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis'+'</div>'
       +'</div>';
   });
   h+='<div style="text-align:center;color:#aaa;padding:16px 20px;font-size:12.5px;line-height:1.6;">Les boutons « Ramassé » arrivent à la prochaine étape.</div>';
@@ -2793,6 +2783,7 @@ function _carteTournee(to, cliquable){
     +     (to.depts?'<div style="font-size:12px;color:var(--text3);">'+to.depts+'</div>':'')
     +   '</div>'
     +   '<div style="font-size:12px;color:var(--text3);margin-top:4px;">👤 '+(to.chauffeur||'pas encore prise')+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')+'</div>'
+  +   ((to.rendus&&to.rendus.length)?'<div style="font-size:11.5px;color:#92400e;margin-top:4px;">↩ Relâchée '+to.rendus.length+' fois — dernier : '+to.rendus[to.rendus.length-1].par+'</div>':'')
     +   (pastilles?'<div style="margin-top:7px;">'+pastilles+'</div>':'')
     + '</div></div>';
 }
@@ -3255,6 +3246,8 @@ function renderPosteTournee(){
   var aDeclarer=ram.filter(function(id){ return !((to.depots||{})[id]); });
   var b=document.getElementById('pt-barre');
   if(b) b.style.display = aDeclarer.length ? 'block' : 'none';
+  var br=document.getElementById('pt-rendre');
+  if(br) br.style.display = _tourneeVierge(to) ? 'block' : 'none';
   // Tout est traité et déclaré → bilan
   if(clients.length && traites>=clients.length && !aDeclarer.length){
     renderFinTournee();
@@ -3265,7 +3258,6 @@ function renderPosteTournee(){
 function _carteArret(id, num, to, fait){
   var c=(franceData.clients||{})[id];
   if(!c) return '';
-  var cr=(to.creneaux||{})[id];
   var ram=(to.ramasses||[]).indexOf(id)>=0;
   var motif=(to.nonRamasses||{})[id];
   var lieu=(to.depots||{})[id];
@@ -3289,7 +3281,7 @@ function _carteArret(id, num, to, fait){
     +  '<div style="width:22px;height:22px;border-radius:50%;background:#1a237e;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+num+'</div>'
     +  '<div style="font-size:15px;font-weight:700;">'+(c.nom||'')+'</div></div>'
     +'<div style="font-size:12px;color:#555;margin-top:5px;line-height:1.4;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+(c.infos?('<br><i>'+c.infos+'</i>'):'')+'</div>'
-    +'<div style="font-size:11.5px;color:var(--text3);margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+(cr==='m'?' · matin':(cr==='a'?' · après-midi':''))+'</div>'
+    +'<div style="font-size:11.5px;color:var(--text3);margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
     +'<div style="display:flex;gap:7px;margin-top:9px;">'
     +  '<a href="tel:'+(c.tel||'')+'" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
     +  '<a href="https://waze.com/ul?q='+encodeURIComponent((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||''))+'&navigate=yes" target="_blank" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">🧭 Itinéraire</a>'
@@ -3370,7 +3362,6 @@ function validerMotif(){
     maj['clients/'+id+'/statut']='attente';
     maj['clients/'+id+'/tourneeId']='';
     maj['clients/'+id+'/dateLib']='';
-    maj['clients/'+id+'/creneau']='';
   }
   db.ref('france').update(maj).then(function(){
     closeModal('modal-motif');
@@ -3395,6 +3386,58 @@ function annulerRamasse(id){
 }
 
 // ── Le dépôt ──
+
+// ── Le chauffeur revient sur son choix ──
+function retourChoixTournee(){
+  _posteTourneeId='';
+  _renderChoixTournee();
+  goTo('s-poste-choix');
+}
+
+// ── Il rend une tournée déjà démarrée ──
+// Impossible tant qu'il a des colis dans son camion : il doit
+// d'abord déclarer où il les a déposés.
+// Vrai tant qu'aucun client n'a été traité
+function _tourneeVierge(to){
+  if(!to) return false;
+  return !(to.ramasses||[]).length && !Object.keys(to.nonRamasses||{}).length;
+}
+
+function rendreTournee(){
+  var to=_tourneeCourante();
+  if(!to){ showToastNew('⚠️ Aucune tournée en cours.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  if(!_tourneeVierge(to)){
+    showToastNew('⚠️ Tournée déjà commencée — impossible d\'en changer.');
+    return;
+  }
+  if(!confirm('Changer de tournée ?\n\n'+_titreTournee(to)+' repartira dans la liste et tu pourras en prendre une autre.')) return;
+
+  var p=currentUser||{};
+  var qui=_chauffeurCourant();
+  var rendus=(to.rendus||[]).slice();
+  rendus.push({par:qui, poste:p.id||'', ts:Date.now()});
+
+  var maj={};
+  maj['tournees/'+to.id+'/statut']='a_prendre';
+  maj['tournees/'+to.id+'/posteId']='';
+  maj['tournees/'+to.id+'/posteNom']='';
+  maj['tournees/'+to.id+'/chauffeur']='';
+  maj['tournees/'+to.id+'/rendus']=rendus;
+  if(p.role==='poste'){
+    maj['postes/'+p.id+'/libre']=true;
+    maj['postes/'+p.id+'/chauffeur']='';
+    maj['postes/'+p.id+'/tourneeId']='';
+  }
+  db.ref('france').update(maj).then(function(){
+    showToastNew('↩ Tournée relâchée — choisis-en une autre');
+    try{ addActivity(qui, 'a relâché la tournée '+_titreTournee(to)); }catch(e){}
+    _posteTourneeId='';
+    if(p.role==='poste'){ _renderChoixTournee(); goTo('s-poste-choix'); }
+    else { renderDanny(); goTo('s-partenaire'); }
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
 function ouvrirDepot(){
   var to=_tourneeCourante(); if(!to) return;
   _depotSel=[];
