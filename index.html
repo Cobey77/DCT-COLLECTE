@@ -1391,8 +1391,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.7.3';
-var APP_UPDATE = '09/08/2026 à 13:40';
+var APP_VERSION = 'v3.7.5';
+var APP_UPDATE = '09/08/2026 à 14:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3902,7 +3902,8 @@ function _ouvrirModalPinCollab(collab, bloque, isFirstTime){
     if(btn){ btn.style.display = 'block'; btn.textContent = '✅ Créer mon PIN'; }
     _pinAction = 'create';
   } else {
-    if(titre) titre.textContent = '🔐 ' + collab.name;
+    // Aucun prénom sur l'écran de code d'un administrateur
+    if(titre) titre.textContent = collab.admin ? ('🔐 ' + collab.id) : ('🔐 ' + collab.name);
     if(sous) sous.textContent = 'Entrez votre code PIN à 4 chiffres.';
     if(inp) inp.style.display = 'block';
     if(btn){ btn.style.display = 'block'; btn.textContent = '→ Connexion'; }
@@ -8242,10 +8243,10 @@ function ecouterCodesEspaces(){
   });
 }
 
-// Seul le carré Dakar City peut être gardé par un code.
-// Global Logistique entre librement : Danny a son code personnel,
-// et les postes chauffeur sont des places partagées.
-var ESPACES_AVEC_CODE = ['DCT'];
+// Les deux sociétés ont leur code d'entrée. Danny transmet le sien
+// à son équipe : les chauffeurs franchissent la porte, puis prennent
+// un poste librement. Danny garde en plus son code personnel.
+var ESPACES_AVEC_CODE = ['DCT','GL'];
 function _espaceProtege(socId){
   if(ESPACES_AVEC_CODE.indexOf(socId)<0) return false;
   var c=_codesEspaces[socId];
@@ -8354,7 +8355,7 @@ function _htmlCodesAdmins(){
 
 function _htmlCodesEspaces(){
   var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">🚪 Codes des espaces</div>'
-      + '<div style="font-size:12px;color:#888;margin-bottom:12px;">Un code commun à l\'entrée du carré Dakar City, puis chacun garde son code personnel sur son profil. L\'espace partenaire, lui, entre librement.</div>';
+      + '<div style="font-size:12px;color:#888;margin-bottom:12px;">Un code par société. Chez Dakar City, chacun garde ensuite son code personnel. Chez Global Logistique, Danny a le sien et les postes chauffeur restent libres derrière la porte.</div>';
   SOCIETES.forEach(function(so){
     if(ESPACES_AVEC_CODE.indexOf(so.id)<0) return;
     var actuel=_codesEspaces[so.id];
