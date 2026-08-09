@@ -397,10 +397,6 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 
 <!-- ESPACE PARTENAIRE -->
 <div class="screen" id="s-partenaire">
-  <div id="bandeau-vue-admin" style="display:none;background:#1a1a2e;color:#fff;padding:8px 12px;font-size:11px;font-weight:700;flex-shrink:0;display:none;justify-content:space-between;align-items:center;">
-    <span>&#128065; VUE ADMINISTRATEUR &#183; LECTURE SEULE</span>
-    <span onclick="quitterVuePartenaire()" style="background:rgba(255,255,255,0.2);padding:3px 9px;border-radius:10px;cursor:pointer;">Quitter</span>
-  </div>
   <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
     <span id="part-societe">🚚 GLOBAL LOGISTIQUE</span>
     <span id="part-qui" style="opacity:0.75;"></span>
@@ -571,7 +567,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div id="btn-france" onclick="ouvrirFrance()" style="background:#1a237e;border:2.5px solid #0d1444;border-radius:var(--radius);padding:14px 16px;display:flex;align-items:center;gap:13px;cursor:pointer;width:100%;margin-bottom:18px;">
       <div style="width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:19px;">🇫🇷</div>
       <div style="flex:1;">
-        <div style="color:#fff;font-size:15px;font-weight:800;">Ramassage France &amp; Europe</div>
+        <div style="color:#fff;font-size:15px;font-weight:800;">Ramassage France</div>
         <div id="france-compteurs" style="color:#c5cae9;font-size:12px;margin-top:2px;">0 en attente · 0 à Chartres</div>
       </div>
       <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
@@ -1395,8 +1391,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.6.2';
-var APP_UPDATE = '09/08/2026 à 11:35';
+var APP_VERSION = 'v3.7.0';
+var APP_UPDATE = '09/08/2026 à 12:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2818,7 +2814,7 @@ function _carteTournee(to, cliquable){
   return '<div'+ouvre+'background:#fff;border:'+bord+';border-radius:var(--radius);margin-bottom:10px;overflow:hidden;'+(fini?'opacity:.6;background:#f5f5f5;filter:grayscale(30%);':'')+'">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px;gap:8px;">'
     +   '<div style="font-size:14px;font-weight:700;color:var(--text);">'+(to.region||'Tournée')+(fini?' 🔒':'')+'</div>'
-    +   '<span class="badge '+bad+'">'+lab+'</span></div>'
+    +   '<div style="display:flex;align-items:center;gap:0;"><span class="badge '+bad+'">'+lab+'</span>'+_crayonTournee(to)+'</div></div>'
     + '<div style="padding:0 14px 13px;">'
     +   '<div style="font-size:13px;font-weight:700;color:var(--text);">'+(to.dateLib||'')+'</div>'
     +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:5px;">'
@@ -8517,13 +8513,120 @@ function _htmlToutesTournees(){
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);">'
      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
      +   '<div style="font-size:14px;font-weight:700;">'+(to.region||'Tournée')+'</div>'
-     +   '<span class="badge '+bad+'">'+lab+'</span></div>'
+     +   '<div style="display:flex;align-items:center;"><span class="badge '+bad+'">'+lab+'</span>'+_crayonTournee(to)+'</div></div>'
      + '<div style="font-size:12.5px;font-weight:600;margin-top:4px;">'+(to.dateLib||'')+'</div>'
      + '<div style="font-size:12px;color:#888;margin-top:3px;">'+n+' client'+(n>1?'s':'')+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')+' · '+(to.chauffeur||'pas encore prise')+'</div>'
      + '<button class="btn btn-gray" style="margin-top:10px;background:#fde0e0;color:#992020;border:1.5px solid #c0392b;" onclick="supprimerTournee(\''+to.id+'\')">🗑️ Supprimer</button>'
      + '</div>';
   });
   return h;
+}
+
+
+// ═══════════ CRAYON SUR LES TOURNÉES — v3.7.0 ═══════════
+var STATUTS_TOURNEE = [
+  {id:'a_prendre', lib:'À prendre', desc:'Elle repart dans la liste, le poste se libère', badge:'badge-blue'},
+  {id:'en_cours',  lib:'En cours',  desc:'Un chauffeur est dessus',                        badge:'badge-green'},
+  {id:'terminee',  lib:'Terminée',  desc:'Archivée, plus modifiable par le chauffeur',     badge:'badge-gray'}
+];
+
+// Qui a le droit de toucher au statut
+function _peutEditerTournee(to){
+  if(!to) return false;
+  if(_vueAdmin) return false;
+  if(currentUser && currentUser.admin) return true;
+  if(currentUser && currentUser.role==='responsable') return to.statut==='a_prendre';
+  return false;
+}
+
+function ouvrirStatutTournee(tid){
+  var to=(franceData.tournees||{})[tid];
+  if(!to){ showToastNew('⚠️ Tournée introuvable.'); return; }
+  if(!_peutEditerTournee(to)){ showToastNew('⚠️ Tournée déjà prise — passe par un administrateur.'); return; }
+  var e=document.getElementById('mst-id'); if(e) e.value=tid;
+  e=document.getElementById('mst-titre'); if(e) e.textContent=_titreTournee(to);
+  _renderStatutsTournee();
+  openModal('modal-statut-tournee');
+}
+
+function _renderStatutsTournee(){
+  var tid=(document.getElementById('mst-id')||{}).value||'';
+  var to=(franceData.tournees||{})[tid]; if(!to) return;
+  var box=document.getElementById('mst-options'); if(!box) return;
+  var h='';
+  STATUTS_TOURNEE.forEach(function(st){
+    var on=(to.statut===st.id);
+    h+='<div onclick="changerStatutTournee(\''+st.id+'\')" class="modal-option" style="'+(on?'border-color:#009A44;background:#d4f0e0;':'')+'">'
+      +'<div style="flex:1;"><div style="font-size:13.5px;font-weight:700;color:'+(on?'#006b2d':'#111')+';">'+st.lib+'</div>'
+      +'<div style="font-size:11.5px;color:#888;margin-top:2px;">'+st.desc+'</div></div>'
+      +'<div style="font-size:15px;color:#009A44;">'+(on?'●':'')+'</div></div>';
+  });
+  box.innerHTML=h;
+  var av=document.getElementById('mst-avert');
+  if(av){
+    var ram=(to.ramasses||[]).length, nonR=Object.keys(to.nonRamasses||{}).length;
+    if(ram||nonR){
+      av.style.display='block';
+      av.textContent='Cette tournée est déjà entamée : '+ram+' ramassé(s), '+nonR+' non ramassé(s). Ce travail est conservé quel que soit le statut choisi.';
+    } else av.style.display='none';
+  }
+}
+
+function changerStatutTournee(nouveau){
+  var tid=(document.getElementById('mst-id')||{}).value||'';
+  var to=(franceData.tournees||{})[tid];
+  if(!to || !db){ return; }
+  if(to.statut===nouveau){ closeModal('modal-statut-tournee'); return; }
+  var st=STATUTS_TOURNEE.filter(function(x){ return x.id===nouveau; })[0]||{};
+  if(nouveau==='en_cours' && !to.chauffeur){
+    showToastNew('⚠️ Aucun chauffeur : laisse-la « À prendre ».');
+    return;
+  }
+  if(!confirm('Passer '+_titreTournee(to)+' en « '+st.lib+' » ?')) return;
+
+  var qui=(currentUser||{}).name||'';
+  var maj={};
+  maj['tournees/'+tid+'/statut']=nouveau;
+  if(nouveau==='a_prendre'){
+    // elle redevient libre : plus de chauffeur, plus de poste
+    if(to.posteId && to.posteId!=='DD'){
+      maj['postes/'+to.posteId+'/libre']=true;
+      maj['postes/'+to.posteId+'/chauffeur']='';
+      maj['postes/'+to.posteId+'/tourneeId']='';
+    }
+    maj['tournees/'+tid+'/posteId']='';
+    maj['tournees/'+tid+'/posteNom']='';
+    maj['tournees/'+tid+'/chauffeur']='';
+  }
+  if(nouveau==='terminee'){
+    maj['tournees/'+tid+'/finTs']=Date.now();
+    if(to.posteId && to.posteId!=='DD'){
+      maj['postes/'+to.posteId+'/libre']=true;
+      maj['postes/'+to.posteId+'/chauffeur']='';
+      maj['postes/'+to.posteId+'/tourneeId']='';
+    }
+  }
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ Tournée « '+st.lib+' »');
+    try{ addActivity(qui, 'a passé la tournée '+_titreTournee(to)+' en '+st.lib); }catch(e){}
+    closeModal('modal-statut-tournee');
+    try{ renderFrance(); }catch(e){}
+    try{ renderDanny(); }catch(e){}
+    try{ if(document.getElementById('admin-section-partenaires').style.display!=='none') renderAdminPartenaires(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+function supprimerDepuisModale(){
+  var tid=(document.getElementById('mst-id')||{}).value||'';
+  closeModal('modal-statut-tournee');
+  supprimerTournee(tid);
+}
+
+// Le crayon, comme sur les cartes de collecte
+function _crayonTournee(to){
+  if(!_peutEditerTournee(to)) return '';
+  return '<button onclick="event.stopPropagation();ouvrirStatutTournee(\''+to.id+'\')" '
+    + 'style="background:#f0f0f0;border:1.5px solid #ccc;border-radius:6px;padding:3px 8px;font-size:11px;color:#555;cursor:pointer;font-weight:700;font-family:var(--font);margin-left:6px;">✏️</button>';
 }
 
 function renderAdminPanel(){
@@ -8775,9 +8878,13 @@ function chargerConfigFirebase(){
   db.ref('dct_config/collabs').once('value', function(snap){
     var data = snap.val();
     if(data && data.length > 0){
-      var admin = COLLABS.find(function(c){ return c.admin; });
-      COLLABS = data;
-      if(admin) COLLABS.push(admin);
+      // Firebase ne stocke que les collaborateurs : on remet TOUS les
+      // administrateurs derrière, pas seulement le premier.
+      var admins = COLLABS.filter(function(c){ return c.admin; });
+      COLLABS = data.filter(function(c){ return c && !c.admin; });
+      admins.forEach(function(a){
+        if(!COLLABS.some(function(c){ return c.id===a.id; })) COLLABS.push(a);
+      });
       buildLogin();
     }
   });
@@ -9070,6 +9177,20 @@ setTimeout(function(){
   <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:12px;font-weight:700;margin-bottom:10px;padding:8px;background:#fde0e0;border-radius:8px;"></div>
   <button id="collab-pin-btn" onclick="collab_pin_action()" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;"></button>
   <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:11px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
+</div>
+</div>
+</div>
+
+<div id="modal-statut-tournee" class="modal-overlay">
+<div class="modal-sheet" style="max-width:340px;margin:auto;">
+<div style="padding:22px 18px;">
+  <div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:3px;">Statut de la tourn&#233;e</div>
+  <div id="mst-titre" style="font-size:12px;color:#888;margin-bottom:14px;"></div>
+  <input type="hidden" id="mst-id">
+  <div id="mst-options"></div>
+  <div id="mst-avert" style="display:none;font-size:11.5px;color:#92400e;background:#fef3c7;border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.5;"></div>
+  <button class="btn btn-gray" style="margin:0 0 8px;background:#fde0e0;color:#992020;border:1.5px solid #c0392b;" onclick="supprimerDepuisModale()">&#128465;&#65039; Supprimer cette tourn&#233;e</button>
+  <button onclick="closeModal('modal-statut-tournee')" style="width:100%;padding:11px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Fermer</button>
 </div>
 </div>
 </div>
