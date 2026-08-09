@@ -538,6 +538,18 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 
 <!-- CRÉATION DE TOURNÉE (Danny) -->
+<div class="screen" id="s-tournee-edit">
+  <div class="header">
+    <button class="btn-back" style="color:#1a237e;" onclick="retourDepuisEdition()">&#8592; Retour</button>
+    <div style="text-align:center;">
+      <div class="h-title" id="ed-titre">Tourn&#233;e</div>
+      <div class="h-sub" id="ed-sous" style="color:#1a237e;"></div>
+    </div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content" id="ed-content" style="background:#F2F3F5;"></div>
+</div>
+
 <div class="screen" id="s-danny-tournee">
   <div style="background:#1a237e;color:#fff;padding:7px 14px;font-size:11px;font-weight:700;letter-spacing:0.04em;flex-shrink:0;display:flex;justify-content:space-between;">
     <span>🚚 GLOBAL LOGISTIQUE</span><span style="opacity:0.75;">Danny Diop</span>
@@ -1398,8 +1410,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.10.0';
-var APP_UPDATE = '09/08/2026 à 17:00';
+var APP_VERSION = 'v3.12.1';
+var APP_UPDATE = '09/08/2026 à 19:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -8462,6 +8474,64 @@ function _htmlCodesEspaces(){
 //  seule fois par client, puis stockées sur sa fiche.
 // ═══════════════════════════════════════════════════════════
 var _carteFr = null, _carteFrMarkers = [], _carteFrMode = 'suivi', _carteFrTid = '';
+var _carteSelFr = [], _carteFrParId = {}, _carteFrCoords = {}, _carteFrTrace = null;
+
+// Distance à vol d'oiseau entre deux points, en km
+function _distanceKm(a, b){
+  var R=6371, r=Math.PI/180;
+  var dLat=(b[0]-a[0])*r, dLng=(b[1]-a[1])*r;
+  var x=Math.sin(dLat/2)*Math.sin(dLat/2)
+       +Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  return R*2*Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+}
+function _longueurTrace(ids){
+  var pts=ids.map(function(id){ return _carteFrCoords[id]; }).filter(Boolean);
+  var d=0;
+  for(var i=1;i<pts.length;i++) d+=_distanceKm(pts[i-1], pts[i]);
+  return Math.round(d);
+}
+
+var _carteFrFleches=[];
+
+// Une flèche au milieu de chaque segment, orientée dans le sens du trajet
+function _poserFleches(pts, couleur){
+  for(var i=1;i<pts.length;i++){
+    var a=pts[i-1], b=pts[i];
+    var mid=[(a[0]+b[0])/2, (a[1]+b[1])/2];
+    var angle=Math.atan2(b[1]-a[1], b[0]-a[0])*180/Math.PI;
+    var html='<div style="transform:rotate('+(90-angle)+'deg);font-size:17px;line-height:1;color:'+couleur
+      +';text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;font-weight:900;">&#10148;</div>';
+    try{
+      _carteFrFleches.push(
+        L.marker(mid,{icon:L.divIcon({html:html,className:'',iconSize:[18,18],iconAnchor:[9,9]}),
+                      interactive:false, keyboard:false}).addTo(_carteFr)
+      );
+    }catch(e){}
+  }
+}
+function _effacerFleches(){
+  _carteFrFleches.forEach(function(m){ try{ m.remove(); }catch(e){} });
+  _carteFrFleches=[];
+}
+
+// Le trait qui relie les points choisis, dans l'ordre du clic
+function _redessinerTraceFr(){
+  if(!_carteFr || !window.L) return;
+  if(_carteFrTrace){ try{ _carteFrTrace.remove(); }catch(e){} _carteFrTrace=null; }
+  _effacerFleches();
+  var pts=_carteSelFr.map(function(id){ return _carteFrCoords[id]; }).filter(Boolean);
+  if(pts.length<2) return;
+  _carteFrTrace=L.polyline(pts, {color:'#009A44', weight:3, opacity:.85, dashArray:'8,6'}).addTo(_carteFr);
+  _poserFleches(pts, '#009A44');
+}
+
+// La sélection n'est proposée qu'à ceux qui peuvent créer une tournée,
+// et seulement sur les clients qui attendent.
+function _carteSelectionPossible(){
+  if(_carteFrMode!=='suivi' || franceFiltre!=='attente') return false;
+  if(_vueAdmin) return false;
+  return _estAdmin() || (currentUser && currentUser.role==='responsable');
+}
 
 function _chargerLeaflet(cb){
   if(window.L){ cb(); return; }
@@ -8513,6 +8583,73 @@ function _geocodeOSM(c, cb){
     .catch(function(){ cb(null,null); });
 }
 
+
+// Pastille du point : le cercle sélectionne, le petit i informe
+function _iconePointFr(o, col){
+  var rang=_carteSelFr.indexOf(o.c._id);
+  var sel=(rang>=0);
+  var bg = sel ? '#009A44' : col.bg;
+  var taille = sel ? 32 : 26;
+  var html='<div style="position:relative;width:'+taille+'px;height:'+taille+'px;">'
+    +'<div style="width:'+taille+'px;height:'+taille+'px;border-radius:50%;background:'+bg+';color:#fff;'
+    +'border:'+(sel?'3px':'2px')+' solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);display:flex;align-items:center;'
+    +'justify-content:center;font-size:'+(sel?'14px':'11px')+';font-weight:800;font-family:sans-serif;">'
+    +(sel?(rang+1):(o.num||'●'))+'</div>'
+    +'<span onclick="event.stopPropagation();infoPointFr(\''+o.c._id+'\')" '
+    +'style="position:absolute;top:-6px;right:-7px;width:15px;height:15px;border-radius:50%;background:#fff;'
+    +'border:1.5px solid #1a237e;color:#1a237e;font-size:10px;font-weight:800;font-family:serif;display:flex;'
+    +'align-items:center;justify-content:center;cursor:pointer;line-height:1;">i</span></div>';
+  return L.divIcon({html:html, className:'', iconSize:[taille,taille], iconAnchor:[taille/2,taille/2]});
+}
+
+function infoPointFr(id){
+  var mk=_carteFrParId[id];
+  if(mk) mk.openPopup();
+}
+
+function basculerPointFr(id){
+  var i=_carteSelFr.indexOf(id);
+  if(i>=0) _carteSelFr.splice(i,1); else _carteSelFr.push(id);
+  var mk=_carteFrParId[id];
+  if(mk && mk._o) mk.setIcon(_iconePointFr(mk._o, mk._col));
+  _redessinerTraceFr();
+  _majBarreCarteFr();
+}
+
+function viderSelectionCarteFr(){
+  var ids=_carteSelFr.slice();
+  _carteSelFr=[];
+  ids.forEach(function(id){
+    var mk=_carteFrParId[id];
+    if(mk && mk._o) mk.setIcon(_iconePointFr(mk._o, mk._col));
+  });
+  _redessinerTraceFr();
+  _majBarreCarteFr();
+}
+
+function _majBarreCarteFr(){
+  var b=document.getElementById('cfr-barre');
+  if(!b) return;
+  var actif=_carteSelectionPossible() && _carteSelFr.length>0;
+  b.style.display = actif ? 'block' : 'none';
+  if(actif){
+    var colis=0;
+    _carteSelFr.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
+    var km=_longueurTrace(_carteSelFr);
+    var i=document.getElementById('cfr-sel-info');
+    if(i) i.innerHTML='<b style="color:#111;">'+_carteSelFr.length+' client'+(_carteSelFr.length>1?'s':'')+'</b> · '+colis+' colis'
+        +(km?(' · ~'+km+' km'):'');
+  }
+}
+
+// On repart sur l'écran de création habituel, avec la sélection faite sur la carte
+function creerTourneeDepuisCarte(){
+  if(!_carteSelFr.length) return;
+  dannySel=_carteSelFr.slice();
+  fermerCarteFrance();
+  ouvrirCreationTournee();
+}
+
 function _couleurClientCarte(c){
   if(c.lieu==='mitry')    return {bg:'#009A44', txt:'#fff'};
   if(c.lieu==='chartres') return {bg:'#b45309', txt:'#fff'};
@@ -8525,8 +8662,15 @@ function ouvrirCarteFrance(mode, tid){
   _carteFrTid  = tid||'';
   var m=document.getElementById('modal-carte-france');
   if(m) m.classList.add('show');
+  _carteSelFr=[]; _carteFrParId={}; _carteFrCoords={};
+  if(_carteFrTrace){ try{ _carteFrTrace.remove(); }catch(e){} _carteFrTrace=null; }
+  _effacerFleches();
   var t=document.getElementById('cfr-titre');
   if(t) t.textContent = (_carteFrMode==='tournee') ? 'Carte de la tournée' : 'Carte des colis';
+  var a=document.getElementById('cfr-aide');
+  if(a) a.style.display = _carteSelectionPossible() ? 'block' : 'none';
+  var bb=document.getElementById('cfr-barre');
+  if(bb) bb.style.display='none';
   var st=document.getElementById('cfr-statut');
   if(st) st.textContent='Chargement de la carte…';
   _chargerLeaflet(function(){ _construireCarteFrance(); });
@@ -8534,6 +8678,8 @@ function ouvrirCarteFrance(mode, tid){
 function fermerCarteFrance(){
   var m=document.getElementById('modal-carte-france');
   if(m) m.classList.remove('show');
+  if(_carteFrTrace){ try{ _carteFrTrace.remove(); }catch(e){} _carteFrTrace=null; }
+  _effacerFleches();
 }
 
 function _clientsPourCarte(){
@@ -8582,17 +8728,30 @@ function _construireCarteFrance(){
           var nonR=(to.nonRamasses||{})[o.c._id];
           col = fait ? {bg:'#009A44',txt:'#fff'} : (nonR ? {bg:'#c0392b',txt:'#fff'} : {bg:pc.bar,txt:'#fff'});
         }
-        var html='<div style="width:26px;height:26px;border-radius:50%;background:'+col.bg+';color:'+col.txt
-          +';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;font-family:sans-serif;">'
-          +(o.num||'●')+'</div>';
-        var mk=L.marker([lat,lng],{icon:L.divIcon({html:html,className:'',iconSize:[26,26],iconAnchor:[13,13]})}).addTo(_carteFr);
+        var mk=L.marker([lat,lng],{icon:_iconePointFr(o, col)}).addTo(_carteFr);
         mk.bindPopup('<b>'+(o.c.nom||'')+'</b><br>'+(o.c.adresse||'')+'<br>'+(o.c.cp||'')+' '+(o.c.ville||'')
-          +'<br>📦 '+(o.c.nb||1)+' colis');
+          +'<br>📦 '+(o.c.nb||1)+' colis'+(o.c.colis?(' · '+o.c.colis):'')
+          +'<br><span style="color:#888;">'+(o.c.ref||'')+'</span>');
+        mk._cid=o.c._id; mk._o=o; mk._col=col;
+        if(_carteSelectionPossible()){
+          mk.on('click', function(){ basculerPointFr(o.c._id); });
+        }
+        _carteFrParId[o.c._id]=mk;
+        _carteFrCoords[o.c._id]=[lat,lng];
         _carteFrMarkers.push(mk);
         points.push([lat,lng]);
       }
       if(faits>=liste.length){
         if(st) st.textContent=points.length+' colis sur '+liste.length+' localisé'+(points.length>1?'s':'');
+        if(_carteFrMode==='tournee'){
+          var ordre=liste.map(function(x){ return _carteFrCoords[x.c._id]; }).filter(Boolean);
+          if(ordre.length>1){
+            var _cl=getPc(((franceData.tournees||{})[_carteFrTid]||{}).posteId).bar;
+            try{ L.polyline(ordre,{color:_cl,weight:3,opacity:.8}).addTo(_carteFr); }catch(e){}
+            _effacerFleches();
+            _poserFleches(ordre, _cl);
+          }
+        }
         if(points.length){
           try{ _carteFr.fitBounds(L.latLngBounds(points).pad(0.2)); }catch(e){}
         }
@@ -8762,6 +8921,134 @@ function _htmlToutesTournees(){
 }
 
 
+
+// ═══════════════════════════════════════════════════════════
+//  MODIFIER LES CLIENTS D'UNE TOURNÉE — v3.11.0
+//  On peut retirer un client tant qu'il n'a pas été traité,
+//  et en ajouter depuis le vivier. Le travail fait est intouchable.
+// ═══════════════════════════════════════════════════════════
+var _editTid='';
+
+function _clientTraite(to, id){
+  return (to.ramasses||[]).indexOf(id)>=0 || !!((to.nonRamasses||{})[id]);
+}
+
+function ouvrirEditionTournee(tid){
+  var to=(franceData.tournees||{})[tid];
+  if(!to){ showToastNew('⚠️ Tournée introuvable.'); return; }
+  if(!_peutEditerTournee(to)){ showToastNew('⚠️ Tournée déjà prise — passe par un administrateur.'); return; }
+  _editTid=tid;
+  closeModal('modal-statut-tournee');
+  _renderEditionTournee();
+  goTo('s-tournee-edit');
+}
+
+function _renderEditionTournee(){
+  var to=(franceData.tournees||{})[_editTid];
+  var box=document.getElementById('ed-content');
+  if(!box) return;
+  if(!to){ box.innerHTML='<div style="text-align:center;color:#aaa;padding:40px 20px;">Tournée introuvable.</div>'; return; }
+  var e=document.getElementById('ed-titre'); if(e) e.textContent=to.region||'Tournée';
+  e=document.getElementById('ed-sous');  if(e) e.textContent=to.dateLib||'';
+
+  var dedans=(to.clients||[]);
+  var h='<div class="slabel" style="margin-top:2px;">Dans la tournée · '+dedans.length+'</div>';
+  if(!dedans.length){
+    h+='<div style="font-size:12.5px;color:#aaa;padding:14px 4px;">Aucun client. Ajoute-en ci-dessous ou supprime la tournée.</div>';
+  }
+  dedans.forEach(function(id){
+    var c=(franceData.clients||{})[id]; if(!c) return;
+    var traite=_clientTraite(to,id);
+    h+='<div style="background:#fff;border:1.5px solid '+(traite?'#ccc':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;'+(traite?'opacity:.6;':'')+'">'
+     + '<div style="font-size:14px;font-weight:700;">'+(c.nom||'')+'</div>'
+     + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+' · '+(c.nb||1)+' colis</div>'
+     + (traite
+        ? '<div style="font-size:11.5px;color:#888;margin-top:7px;">Déjà traité — impossible de le retirer</div>'
+        : '<div onclick="retirerClientTournee(\''+id+'\')" style="margin-top:8px;text-align:center;background:#fde0e0;color:#992020;border-radius:9px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer;">✕ Retirer de la tournée</div>')
+     + '</div>';
+  });
+
+  var dispo=[];
+  Object.keys(franceData.clients||{}).forEach(function(id){
+    var c=franceData.clients[id];
+    if(c && c.statut==='attente'){ c._id=id; dispo.push(c); }
+  });
+  dispo.sort(function(a,b){ return (a.creeTs||0)-(b.creeTs||0); });
+
+  h+='<div class="slabel">À ajouter · '+dispo.length+' disponible'+(dispo.length>1?'s':'')+'</div>';
+  if(!dispo.length){
+    h+='<div style="font-size:12.5px;color:#aaa;padding:10px 4px;">Aucun client en attente.</div>';
+  }
+  dispo.forEach(function(c){
+    var memeRegion=(c.region===to.region);
+    h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;">'
+     + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+     +   '<div style="font-size:14px;font-weight:700;">'+(c.nom||'')+'</div>'
+     +   (memeRegion?'':'<span class="badge badge-orange">Autre région</span>')+'</div>'
+     + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+' · '+(c.nb||1)+' colis</div>'
+     + '<div onclick="ajouterClientTournee(\''+c._id+'\')" style="margin-top:8px;text-align:center;background:#d4f0e0;color:#006b2d;border-radius:9px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer;">+ Ajouter à la tournée</div>'
+     + '</div>';
+  });
+  box.innerHTML=h;
+}
+
+function retirerClientTournee(id){
+  var to=(franceData.tournees||{})[_editTid];
+  if(!to || !db) return;
+  if(_clientTraite(to,id)){ showToastNew('⚠️ Client déjà traité.'); return; }
+  var c=(franceData.clients||{})[id]||{};
+  if(!confirm('Retirer '+(c.nom||'ce client')+' de la tournée ?\n\nIl repart dans le vivier.')) return;
+  var qui=(currentUser||{}).name||'';
+  var hist=(c.hist||[]).slice();
+  hist.push({q:qui, a:'retiré de la tournée — retour dans le vivier', ts:Date.now()});
+  var maj={};
+  maj['tournees/'+to.id+'/clients']=(to.clients||[]).filter(function(x){ return x!==id; });
+  maj['tournees/'+to.id+'/confirmes']=(to.confirmes||[]).filter(function(x){ return x!==id; });
+  maj['clients/'+id+'/statut']='attente';
+  maj['clients/'+id+'/tourneeId']='';
+  maj['clients/'+id+'/dateLib']='';
+  maj['clients/'+id+'/hist']=hist;
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✕ Client retiré');
+    _renderEditionTournee();
+    try{ renderFrance(); }catch(e){}
+    try{ renderDanny(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+function ajouterClientTournee(id){
+  var to=(franceData.tournees||{})[_editTid];
+  if(!to || !db) return;
+  var c=(franceData.clients||{})[id]||{};
+  if(c.statut!=='attente'){ showToastNew('⚠️ Ce client est déjà engagé ailleurs.'); return; }
+  if(c.region && to.region && c.region.indexOf(c.region)===0 && c.region!==to.region){
+    if(!confirm('Ce client est en '+c.region+', la tournée est en '+to.region+'.\n\nL\'ajouter quand même ?')) return;
+  }
+  var qui=(currentUser||{}).name||'';
+  var hist=(c.hist||[]).slice();
+  hist.push({q:qui, a:'ajouté à la tournée — '+(to.dateLib||''), ts:Date.now()});
+  var liste=(to.clients||[]).slice();
+  if(liste.indexOf(id)<0) liste.push(id);
+  var maj={};
+  maj['tournees/'+to.id+'/clients']=liste;
+  maj['clients/'+id+'/statut']='planifie';
+  maj['clients/'+id+'/tourneeId']=to.id;
+  maj['clients/'+id+'/dateLib']=to.dateLib||'';
+  maj['clients/'+id+'/planifieTs']=Date.now();
+  maj['clients/'+id+'/hist']=hist;
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ Client ajouté');
+    _renderEditionTournee();
+    try{ renderFrance(); }catch(e){}
+    try{ renderDanny(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+function retourDepuisEdition(){
+  if(_estAdmin()){ switchFranceTab('tournees'); goTo('s-france'); }
+  else { switchDannyTab('tournees'); goTo('s-partenaire'); }
+}
+
 // ═══════════ CRAYON SUR LES TOURNÉES — v3.7.0 ═══════════
 var STATUTS_TOURNEE = [
   {id:'a_prendre', lib:'À prendre', desc:'Elle repart dans la liste, le poste se libère', badge:'badge-blue'},
@@ -8801,6 +9088,8 @@ function _renderStatutsTournee(){
       +'<div style="font-size:15px;color:#009A44;">'+(on?'●':'')+'</div></div>';
   });
   box.innerHTML=h;
+  var mc=document.getElementById('mst-clients');
+  if(mc) mc.onclick=function(){ ouvrirEditionTournee(tid); };
   var av=document.getElementById('mst-avert');
   if(av){
     var ram=(to.ramasses||[]).length, nonR=Object.keys(to.nonRamasses||{}).length;
@@ -9429,7 +9718,17 @@ setTimeout(function(){
     </div>
     <button onclick="fermerCarteFrance()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Fermer</button>
   </div>
+  <div id="cfr-aide" style="display:none;background:#e8eaf6;color:#1a237e;padding:8px 14px;font-size:11.5px;flex-shrink:0;line-height:1.4;">
+    Tape un point pour le choisir &#183; le petit <b>i</b> ouvre sa fiche
+  </div>
   <div id="cfr-map" style="flex:1;"></div>
+  <div id="cfr-barre" style="display:none;background:#fff;border-top:1px solid var(--border);padding:10px 14px;flex-shrink:0;">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:8px;">
+      <span id="cfr-sel-info"></span>
+      <span onclick="viderSelectionCarteFr()" style="color:#1a237e;font-weight:700;cursor:pointer;">Tout d&#233;cocher</span>
+    </div>
+    <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="creerTourneeDepuisCarte()">Cr&#233;er une tourn&#233;e</button>
+  </div>
   <div style="background:#fff;border-top:1px solid var(--border);padding:9px 14px;flex-shrink:0;display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#555;">
     <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#78909c;margin-right:4px;"></span>En attente</span>
     <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a237e;margin-right:4px;"></span>Planifi&#233;</span>
@@ -9447,6 +9746,7 @@ setTimeout(function(){
   <input type="hidden" id="mst-id">
   <div id="mst-options"></div>
   <div id="mst-avert" style="display:none;font-size:11.5px;color:#92400e;background:#fef3c7;border-radius:8px;padding:9px 11px;margin-bottom:10px;line-height:1.5;"></div>
+  <button id="mst-clients" class="btn btn-gray" style="margin:0 0 8px;">&#128100; Modifier les clients</button>
   <button class="btn btn-gray" style="margin:0 0 8px;background:#fde0e0;color:#992020;border:1.5px solid #c0392b;" onclick="supprimerDepuisModale()">&#128465;&#65039; Supprimer cette tourn&#233;e</button>
   <button onclick="closeModal('modal-statut-tournee')" style="width:100%;padding:11px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Fermer</button>
 </div>
