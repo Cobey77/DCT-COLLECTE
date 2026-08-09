@@ -329,7 +329,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div class="h-title">🇪🇺 Ramassage France &amp; Europe</div>
       <div class="h-sub" id="fr-sous" style="color:#1a237e;">Suivi des colis</div>
     </div>
-    <div id="fr-av" class="av" style="width:30px;height:30px;font-size:10px;"></div>
+    <button onclick="ouvrirCarteFrance('suivi')" style="background:#e8eaf6;color:#1a237e;border:1.5px solid #1a237e;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">&#128506;</button>
   </div>
   <div class="subtabs">
     <div class="subtab active" id="ftab-suivi" onclick="switchFranceTab('suivi')">🔍 Suivi</div>
@@ -472,7 +472,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div class="h-title" id="pt-date">Tourn&#233;e</div>
       <div class="h-sub" id="pt-sous" style="color:#1a237e;"></div>
     </div>
-    <div style="width:60px;"></div>
+    <button onclick="ouvrirCarteFrance('tournee', _posteTourneeId)" style="background:#e8eaf6;color:#1a237e;border:1.5px solid #1a237e;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">&#128506;</button>
   </div>
   <div class="sbar" style="background:#1a237e;">
     <div class="sbar-item"><div class="sbar-label" style="color:#c5cae9;">Clients</div><div class="sbar-val" id="pt-n">0</div></div>
@@ -1398,8 +1398,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.8.1';
-var APP_UPDATE = '09/08/2026 à 15:30';
+var APP_VERSION = 'v3.10.0';
+var APP_UPDATE = '09/08/2026 à 17:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2219,10 +2219,11 @@ function ouvrirEspace(socId){
   var html='';
   liste.forEach(function(c){
     var sous=_sousTitreProfil(c);
+    var _pc = (c.role==='poste') ? getPc(c.id) : {bg:c.bg,color:c.color,bar:c.color};
     var avat = (c.id==='DD')
       ? '<div class="av" style="background:'+c.bg+';width:46px;height:46px;border:2px solid '+c.color+';display:flex;align-items:center;justify-content:center;">'+_logoGL(32)+'</div>'
-      : '<div class="av" style="background:'+c.bg+';color:'+c.color+';width:46px;height:46px;font-size:'+(c.role==='poste'?'17px':'13px')+';border:2px solid '+c.color+';">'+(c.role==='poste'?'🚚':c.id)+'</div>';
-    html += '<div class="login-card" style="border-left:4px solid '+c.color+';" onclick="login(\''+c.id+'\')">'
+      : '<div class="av" style="background:'+_pc.bg+';color:'+_pc.color+';width:46px;height:46px;font-size:'+(c.role==='poste'?'17px':'13px')+';border:2px solid '+_pc.bar+';">'+(c.role==='poste'?'🚚':c.id)+'</div>';
+    html += '<div class="login-card" style="border-left:4px solid '+_pc.bar+';" onclick="login(\''+c.id+'\')">'
          + avat
          + '<div style="flex:1;"><div class="login-name">'+c.name+'</div>'+(sous?'<div class="login-role">'+sous+'</div>':'')+'</div>'
          + '<svg style="margin-left:auto;" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="'+c.color+'" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>'
@@ -2867,9 +2868,10 @@ function _carteTournee(to, cliquable){
   var n=(to.clients||[]).length, colis=0, ram=(to.ramasses||[]).length;
   (to.clients||[]).forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
   var fini=(to.statut==='terminee'), libre=(to.statut==='a_prendre');
-  var bord = fini ? '1.5px solid #ccc' : (libre ? '2.5px solid #1a237e' : '2.5px solid var(--green)');
-  var bad  = fini ? 'badge-gray' : (libre ? 'badge-blue' : 'badge-green');
-  var lab  = fini ? 'Terminée' : (libre ? 'À prendre' : 'En cours');
+  var pc   = getPc(to.posteId);
+  var bord = fini ? '1.5px solid #ccc' : (libre ? '2px dashed #90a4ae' : '2.5px solid '+pc.bar);
+  var bad  = fini ? 'badge-gray' : (libre ? 'badge-gray' : '');
+  var lab  = fini ? 'Terminée' : (libre ? 'Libre' : (to.posteNom||'En cours'));
   var dep  = (to.depots||{});
   var mit=0, cha=0;
   Object.keys(dep).forEach(function(id){ if(dep[id]==='mitry') mit++; else if(dep[id]==='chartres') cha++; });
@@ -2880,7 +2882,10 @@ function _carteTournee(to, cliquable){
   return '<div'+ouvre+'background:#fff;border:'+bord+';border-radius:var(--radius);margin-bottom:10px;overflow:hidden;'+(fini?'opacity:.6;background:#f5f5f5;filter:grayscale(30%);':'')+'">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;padding:13px 14px 6px;gap:8px;">'
     +   '<div style="font-size:14px;font-weight:700;color:var(--text);">'+(to.region||'Tournée')+(fini?' 🔒':'')+'</div>'
-    +   '<div style="display:flex;align-items:center;gap:0;"><span class="badge '+bad+'">'+lab+'</span>'+_crayonTournee(to)+'</div></div>'
+    +   '<div style="display:flex;align-items:center;gap:0;">'
+    +     (bad ? ('<span class="badge '+bad+'">'+lab+'</span>')
+                : ('<span style="font-size:11px;padding:3px 10px;border-radius:20px;font-weight:700;background:'+pc.bg+';color:'+pc.color+';border:1.5px solid '+pc.bar+';">'+lab+'</span>'))
+    +     _crayonTournee(to)+'</div></div>'
     + '<div style="padding:0 14px 13px;">'
     +   '<div style="font-size:13px;font-weight:700;color:var(--text);">'+(to.dateLib||'')+'</div>'
     +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:5px;">'
@@ -2888,7 +2893,11 @@ function _carteTournee(to, cliquable){
     +     '<div style="font-size:12px;color:var(--text3);"><b style="color:var(--text);">'+colis+'</b> colis</div>'
     +     (to.depts?'<div style="font-size:12px;color:var(--text3);">'+to.depts+'</div>':'')
     +   '</div>'
-    +   '<div style="font-size:12px;color:var(--text3);margin-top:4px;">👤 '+(to.chauffeur||'pas encore prise')+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')+'</div>'
+    +   (to.chauffeur
+          ? ('<div style="display:flex;align-items:center;gap:7px;margin-top:7px;">'
+            +  '<div style="width:24px;height:24px;border-radius:50%;background:'+pc.bg+';color:'+pc.color+';border:2px solid '+pc.bar+';font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+_initiales(to.chauffeur)+'</div>'
+            +  '<div style="font-size:12px;color:var(--text3);">'+to.chauffeur+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')+'</div></div>')
+          : '<div style="font-size:12px;color:var(--text3);margin-top:4px;">👤 pas encore prise</div>')
   +   ((to.rendus&&to.rendus.length)?'<div style="font-size:11.5px;color:#92400e;margin-top:4px;">↩ Relâchée '+to.rendus.length+' fois — dernier : '+to.rendus[to.rendus.length-1].par+'</div>':'')
     +   (pastilles?'<div style="margin-top:7px;">'+pastilles+'</div>':'')
     + '</div></div>';
@@ -3387,6 +3396,9 @@ function renderPosteTournee(){
   var e;
   e=document.getElementById('pt-qui');  if(e) e.textContent=_chauffeurCourant();
   e=document.getElementById('pt-date'); if(e) e.textContent=to.region||to.dateLib||'Tournée';
+  var _pcb=getPc(to.posteId);
+  var _sb=document.querySelector('#s-poste-tournee .sbar');
+  if(_sb && _sb.style) _sb.style.background=_pcb.bar;
   var ram=(to.ramasses||[]), nonR=(to.nonRamasses||{});
   var clients=(to.clients||[]);
   var traites=ram.length+Object.keys(nonR).length;
@@ -8442,6 +8454,173 @@ function _htmlCodesEspaces(){
 }
 
 
+
+// ═══════════════════════════════════════════════════════════
+//  CARTE DU RAMASSAGE — v3.10.0
+//  Même principe que la carte du dispatch : Leaflet + OSM,
+//  chargés à la demande. Les coordonnées sont calculées une
+//  seule fois par client, puis stockées sur sa fiche.
+// ═══════════════════════════════════════════════════════════
+var _carteFr = null, _carteFrMarkers = [], _carteFrMode = 'suivi', _carteFrTid = '';
+
+function _chargerLeaflet(cb){
+  if(window.L){ cb(); return; }
+  if(!document.getElementById('leaflet-css')){
+    var link=document.createElement('link');
+    link.id='leaflet-css'; link.rel='stylesheet';
+    link.href='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css';
+    document.head.appendChild(link);
+  }
+  var s=document.getElementById('leaflet-js');
+  if(s){ setTimeout(function(){ cb(); },300); return; }
+  s=document.createElement('script');
+  s.id='leaflet-js';
+  s.src='https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js';
+  s.onload=function(){ setTimeout(cb,150); };
+  document.head.appendChild(s);
+}
+
+// Géocodage : l'API française d'abord, OpenStreetMap pour l'étranger
+function _geocodeClientFr(c, cb){
+  if(c.lat && c.lng){ cb(c.lat, c.lng); return; }
+  var adr=((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||'')).trim();
+  if(!adr){ cb(null,null); return; }
+  var fini=function(lat,lng){
+    if(lat && lng && c._id && db && firebaseReady){
+      var maj={}; maj['clients/'+c._id+'/lat']=lat; maj['clients/'+c._id+'/lng']=lng;
+      db.ref('france').update(maj);
+      c.lat=lat; c.lng=lng;
+    }
+    cb(lat,lng);
+  };
+  if((c.pays||'FR')==='FR'){
+    _geocodeAdresse((c.adresse||'')+' '+(c.ville||''), c.cp||'', function(lat,lng){
+      if(lat) fini(lat,lng); else _geocodeOSM(c, fini);
+    });
+  } else {
+    _geocodeOSM(c, fini);
+  }
+}
+function _geocodeOSM(c, cb){
+  var p=getPays(c.pays||'FR');
+  var q=((c.adresse||'')+', '+(c.cp||'')+' '+(c.ville||'')+', '+p.nom).trim();
+  fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d && d.length) cb(parseFloat(d[0].lat), parseFloat(d[0].lon));
+      else cb(null,null);
+    })
+    .catch(function(){ cb(null,null); });
+}
+
+function _couleurClientCarte(c){
+  if(c.lieu==='mitry')    return {bg:'#009A44', txt:'#fff'};
+  if(c.lieu==='chartres') return {bg:'#b45309', txt:'#fff'};
+  if(c.statut==='planifie'||c.statut==='ramasse') return {bg:'#1a237e', txt:'#fff'};
+  return {bg:'#78909c', txt:'#fff'};
+}
+
+function ouvrirCarteFrance(mode, tid){
+  _carteFrMode = mode||'suivi';
+  _carteFrTid  = tid||'';
+  var m=document.getElementById('modal-carte-france');
+  if(m) m.classList.add('show');
+  var t=document.getElementById('cfr-titre');
+  if(t) t.textContent = (_carteFrMode==='tournee') ? 'Carte de la tournée' : 'Carte des colis';
+  var st=document.getElementById('cfr-statut');
+  if(st) st.textContent='Chargement de la carte…';
+  _chargerLeaflet(function(){ _construireCarteFrance(); });
+}
+function fermerCarteFrance(){
+  var m=document.getElementById('modal-carte-france');
+  if(m) m.classList.remove('show');
+}
+
+function _clientsPourCarte(){
+  var out=[];
+  if(_carteFrMode==='tournee'){
+    var to=(franceData.tournees||{})[_carteFrTid];
+    (to&&to.clients||[]).forEach(function(id,i){
+      var c=(franceData.clients||{})[id];
+      if(c){ c._id=id; out.push({c:c, num:i+1, to:to}); }
+    });
+  } else {
+    Object.keys(franceData.clients||{}).forEach(function(id){
+      var c=franceData.clients[id];
+      if(!c || c.statut==='annule') return;
+      if(_frDansFiltre(c)){ c._id=id; out.push({c:c, num:0}); }
+    });
+  }
+  return out;
+}
+
+function _construireCarteFrance(){
+  var el=document.getElementById('cfr-map');
+  if(!el || !window.L) return;
+  if(_carteFr){ try{ _carteFr.remove(); }catch(e){} _carteFr=null; }
+  _carteFrMarkers=[];
+  _carteFr = L.map(el).setView([46.6, 2.4], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {attribution:'© OpenStreetMap', maxZoom:18}).addTo(_carteFr);
+
+  var liste=_clientsPourCarte();
+  var st=document.getElementById('cfr-statut');
+  if(!liste.length){
+    if(st) st.textContent='Aucun colis à afficher.';
+    return;
+  }
+  var faits=0, points=[];
+  liste.forEach(function(o){
+    _geocodeClientFr(o.c, function(lat,lng){
+      faits++;
+      if(st) st.textContent='📍 Localisation '+faits+' / '+liste.length+'…';
+      if(lat && lng){
+        var col=_couleurClientCarte(o.c);
+        if(_carteFrMode==='tournee'){
+          var to=o.to||{}; var pc=getPc(to.posteId);
+          var fait=(to.ramasses||[]).indexOf(o.c._id)>=0;
+          var nonR=(to.nonRamasses||{})[o.c._id];
+          col = fait ? {bg:'#009A44',txt:'#fff'} : (nonR ? {bg:'#c0392b',txt:'#fff'} : {bg:pc.bar,txt:'#fff'});
+        }
+        var html='<div style="width:26px;height:26px;border-radius:50%;background:'+col.bg+';color:'+col.txt
+          +';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;font-family:sans-serif;">'
+          +(o.num||'●')+'</div>';
+        var mk=L.marker([lat,lng],{icon:L.divIcon({html:html,className:'',iconSize:[26,26],iconAnchor:[13,13]})}).addTo(_carteFr);
+        mk.bindPopup('<b>'+(o.c.nom||'')+'</b><br>'+(o.c.adresse||'')+'<br>'+(o.c.cp||'')+' '+(o.c.ville||'')
+          +'<br>📦 '+(o.c.nb||1)+' colis');
+        _carteFrMarkers.push(mk);
+        points.push([lat,lng]);
+      }
+      if(faits>=liste.length){
+        if(st) st.textContent=points.length+' colis sur '+liste.length+' localisé'+(points.length>1?'s':'');
+        if(points.length){
+          try{ _carteFr.fitBounds(L.latLngBounds(points).pad(0.2)); }catch(e){}
+        }
+        setTimeout(function(){ try{ _carteFr.invalidateSize(); }catch(e){} }, 100);
+      }
+    });
+  });
+}
+
+// ═══════════ COULEURS DES POSTES — v3.9.0 ═══════════
+// Même principe que tes camions : chaque poste a sa couleur,
+// et la tournée prend celle du poste qui l'a prise.
+var POSTE_COLORS = {
+  P1:{bg:'#e3f2fd',color:'#0d47a1',bar:'#1565c0'},
+  P2:{bg:'#fff8e1',color:'#e65100',bar:'#ef6c00'},
+  P3:{bg:'#f3e5f5',color:'#6a1b9a',bar:'#7b1fa2'},
+  P4:{bg:'#e0f7fa',color:'#006064',bar:'#00838f'},
+  DD:{bg:'#e8eaf6',color:'#1a237e',bar:'#1a237e'}
+};
+function getPc(id){ return POSTE_COLORS[id] || {bg:'#eeeeee',color:'#555',bar:'#999'}; }
+
+// Initiales du chauffeur, pour la pastille
+function _initiales(nom){
+  var m=(nom||'').trim().split(/\s+/);
+  if(!m[0]) return '?';
+  return (m[0][0]+((m[1]||'')[0]||'')).toUpperCase();
+}
+
 // ═══════════ VUE ADMIN — v3.6.0 ═══════════
 // L'administrateur peut ouvrir l'espace de Danny ou d'un poste
 // pour voir ce qu'ils voient. En lecture seule : aucune écriture,
@@ -8564,12 +8743,16 @@ function _htmlToutesTournees(){
   h+='<div style="font-size:12px;color:#888;margin-bottom:12px;">Tu peux supprimer n\'importe laquelle, quel que soit son état.</div>';
   tout.forEach(function(to){
     var n=(to.clients||[]).length, ram=(to.ramasses||[]).length;
-    var lab = to.statut==='terminee' ? 'Terminée' : (to.statut==='a_prendre' ? 'À prendre' : 'En cours');
-    var bad = to.statut==='terminee' ? 'badge-gray' : (to.statut==='a_prendre' ? 'badge-blue' : 'badge-green');
+    var pc  = getPc(to.posteId);
+    var lab = to.statut==='terminee' ? 'Terminée' : (to.statut==='a_prendre' ? 'Libre' : (to.posteNom||'En cours'));
+    var bad = to.statut==='terminee' ? 'badge-gray' : (to.statut==='a_prendre' ? 'badge-gray' : '');
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);">'
      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
      +   '<div style="font-size:14px;font-weight:700;">'+(to.region||'Tournée')+'</div>'
-     +   '<div style="display:flex;align-items:center;"><span class="badge '+bad+'">'+lab+'</span>'+_crayonTournee(to)+'</div></div>'
+     +   '<div style="display:flex;align-items:center;">'
+     +     (bad ? ('<span class="badge '+bad+'">'+lab+'</span>')
+                : ('<span style="font-size:11px;padding:3px 10px;border-radius:20px;font-weight:700;background:'+pc.bg+';color:'+pc.color+';border:1.5px solid '+pc.bar+';">'+lab+'</span>'))
+     +     _crayonTournee(to)+'</div></div>'
      + '<div style="font-size:12.5px;font-weight:600;margin-top:4px;">'+(to.dateLib||'')+'</div>'
      + '<div style="font-size:12px;color:#888;margin-top:3px;">'+n+' client'+(n>1?'s':'')+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')+' · '+(to.chauffeur||'pas encore prise')+'</div>'
      + '<button class="btn btn-gray" style="margin-top:10px;background:#fde0e0;color:#992020;border:1.5px solid #c0392b;" onclick="supprimerTournee(\''+to.id+'\')">🗑️ Supprimer</button>'
@@ -9234,6 +9417,25 @@ setTimeout(function(){
   <button id="collab-pin-btn" onclick="collab_pin_action()" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;"></button>
   <button onclick="closeModal('modal-collab-pin')" style="width:100%;padding:11px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
 </div>
+</div>
+</div>
+
+<div id="modal-carte-france" class="modal-overlay">
+<div style="background:#fff;width:100%;max-width:430px;height:100%;margin:auto;display:flex;flex-direction:column;">
+  <div style="background:#1a237e;color:#fff;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+    <div>
+      <div id="cfr-titre" style="font-size:15px;font-weight:800;">Carte des colis</div>
+      <div id="cfr-statut" style="font-size:11px;opacity:.8;margin-top:2px;">Chargement…</div>
+    </div>
+    <button onclick="fermerCarteFrance()" style="background:rgba(255,255,255,0.2);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Fermer</button>
+  </div>
+  <div id="cfr-map" style="flex:1;"></div>
+  <div style="background:#fff;border-top:1px solid var(--border);padding:9px 14px;flex-shrink:0;display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#555;">
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#78909c;margin-right:4px;"></span>En attente</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#1a237e;margin-right:4px;"></span>Planifi&#233;</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#b45309;margin-right:4px;"></span>Chartres</span>
+    <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#009A44;margin-right:4px;"></span>Mitry</span>
+  </div>
 </div>
 </div>
 
