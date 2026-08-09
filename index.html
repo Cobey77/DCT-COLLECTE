@@ -1410,8 +1410,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.12.1';
-var APP_UPDATE = '09/08/2026 à 19:20';
+var APP_VERSION = 'v3.12.2';
+var APP_UPDATE = '09/08/2026 à 19:50';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2900,6 +2900,7 @@ function _carteTournee(to, cliquable){
     +     _crayonTournee(to)+'</div></div>'
     + '<div style="padding:0 14px 13px;">'
     +   '<div style="font-size:13px;font-weight:700;color:var(--text);">'+(to.dateLib||'')+'</div>'
+    +   (n?'':'<div style="font-size:11.5px;color:#92400e;background:#fef3c7;border-radius:8px;padding:6px 9px;margin-top:6px;">⚠️ Aucun client — complète-la ou supprime-la</div>')
     +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:5px;">'
     +     '<div style="font-size:12px;color:var(--text3);"><b style="color:var(--text);">'+n+'</b> client'+(n!==1?'s':'')+'</div>'
     +     '<div style="font-size:12px;color:var(--text3);"><b style="color:var(--text);">'+colis+'</b> colis</div>'
@@ -3167,7 +3168,8 @@ function _tourneesAPrendre(){
   var t=franceData.tournees||{}, out=[];
   Object.keys(t).forEach(function(k){
     var to=t[k];
-    if(to && to.statut==='a_prendre' && !to.posteId) out.push(to);
+    // une tournée sans client n'a rien à proposer
+    if(to && to.statut==='a_prendre' && !to.posteId && (to.clients||[]).length) out.push(to);
   });
   out.sort(function(a,b){ return (a.dateIso||'').localeCompare(b.dateIso||''); });
   return out;
@@ -3332,8 +3334,11 @@ function _renderOuverturePoste(to){
    +   '<div style="font-size:12px;color:var(--text3);margin-top:5px;line-height:1.5;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis'
    +     (_auteurPourPartenaire(to.creePar)?('<br>Préparée par '+_auteurPourPartenaire(to.creePar)):'')+'</div>'
    + '</div>'
-   + '<div class="slabel">Les '+n+' arrêt'+(n>1?'s':'')+'</div>'
-   + '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:6px 14px 10px;box-shadow:var(--shadow);">'+_listeAdresses(to)+'</div>'
+   + (n
+      ? ('<div class="slabel">'+(n>1?('Les '+n+' arrêts'):'L\'arrêt')+'</div>'
+        +'<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:6px 14px 10px;box-shadow:var(--shadow);">'+_listeAdresses(to)+'</div>')
+      : '<div style="background:#fef3c7;border:1.5px solid #fcd34d;border-radius:var(--radius);padding:12px 14px;font-size:12.5px;color:#92400e;line-height:1.5;">'
+        +'⚠️ <b>Cette tournée n\'a aucun client.</b><br>Préviens Danny, il doit la compléter ou la supprimer.</div>')
    + '<div style="font-size:11.5px;color:#888;text-align:center;margin-top:16px;line-height:1.6;">Le poste se referme tout seul<br>une fois le dépôt déclaré.</div>';
   var box=document.getElementById('po-content'); if(box) box.innerHTML=h;
 }
@@ -3354,6 +3359,7 @@ function demarrerTournee(){
   if(nom.length<3){ showToastNew('⚠️ Indiquez le nom du chauffeur.'); return; }
   var to=_tourneeCourante();
   if(!to){ showToastNew('⚠️ Aucune tournée sélectionnée.'); return; }
+  if(!(to.clients||[]).length){ showToastNew('⚠️ Cette tournée n\'a aucun client.'); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var p=currentUser||{};
   var btn=document.getElementById('po-btn');
@@ -8997,7 +9003,10 @@ function retirerClientTournee(id){
   if(!to || !db) return;
   if(_clientTraite(to,id)){ showToastNew('⚠️ Client déjà traité.'); return; }
   var c=(franceData.clients||{})[id]||{};
-  if(!confirm('Retirer '+(c.nom||'ce client')+' de la tournée ?\n\nIl repart dans le vivier.')) return;
+  var restants=(to.clients||[]).filter(function(x){ return x!==id; }).length;
+  var msg='Retirer '+(c.nom||'ce client')+' de la tournée ?\n\nIl repart dans le vivier.';
+  if(!restants) msg+='\n\n⚠️ C\'est le dernier client : la tournée deviendra vide et ne sera plus proposée aux chauffeurs.';
+  if(!confirm(msg)) return;
   var qui=(currentUser||{}).name||'';
   var hist=(c.hist||[]).slice();
   hist.push({q:qui, a:'retiré de la tournée — retour dans le vivier', ts:Date.now()});
