@@ -339,6 +339,13 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <input class="fi" id="fr-q" placeholder="🔍 Nom, téléphone ou référence…" oninput="renderFrance()" style="margin:0;">
   </div>
   <div class="content" id="france-content" style="background:#F2F3F5;"></div>
+  <div id="fr-barre" style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 12px;flex-shrink:0;display:none;">
+    <div style="display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:8px;">
+      <span id="fr-sel-info"></span>
+      <span onclick="viderSelectionAdmin()" style="color:#1a237e;font-weight:700;cursor:pointer;">Annuler</span>
+    </div>
+    <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="ouvrirCreationTournee()">Cr&#233;er une tourn&#233;e</button>
+  </div>
   <div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
     <button class="btn btn-green" style="margin:0;" onclick="ouvrirAjoutFrance()">+ Inscrire un client</button>
   </div>
@@ -536,7 +543,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <span>🚚 GLOBAL LOGISTIQUE</span><span style="opacity:0.75;">Danny Diop</span>
   </div>
   <div class="header">
-    <button class="btn-back" style="color:#1a237e;" onclick="goTo('s-partenaire')">← Retour</button>
+    <button class="btn-back" style="color:#1a237e;" onclick="retourDepuisCreation()">← Retour</button>
     <div class="h-title">Nouvelle tournée</div>
     <div style="width:60px;"></div>
   </div>
@@ -1391,8 +1398,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.7.5';
-var APP_UPDATE = '09/08/2026 à 14:20';
+var APP_VERSION = 'v3.8.1';
+var APP_UPDATE = '09/08/2026 à 15:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2396,6 +2403,11 @@ function _majBarreDanny(){
 }
 
 // ── Création de tournée ──
+function retourDepuisCreation(){
+  if(_estAdmin()){ goTo('s-france'); renderFrance(); }
+  else { goTo('s-partenaire'); renderDanny(); }
+}
+
 function ouvrirCreationTournee(){
   if(_bloqueSiVueAdmin()) return;
   if(!dannySel.length) return;
@@ -2453,7 +2465,11 @@ function _dtToggleConfirme(id){
 function _dtRetirer(id){
   var i=dannySel.indexOf(id); if(i>=0) dannySel.splice(i,1);
   var j=_dtConfirmes.indexOf(id); if(j>=0) _dtConfirmes.splice(j,1);
-  if(!dannySel.length){ goTo('s-partenaire'); renderDanny(); return; }
+  if(!dannySel.length){
+    if(_estAdmin()){ goTo('s-france'); renderFrance(); }
+    else { goTo('s-partenaire'); renderDanny(); }
+    return;
+  }
   _renderCreationTournee();
 }
 function _libelleDate(iso){
@@ -2505,8 +2521,8 @@ function validerTourneeDanny(){
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Tournée du '+lib+' créée');
     dannySel=[]; _dtConfirmes=[]; _dtPoste='';
-    switchDannyTab('tournees');
-    goTo('s-partenaire');
+    if(_estAdmin()){ switchFranceTab('tournees'); goTo('s-france'); }
+    else { switchDannyTab('tournees'); goTo('s-partenaire'); }
   }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
 }
 
@@ -2575,7 +2591,8 @@ function _htmlPoste(){
   var n=(mienne.clients||[]).length;
   var h='<div style="background:#fff;border:2.5px solid #1a237e;border-radius:var(--radius);padding:14px;margin-bottom:12px;box-shadow:var(--shadow);">'
     +'<div style="font-size:16px;font-weight:800;">'+(mienne.dateLib||'')+'</div>'
-    +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+n+' client'+(n>1?'s':'')+' · affectée par '+(mienne.creePar||'Danny')+'</div></div>';
+    +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+n+' client'+(n>1?'s':'')
+    + (_auteurPourPartenaire(mienne.creePar)?(' · préparée par '+_auteurPourPartenaire(mienne.creePar)):'')+'</div></div>';
   (mienne.clients||[]).forEach(function(id){
     var c=(franceData.clients||{})[id]; if(!c) return;
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
@@ -2706,6 +2723,10 @@ function renderFrance(){
        + '</div>';
   }
 
+  if(_selectionPossible()){
+    html+='<div style="background:#e8eaf6;border:1.5px solid #c5cae9;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
+       +'📋 <b>Préparer une tournée</b><br><span style="opacity:.85;">Coche des clients, elle sera proposée aux chauffeurs de Global Logistique.</span></div>';
+  }
   var liste=tous.filter(_frDansFiltre);
   // Filtres géographiques calculés sur la liste courante
   html+=_frBarresGeo(liste);
@@ -2719,6 +2740,7 @@ function renderFrance(){
   html+= liste.length ? liste.map(_frCarte).join('')
        : _frVide(franceFiltre==='attente'?'Aucun client en attente.<br>Inscrivez le premier avec le bouton en bas.':'Aucun client ici pour le moment.');
   box.innerHTML=html;
+  _majBarreFrance();
 }
 
 function _frVide(txt){
@@ -2731,7 +2753,7 @@ function _frPuce(id,lib,n,col){
        + (on?('background:'+col+';color:#fff;border:1.5px solid '+col+';'):'background:#fff;border:1.5px solid var(--border);color:#555;')
        + '">'+lib+' · '+n+'</span>';
 }
-function setFranceFiltre(f){ franceFiltre=f; franceRegion=''; franceDept=''; renderFrance(); }
+function setFranceFiltre(f){ franceFiltre=f; franceRegion=''; franceDept=''; dannySel=[]; renderFrance(); }
 function setFranceRegion(r){ franceRegion=(franceRegion===r?'':r); franceDept=''; renderFrance(); }
 function setFranceDept(d){ franceDept=(franceDept===d?'':d); renderFrance(); }
 
@@ -2778,6 +2800,41 @@ function _chip(lib,on,action,col){
        + (on?('background:'+col+';color:#fff;border:1.5px solid '+col+';'):'background:#fff;border:1.5px solid var(--border);color:#555;')+'">'+lib+'</span>';
 }
 
+// L'administrateur peut préparer une tournée depuis son propre onglet,
+// sans entrer dans l'espace du partenaire.
+// Côté partenaire, aucun nom de Dakar City n'apparaît :
+// ni les administrateurs, ni les collaborateurs.
+function _estNomDCT(nom){
+  if(!nom) return false;
+  return COLLABS.some(function(c){ return c.name===nom; });
+}
+function _auteurPourPartenaire(nom){
+  return _estNomDCT(nom) ? '' : (nom||'');
+}
+
+function _estAdmin(){ return !!(currentUser && currentUser.admin); }
+function _selectionPossible(){ return _estAdmin() && franceTab==='suivi' && franceFiltre==='attente'; }
+
+function toggleSelAdmin(id){
+  var i=dannySel.indexOf(id);
+  if(i>=0) dannySel.splice(i,1); else dannySel.push(id);
+  renderFrance();
+}
+function viderSelectionAdmin(){ dannySel=[]; renderFrance(); }
+
+function _majBarreFrance(){
+  var b=document.getElementById('fr-barre');
+  if(!b) return;
+  var actif=_selectionPossible() && dannySel.length>0;
+  b.style.display = actif ? 'block' : 'none';
+  if(actif){
+    var colis=0;
+    dannySel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
+    var i=document.getElementById('fr-sel-info');
+    if(i) i.innerHTML='<b style="color:#111;">'+dannySel.length+' client'+(dannySel.length>1?'s':'')+'</b> · '+colis+' colis';
+  }
+}
+
 function _frCarte(c){
   var st=FR_STATUTS[c.statut]||FR_STATUTS.attente;
   var lieu='';
@@ -2786,9 +2843,17 @@ function _frCarte(c){
   else lieu='<span class="badge '+st.badge+'">'+st.lib+'</span>';
   var j=_joursDepuis(c.creeTs);
   var vieux=(c.statut==='attente' && j>=14);
-  return '<div onclick="ouvrirFicheFrance(\''+c._id+'\')" style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);cursor:pointer;">'
+  var sel=_selectionPossible();
+  var coche=(dannySel.indexOf(c._id)>=0);
+  var act = sel ? 'toggleSelAdmin(\''+c._id+'\')' : 'ouvrirFicheFrance(\''+c._id+'\')';
+  var cadre = sel&&coche ? 'border:1.5px solid #009A44;background:#f2fbf5;' : 'border:1.5px solid var(--border);background:#fff;';
+  var boite = sel
+    ? '<div style="width:21px;height:21px;border-radius:6px;border:2px solid '+(coche?'#009A44':'#ccc')+';background:'+(coche?'#009A44':'#fff')+';color:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;margin-right:9px;">'+(coche?'✓':'')+'</div>'
+    : '';
+  return '<div onclick="'+act+'" style="'+cadre+'border-radius:var(--radius);padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);cursor:pointer;">'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
-    +   '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div>'+lieu+'</div>'
+    +   '<div style="display:flex;align-items:center;flex:1;min-width:0;">'+boite
+    +   '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div></div>'+lieu+'</div>'
     + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+(c.cp?(' · '+c.cp+' '+(c.ville||'')):'')+'</div>'
     + '<div style="font-size:11.5px;color:#555;margin-top:5px;"><span style="font-family:ui-monospace,monospace;">'+(c.ref||'')+'</span> · 📦 '+(c.nb||1)+' colis</div>'
     + '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)
@@ -3243,7 +3308,8 @@ function _renderOuverturePoste(to){
    + '<div style="background:#fff;border:2.5px solid #1a237e;border-radius:var(--radius);padding:13px 14px;box-shadow:var(--shadow);">'
    +   '<div style="font-size:15px;font-weight:800;color:#1a237e;">'+(to.region||'')+'</div>'
    +   '<div style="font-size:13.5px;font-weight:700;margin-top:3px;">'+(to.dateLib||'')+'</div>'
-   +   '<div style="font-size:12px;color:var(--text3);margin-top:5px;line-height:1.5;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis<br>Préparée par '+(to.creePar||'Danny')+'</div>'
+   +   '<div style="font-size:12px;color:var(--text3);margin-top:5px;line-height:1.5;">'+n+' client'+(n>1?'s':'')+' · '+colis+' colis'
+   +     (_auteurPourPartenaire(to.creePar)?('<br>Préparée par '+_auteurPourPartenaire(to.creePar)):'')+'</div>'
    + '</div>'
    + '<div class="slabel">Les '+n+' arrêt'+(n>1?'s':'')+'</div>'
    + '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:6px 14px 10px;box-shadow:var(--shadow);">'+_listeAdresses(to)+'</div>'
