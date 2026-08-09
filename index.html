@@ -450,6 +450,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="content" id="po-content" style="background:#F2F3F5;"></div>
   <div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
     <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" id="po-btn" onclick="demarrerTournee()">D&#233;marrer la tourn&#233;e</button>
+    <button class="btn btn-gray" style="margin-top:8px;" onclick="retourChoixTournee()">&#8592; Choisir une autre tourn&#233;e</button>
   </div>
 </div>
 
@@ -473,6 +474,9 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   <div class="content" id="pt-content" style="background:#F2F3F5;"></div>
   <div id="pt-barre" style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;display:none;">
     <button class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="ouvrirDepot()">&#128205; D&#233;clarer le d&#233;p&#244;t</button>
+  </div>
+  <div id="pt-rendre" style="background:#fff;border-top:1px solid var(--border);padding:8px 14px 14px;flex-shrink:0;">
+    <button class="btn btn-gray" style="margin:0;" onclick="rendreTournee()">&#8617; Changer de tourn&#233;e</button>
   </div>
 </div>
 
@@ -1363,8 +1367,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.4.6';
-var APP_UPDATE = '09/08/2026 à 09:00';
+var APP_VERSION = 'v3.4.7';
+var APP_UPDATE = '09/08/2026 à 09:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
