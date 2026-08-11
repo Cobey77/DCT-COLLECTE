@@ -1409,8 +1409,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.14.3';
-var APP_UPDATE = '09/08/2026 à 23:30';
+var APP_VERSION = 'v3.15.0';
+var APP_UPDATE = '10/08/2026 à 00:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2466,7 +2466,9 @@ function _renderCreationTournee(){
    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;font-size:12px;"><span style="color:#888;">Confirmations</span>'
    + '<span class="badge '+(manquants?'badge-orange':'badge-green')+'">'+(dannySel.length-manquants)+' sur '+dannySel.length+'</span></div></div>';
 
-  h+='<div class="slabel">'+dannySel.length+' client'+(dannySel.length>1?'s':'')+'</div>';
+  var _colisSel=0; dannySel.forEach(function(id){ var _c=(franceData.clients||{})[id]; if(_c) _colisSel+=(_c.nb||1); });
+  h+='<div class="slabel"><span>'+dannySel.length+' client'+(dannySel.length>1?'s':'')+' · '+_colisSel+' colis</span>'
+   +(_montantsVisibles()?('<span style="color:#006b2d;">'+_totalPrix(dannySel)+' €</span>'):'')+'</div>';
   dannySel.forEach(function(id){
     var c=(franceData.clients||{})[id]; if(!c) return;
     var ok=_dtConfirmes.indexOf(id)>=0;
@@ -2766,8 +2768,10 @@ function renderFrance(){
 
   liste.sort(function(a,b){ return (a.creeTs||0)-(b.creeTs||0); });
 
-  html+='<div class="slabel">'+FR_STATUTS[franceFiltre==='planifie'?'planifie':(franceFiltre==='chartres'||franceFiltre==='mitry'?'ramasse':'attente')].lib
-      + ' · '+liste.length+' client'+(liste.length>1?'s':'')+'</div>';
+  var _lib=FR_STATUTS[franceFiltre==='planifie'?'planifie':(franceFiltre==='chartres'||franceFiltre==='mitry'?'ramasse':'attente')].lib;
+  var _tot=_totalPrix(liste.map(function(x){ return x._id; }));
+  html+='<div class="slabel"><span>'+_lib+' · '+liste.length+' client'+(liste.length>1?'s':'')+'</span>'
+      + (_montantsVisibles()&&_tot?('<span style="color:#006b2d;">'+_tot+' €</span>'):'')+'</div>';
   html+= liste.length ? liste.map(_frCarte).join('')
        : _frVide(franceFiltre==='attente'?'Aucun client en attente.<br>Inscrivez le premier avec le bouton en bas.':'Aucun client ici pour le moment.');
   box.innerHTML=html;
@@ -2846,6 +2850,18 @@ function _auteurPourPartenaire(nom){
 function _estAdmin(){ return !!(currentUser && currentUser.admin); }
 // Tout le monde chez Dakar City gère le ramassage : administrateurs
 // et collaborateurs ont exactement les mêmes droits sur ce module.
+// Somme des montants d'une liste de clients
+function _totalPrix(ids){
+  var t=0;
+  (ids||[]).forEach(function(id){
+    var c=(franceData.clients||{})[id];
+    if(c) t+=(c.prix||0);
+  });
+  return t;
+}
+// Les montants ne s'affichent que côté Dakar City
+function _montantsVisibles(){ return _peutGererFrance(); }
+
 function _peutGererFrance(){
   if(_vueAdmin) return false;
   return !!(currentUser && !currentUser.societe);
@@ -2868,7 +2884,8 @@ function _majBarreFrance(){
     var colis=0;
     dannySel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
     var i=document.getElementById('fr-sel-info');
-    if(i) i.innerHTML='<b style="color:#111;">'+dannySel.length+' client'+(dannySel.length>1?'s':'')+'</b> · '+colis+' colis';
+    if(i) i.innerHTML='<b style="color:#111;">'+dannySel.length+' client'+(dannySel.length>1?'s':'')+'</b> · '+colis+' colis'
+        +(_montantsVisibles()?(' · <b style="color:#006b2d;">'+_totalPrix(dannySel)+' €</b>'):'');
   }
 }
 
@@ -2893,7 +2910,8 @@ function _frCarte(c){
     +   '<div style="display:flex;align-items:center;flex:1;min-width:0;">'+boite
     +   '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div></div>'+lieu+'</div>'
     + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+(c.cp?(' · '+c.cp+' '+(c.ville||'')):'')+'</div>'
-    + '<div style="font-size:11.5px;color:#555;margin-top:5px;"><span style="font-family:ui-monospace,monospace;">'+(c.ref||'')+'</span> · 📦 '+(c.nb||1)+' colis</div>'
+    + '<div style="font-size:11.5px;color:#555;margin-top:5px;"><span style="font-family:ui-monospace,monospace;">'+(c.ref||'')+'</span> · 📦 '+(c.nb||1)+' colis'
+    +   (_montantsVisibles()?(' · <b style="color:#006b2d;">'+(c.prix||0)+' €</b>'):'')+'</div>'
     + '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)
     +   ' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></div>'
     + '</div>';
@@ -2929,6 +2947,7 @@ function _carteTournee(to, cliquable){
     +   '<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:5px;">'
     +     '<div style="font-size:12px;color:var(--text3);"><b style="color:var(--text);">'+n+'</b> client'+(n!==1?'s':'')+'</div>'
     +     '<div style="font-size:12px;color:var(--text3);"><b style="color:var(--text);">'+colis+'</b> colis</div>'
+    +     (_montantsVisibles()?('<div style="font-size:12px;color:var(--text3);"><b style="color:#006b2d;">'+_totalPrix(to.clients||[])+' €</b></div>'):'')
     +     (to.depts?'<div style="font-size:12px;color:var(--text3);">'+to.depts+'</div>':'')
     +   '</div>'
     +   (to.chauffeur
@@ -8605,13 +8624,21 @@ function _longueurTrace(ids){
 
 var _carteFrFleches=[];
 
+// Angle d'affichage d'une flèche allant de a vers b.
+// Le glyphe pointe vers la droite au repos. À l'écran, x suit la
+// longitude et y descend quand la latitude monte : la rotation CSS
+// est donc l'opposée de l'angle mathématique.
+function _capFleche(a, b){
+  var theta = Math.atan2(b[0]-a[0], b[1]-a[1]) * 180/Math.PI; // 0 = est, 90 = nord
+  return -theta;                                             // sens horaire du CSS
+}
+
 // Une flèche au milieu de chaque segment, orientée dans le sens du trajet
 function _poserFleches(pts, couleur){
   for(var i=1;i<pts.length;i++){
     var a=pts[i-1], b=pts[i];
     var mid=[(a[0]+b[0])/2, (a[1]+b[1])/2];
-    var angle=Math.atan2(b[1]-a[1], b[0]-a[0])*180/Math.PI;
-    var html='<div style="transform:rotate('+(90-angle)+'deg);font-size:17px;line-height:1;color:'+couleur
+    var html='<div style="transform:rotate('+_capFleche(a,b)+'deg);font-size:17px;line-height:1;color:'+couleur
       +';text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff;font-weight:900;">&#10148;</div>';
     try{
       _carteFrFleches.push(
@@ -8750,6 +8777,7 @@ function _majBarreCarteFr(){
     var km=_longueurTrace(_carteSelFr);
     var i=document.getElementById('cfr-sel-info');
     if(i) i.innerHTML='<b style="color:#111;">'+_carteSelFr.length+' client'+(_carteSelFr.length>1?'s':'')+'</b> · '+colis+' colis'
+        +(_montantsVisibles()?(' · <b style="color:#006b2d;">'+_totalPrix(_carteSelFr)+' €</b>'):'')
         +(km?(' · ~'+km+' km'):'');
   }
 }
@@ -9051,7 +9079,9 @@ function _htmlToutesTournees(){
                 : ('<span style="font-size:11px;padding:3px 10px;border-radius:20px;font-weight:700;background:'+pc.bg+';color:'+pc.color+';border:1.5px solid '+pc.bar+';">'+lab+'</span>'))
      +     _crayonTournee(to)+'</div></div>'
      + '<div style="font-size:12.5px;font-weight:600;margin-top:4px;">'+(to.dateLib||'')+'</div>'
-     + '<div style="font-size:12px;color:#888;margin-top:3px;">'+n+' client'+(n>1?'s':'')+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')+' · '+(to.chauffeur||'pas encore prise')+'</div>'
+     + '<div style="font-size:12px;color:#888;margin-top:3px;">'+n+' client'+(n>1?'s':'')+(ram?(' · '+ram+' ramassé'+(ram>1?'s':'')):'')
+     +   (_montantsVisibles()?(' · <b style="color:#006b2d;">'+_totalPrix(to.clients||[])+' €</b>'):'')
+     +   ' · '+(to.chauffeur||'pas encore prise')+'</div>'
      + '<button class="btn btn-gray" style="margin-top:10px;background:#fde0e0;color:#992020;border:1.5px solid #c0392b;" onclick="supprimerTournee(\''+to.id+'\')">🗑️ Supprimer</button>'
      + '</div>';
   });
