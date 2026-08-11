@@ -346,6 +346,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     </div>
     <button id="fr-btn-tournee" class="btn" style="margin:0;background:#1a237e;border:2.5px solid #0d1444;color:#fff;" onclick="ouvrirCreationTournee()">Cr&#233;er une tourn&#233;e</button>
     <button id="fr-btn-partis" class="btn btn-green" style="margin:0;display:none;" onclick="marquerPartis()">&#9992; D&#233;clarer partis pour Dakar</button>
+    <button id="fr-btn-suppr" class="btn" style="margin:0;display:none;background:#fde0e0;color:#992020;border:1.5px solid #c0392b;" onclick="supprimerHistoriqueSel()">&#128465;&#65039; Supprimer les fiches choisies</button>
   </div>
   <div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
     <button class="btn btn-green" style="margin:0;" onclick="ouvrirAjoutFrance()">+ Inscrire un client</button>
@@ -1412,8 +1413,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.18.2';
-var APP_UPDATE = '11/08/2026 à 11:05';
+var APP_VERSION = 'v3.19.0';
+var APP_UPDATE = '11/08/2026 à 12:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2781,7 +2782,7 @@ function renderFrance(){
 
   liste.sort(function(a,b){ return (a.creeTs||0)-(b.creeTs||0); });
 
-  if(_selectionDepart() && liste.length){
+  if((_selectionDepart()||_selectionSuppression()) && liste.length){
     var tout=(dannySel.length>=liste.length);
     html+='<div onclick="_toutCocherDepart()" style="text-align:right;font-size:12px;font-weight:700;'
        +  'color:#006b2d;cursor:pointer;margin:2px 2px 6px;">'+(tout?'Tout décocher':'Tout cocher')+'</div>';
@@ -2792,7 +2793,12 @@ function renderFrance(){
   var _tot=_totalPrix(liste.map(function(x){ return x._id; }));
   html+='<div class="slabel"><span>'+_lib+' · '+liste.length+' client'+(liste.length>1?'s':'')+'</span>'
       + (_montantsVisibles()&&_tot?('<span style="color:#006b2d;">'+_tot+' €</span>'):'')+'</div>';
-  html+= liste.length ? liste.map(_frCarte).join('')
+  var _finHtml = (franceFiltre==='historique' && _peutGererFrance() && liste.length)
+    ? ('<div onclick="viderHistorique()" style="text-align:center;background:#fff;border:1.5px solid #c0392b;'
+      +'color:#992020;border-radius:var(--radius);padding:12px;font-size:12.5px;font-weight:800;'
+      +'cursor:pointer;margin:14px 0 6px;">🗑️ Vider tout l\'historique · '+liste.length+' fiche'+(liste.length>1?'s':'')+'</div>')
+    : '';
+  html+= liste.length ? (liste.map(_frCarte).join('')+_finHtml)
        : _frVide(franceFiltre==='attente'?'Aucun client en attente.<br>Inscrivez le premier avec le bouton en bas.':'Aucun client ici pour le moment.');
   box.innerHTML=html;
   _majBarreFrance();
@@ -2919,6 +2925,50 @@ function marquerPartis(){
   });
 }
 
+// Ménage dans les dossiers clos. Un dossier parti pour Dakar n'a plus
+// d'utilité au quotidien : on le retire pour de bon, jamais autre chose.
+function _supprimerFiches(ids, libelle){
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  var maj={};
+  ids.forEach(function(id){ maj['clients/'+id]=null; });
+  db.ref('france').update(maj).then(function(){
+    dannySel=[];
+    showToastNew('🗑️ '+ids.length+' fiche'+(ids.length>1?'s':'')+' supprimée'+(ids.length>1?'s':''));
+    _activiteFrance('🗑️', 'a supprimé <strong>'+ids.length+' fiche'+(ids.length>1?'s':'')+'</strong> '+libelle);
+    renderFrance();
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
+  });
+}
+
+function _fichesHistorique(){
+  var out=[];
+  Object.keys(franceData.clients||{}).forEach(function(k){
+    var c=franceData.clients[k];
+    if(c && c.statut==='parti') out.push(k);
+  });
+  return out;
+}
+
+function supprimerHistoriqueSel(){
+  if(!_selectionSuppression()) return;
+  var clos=_fichesHistorique();
+  var ids=dannySel.filter(function(id){ return clos.indexOf(id)>=0; });
+  if(!ids.length){ showToastNew('⚠️ Aucune fiche sélectionnée.'); return; }
+  if(!confirm('Supprimer '+ids.length+' fiche'+(ids.length>1?'s':'')+' définitivement ?\n\n'
+    +'Ces clients disparaîtront de l\'application. Cette action est irréversible.')) return;
+  _supprimerFiches(ids, 'de l\'historique');
+}
+
+function viderHistorique(){
+  if(!_peutGererFrance()) return;
+  var ids=_fichesHistorique();
+  if(!ids.length){ showToastNew('⚠️ L\'historique est déjà vide.'); return; }
+  if(!confirm('Vider tout l\'historique ?\n\n'+ids.length+' fiche'+(ids.length>1?'s':'')
+    +' seront supprimées définitivement. Cette action est irréversible.')) return;
+  _supprimerFiches(ids, 'en vidant l\'historique');
+}
+
 // Somme des montants d'une liste de clients
 function _totalPrix(ids){
   var t=0;
@@ -2937,10 +2987,12 @@ function _peutGererFrance(){
 }
 function _selectionPossible(){
   if(!_peutGererFrance() || franceTab!=='suivi') return false;
-  return franceFiltre==='attente' || franceFiltre==='mitry';
+  return franceFiltre==='attente' || franceFiltre==='mitry' || franceFiltre==='historique';
 }
 // Vrai quand la sélection sert à déclarer un départ, pas à monter une tournée.
 function _selectionDepart(){ return _selectionPossible() && franceFiltre==='mitry'; }
+// Vrai quand elle sert à faire le ménage dans les dossiers clos.
+function _selectionSuppression(){ return _selectionPossible() && franceFiltre==='historique'; }
 
 function toggleSelAdmin(id){
   var i=dannySel.indexOf(id);
@@ -2962,9 +3014,10 @@ function _majBarreFrance(){
   if(!b) return;
   var actif=_selectionPossible() && dannySel.length>0;
   b.style.display = actif ? 'block' : 'none';
-  var dep=_selectionDepart();
-  var bt=document.getElementById('fr-btn-tournee'); if(bt) bt.style.display = dep?'none':'block';
+  var dep=_selectionDepart(), sup=_selectionSuppression();
+  var bt=document.getElementById('fr-btn-tournee'); if(bt) bt.style.display = (dep||sup)?'none':'block';
   var bp=document.getElementById('fr-btn-partis');  if(bp) bp.style.display = dep?'block':'none';
+  var bs=document.getElementById('fr-btn-suppr');   if(bs) bs.style.display = sup?'block':'none';
   if(actif){
     var colis=0;
     dannySel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) colis+=(c.nb||1); });
