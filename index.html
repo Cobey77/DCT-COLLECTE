@@ -1412,8 +1412,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.18.1';
-var APP_UPDATE = '11/08/2026 à 10:15';
+var APP_VERSION = 'v3.18.2';
+var APP_UPDATE = '11/08/2026 à 11:05';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2574,7 +2574,12 @@ function _htmlTourneesDanny(){
   var h='';
   if(g.enCours.length){
     h+='<div class="slabel" style="margin-top:2px;">En cours</div>';
-    g.enCours.forEach(function(to){ h+=_carteTournee(to,true); });
+    g.enCours.forEach(function(to){
+      h+=_carteTournee(to,true)
+       + '<div onclick="cloturerPourChauffeur(\''+to.id+'\')" style="text-align:center;background:#fff;'
+       +   'border:1.5px solid var(--border);color:#555;border-radius:10px;padding:9px;font-size:12px;'
+       +   'font-weight:700;cursor:pointer;margin:-4px 0 12px;">🏁 Clôturer et libérer le poste</div>';
+    });
   }
   if(g.aPrendre.length){
     h+='<div class="slabel">À venir</div>';
@@ -3954,23 +3959,55 @@ function renderFinTournee(){
 
 function fermerPoste(){
   if(_bloqueSiVueAdmin()) return;
-  var to=_tourneeCourante();
   var p=currentUser||{};
-  if(!db || !to) return;
-  if(!confirm('Fermer le poste ?\n\nTa tournée sera archivée et tu ne pourras plus la modifier.')) return;
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  // La tournée peut manquer si l'application a perdu le fil.
+  // Le poste doit se libérer quand même : sinon la place reste bloquée.
+  var to=_tourneeCourante() || (p.role==='poste' ? _tourneeDuPoste(p.id) : null);
+  if(!confirm(to
+      ? 'Fermer le poste ?\n\nTa tournée sera archivée et tu ne pourras plus la modifier.'
+      : 'Fermer le poste ?\n\nLa place redeviendra disponible.')) return;
   var maj={};
-  maj['tournees/'+to.id+'/statut']='terminee';
-  maj['tournees/'+to.id+'/finTs']=Date.now();
+  if(to){
+    maj['tournees/'+to.id+'/statut']='terminee';
+    maj['tournees/'+to.id+'/finTs']=Date.now();
+  }
   if(p.role==='poste'){
     maj['postes/'+p.id+'/libre']=true;
     maj['postes/'+p.id+'/chauffeur']='';
     maj['postes/'+p.id+'/tourneeId']='';
   }
+  if(!Object.keys(maj).length){ showToastNew('⚠️ Aucun poste à fermer.'); return; }
   db.ref('france').update(maj).then(function(){
-    showToastNew('✅ Tournée archivée');
-    _activiteFrance('🏁', 'a terminé la tournée <strong>'+_titreTournee(to)+'</strong>');
+    showToastNew(to?'✅ Tournée archivée':'✅ Poste libéré');
+    if(to) _activiteFrance('🏁', 'a terminé la tournée <strong>'+_titreTournee(to)+'</strong>');
     _posteTourneeId='';
     deconnexionPartenaire();
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+// Danny referme une tournée qu'un chauffeur a laissée ouverte —
+// il rentre le soir, il oublie, et la place reste prise pour tout le monde.
+function cloturerPourChauffeur(tid){
+  if(_bloqueSiVueAdmin()) return;
+  var to=(franceData.tournees||{})[tid];
+  if(!to || !db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  if(to.statut!=='en_cours'){ showToastNew('⚠️ Cette tournée n\'est pas en cours.'); return; }
+  var qui=to.chauffeur||'le chauffeur';
+  if(!confirm('Clôturer la tournée de '+qui+' ?\n\nElle sera archivée en l\'état et le poste redeviendra libre.')) return;
+  var maj={};
+  maj['tournees/'+tid+'/statut']='terminee';
+  maj['tournees/'+tid+'/finTs']=Date.now();
+  maj['tournees/'+tid+'/closePar']=(currentUser||{}).name||'';
+  if(to.posteId){
+    maj['postes/'+to.posteId+'/libre']=true;
+    maj['postes/'+to.posteId+'/chauffeur']='';
+    maj['postes/'+to.posteId+'/tourneeId']='';
+  }
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ Tournée clôturée · poste libéré');
+    _activiteFrance('🏁', 'a clôturé la tournée <strong>'+_titreTournee(to)+'</strong> à la place de '+qui);
+    renderDanny(); renderFrance();
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
 
