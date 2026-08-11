@@ -782,9 +782,10 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div class="info-banner">
       📅 <span id="add-collecte-label">Collecte en cours</span> · Ajouté par <strong id="add-by" style="margin-left:4px;">Issyaka</strong>
     </div>
+    <div class="fg"><label class="fl">Civilité</label><div id="f-civ" style="display:flex;gap:6px;"></div></div>
     <div class="form-row">
-      <div class="fg"><label class="fl">Prénom</label><input class="fi" id="f-prenom" placeholder="Fatou" oninput="_showSuggestionsCombo()"></div>
-      <div class="fg"><label class="fl">Nom</label><input class="fi" id="f-nom" placeholder="Diallo" oninput="_showSuggestionsCombo()"></div>
+      <div class="fg" id="f-bloc-prenom"><label class="fl">Prénom</label><input class="fi" id="f-prenom" placeholder="Fatou" oninput="_showSuggestionsCombo()"></div>
+      <div class="fg"><label class="fl" id="f-lab-nom">Nom</label><input class="fi" id="f-nom" placeholder="Diallo" oninput="_showSuggestionsCombo()"></div>
     </div>
     <div class="suggestions" id="suggestions"></div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="f-tel" placeholder="06 00 00 00 00" type="tel" oninput="_showSuggestionsCombo()"></div>
@@ -818,9 +819,10 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div><div id="client-av-name" style="font-size:16px;font-weight:800;color:var(--text);">Client</div><div id="client-av-by" style="font-size:12px;font-weight:700;">Ajouté par</div></div>
     </div>
     <div id="client-locked-banner" style="display:none;" class="warn-banner">🔒 Collecte terminée — données en lecture seule</div>
+    <div class="fg"><label class="fl">Civilité</label><div id="e-civ" style="display:flex;gap:6px;"></div></div>
     <div class="form-row">
-      <div class="fg"><label class="fl">Prénom</label><input class="fi" id="e-prenom"></div>
-      <div class="fg"><label class="fl">Nom</label><input class="fi" id="e-nom"></div>
+      <div class="fg" id="e-bloc-prenom"><label class="fl">Prénom</label><input class="fi" id="e-prenom"></div>
+      <div class="fg"><label class="fl" id="e-lab-nom">Nom</label><input class="fi" id="e-nom"></div>
     </div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="e-tel" type="tel"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="e-adresse"></div>
@@ -922,9 +924,10 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <button onclick="closeModal('modal-contact-edit')" style="background:none;border:none;font-size:22px;cursor:pointer;">✕</button>
   </div>
   <input type="hidden" id="ce-key">
+  <div class="fg"><label class="fl">Civilité</label><div id="ce-civ" style="display:flex;gap:6px;"></div></div>
   <div class="form-row">
-    <div class="fg"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div>
-    <div class="fg"><label class="fl">Nom</label><input class="fi" id="ce-nom"></div>
+    <div class="fg" id="ce-bloc-prenom"><label class="fl">Prénom</label><input class="fi" id="ce-prenom"></div>
+    <div class="fg"><label class="fl" id="ce-lab-nom">Nom</label><input class="fi" id="ce-nom"></div>
   </div>
   <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div>
   <div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div>
@@ -1415,8 +1418,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.21.0';
-var APP_UPDATE = '11/08/2026 à 15:40';
+var APP_VERSION = 'v3.22.0';
+var APP_UPDATE = '11/08/2026 à 17:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3015,6 +3018,50 @@ function _renderCivilite(){
   if(soc){ var pi=document.getElementById('fa-prenom'); if(pi) pi.value=''; }
 }
 
+// ═══════════ CIVILITÉ CÔTÉ DAKAR — v3.22.0 ═══════════
+// Le nom affiché partout est déjà recalculé à l'enregistrement :
+// en y intégrant la civilité, elle apparaît sur tous les écrans
+// sans toucher au reste de l'application.
+var _civDct = { f:'', e:'', ce:'' };
+
+function _composeNom(civ, prenom, nom){
+  var base=((prenom||'')+' '+(nom||'')).trim().replace(/\s+/g,' ');
+  if(civ==='Societe') return base ? ('🏢 '+base) : '';
+  if(civ==='M.' || civ==='Mme') return (civ+' '+base).trim();
+  return base;
+}
+
+function setCivDct(pre, v){
+  _civDct[pre] = (_civDct[pre]===v) ? '' : v;
+  _renderCivDct(pre);
+}
+
+function _renderCivDct(pre){
+  var box=document.getElementById(pre+'-civ');
+  if(box){
+    box.innerHTML = CIVILITES.map(function(x){
+      var on=(_civDct[pre]===x.v);
+      return '<div onclick="setCivDct(\''+pre+'\',\''+x.v+'\')" style="flex:1;text-align:center;padding:9px 4px;'
+           + 'border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;'
+           + (on ? 'background:#009A44;color:#fff;border:1.5px solid #009A44;'
+                 : 'background:#fff;color:#555;border:1.5px solid var(--border);')
+           + '">'+x.lib+'</div>';
+    }).join('');
+  }
+  var soc=(_civDct[pre]==='Societe');
+  var bp=document.getElementById(pre+'-bloc-prenom'); if(bp) bp.style.display = soc?'none':'block';
+  var ln=document.getElementById(pre+'-lab-nom');     if(ln) ln.textContent = soc?'Nom de la société':'Nom';
+  if(soc){ var pi=document.getElementById(pre+'-prenom'); if(pi) pi.value=''; }
+}
+
+// Répartit un nom brut dans les deux cases : un mot seul est un nom
+// de famille, pas un prénom.
+function _repartirNom(brut){
+  var mots=String(brut||'').trim().split(/\s+/).filter(Boolean);
+  if(mots.length<=1) return { prenom:'', nom:mots[0]||'' };
+  return { prenom:mots[0], nom:mots.slice(1).join(' ') };
+}
+
 // ═══════════ REPRISE DES ANCIENNES FICHES — v3.21.0 ═══════════
 // Avant la civilité, beaucoup de noms ont été saisis « Mr Diallo »
 // ou « Madame Sarr ». On repère le mot en tête, on le déplace dans
@@ -3041,14 +3088,37 @@ function _civiliteDansNom(nom){
 
 function _fichesACorriger(){
   var out=[];
+  // France & Europe : un seul champ nom
   Object.keys(franceData.clients||{}).forEach(function(id){
     var c=franceData.clients[id]; if(!c) return;
     var r=_civiliteDansNom(c.nom);
     if(!r) return;
-    out.push({ id:id, avant:c.nom||'', civilite:r.civilite, apres:r.reste,
-               deja:(c.civilite||'') });
+    out.push({ src:'france', id:id, avant:c.nom||'', civilite:r.civilite, apres:r.reste });
+  });
+  // Collectes de Dakar : prénom et nom séparés
+  Object.keys(clientsParCollecte||{}).forEach(function(colId){
+    var cls=clientsParCollecte[colId]||{};
+    Object.keys(cls).forEach(function(id){
+      var c=cls[id]; if(!c) return;
+      var brut=((c.prenom||'')+' '+(c.nom||'')).trim();
+      var r=_civiliteDansNom(brut);
+      if(!r) return;
+      out.push({ src:'dct', col:colId, id:id, avant:brut, civilite:r.civilite, apres:r.reste });
+    });
+  });
+  // Carnet de contacts
+  Object.keys(window.dctContacts||{}).forEach(function(k){
+    var c=window.dctContacts[k]; if(!c) return;
+    var brut=((c.prenom||'')+' '+(c.nom||'')).trim();
+    var r=_civiliteDansNom(brut);
+    if(!r) return;
+    out.push({ src:'carnet', id:k, avant:brut, civilite:r.civilite, apres:r.reste });
   });
   return out;
+}
+
+function _libSource(s){
+  return s==='france' ? 'France & Europe' : (s==='carnet' ? 'Carnet de contacts' : 'Collectes de Dakar');
 }
 
 function _htmlCorrectionCivilites(){
@@ -3058,14 +3128,17 @@ function _htmlCorrectionCivilites(){
     return h + '<div style="background:#d4f0e0;border:1.5px solid #009A44;border-radius:14px;padding:14px;'
       + 'font-size:13px;color:#006b2d;font-weight:600;margin-bottom:22px;">✅ Aucune fiche à reprendre.</div>';
   }
+  var _src={}; l.forEach(function(x){ _src[x.src]=(_src[x.src]||0)+1; });
+  var _det=Object.keys(_src).map(function(k){ return _src[k]+' · '+_libSource(k); }).join(' — ');
   h+='<div style="font-size:12px;color:#888;margin-bottom:12px;">'+l.length+' fiche'+(l.length>1?'s ont':' a')
-   + ' la civilité écrite dans le nom. Elle sera déplacée dans sa propre case.</div>';
+   + ' la civilité écrite dans le nom. Elle sera déplacée dans sa propre case.<br>'+_det+'</div>';
   l.slice(0,40).forEach(function(x){
     var lib=(x.civilite==='Societe'?'🏢':x.civilite);
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid #1a1a2e;'
       +'border-radius:14px;padding:11px 13px;margin-bottom:8px;box-shadow:var(--shadow);">'
       +'<div style="font-size:12px;color:#992020;text-decoration:line-through;">'+x.avant+'</div>'
       +'<div style="font-size:13.5px;font-weight:700;color:#006b2d;margin-top:3px;">'+lib+' '+x.apres+'</div>'
+      +'<div style="font-size:10.5px;color:#999;margin-top:4px;">'+_libSource(x.src)+'</div>'
       +'</div>';
   });
   if(l.length>40) h+='<div style="font-size:12px;color:#888;margin-bottom:8px;">… et '+(l.length-40)+' autre'+((l.length-40)>1?'s':'')+'.</div>';
@@ -3081,23 +3154,42 @@ function corrigerCivilites(){
   if(!confirm('Corriger '+l.length+' fiche'+(l.length>1?'s':'')+' ?\n\n'
     +'La civilité sort du nom et prend sa place dans la case dédiée. '
     +'Rien d\'autre n\'est modifié.')) return;
-  var qui=(currentUser||{}).name||'', now=Date.now(), maj={};
+  var qui=(currentUser||{}).name||'', now=Date.now(), maj={}, nDct=0;
   l.forEach(function(x){
-    var c=franceData.clients[x.id]||{};
-    var hist=(c.hist||[]).slice();
-    hist.push({q:qui, a:'a corrigé la civilité — « '+x.avant+' »', ts:now});
-    maj['clients/'+x.id+'/civilite']=x.civilite;
-    maj['clients/'+x.id+'/nom']=x.apres;
-    maj['clients/'+x.id+'/hist']=hist;
+    if(x.src==='france'){
+      var c=franceData.clients[x.id]||{};
+      var hist=(c.hist||[]).slice();
+      hist.push({q:qui, a:'a corrigé la civilité — « '+x.avant+' »', ts:now});
+      maj['clients/'+x.id+'/civilite']=x.civilite;
+      maj['clients/'+x.id+'/nom']=x.apres;
+      maj['clients/'+x.id+'/hist']=hist;
+      return;
+    }
+    // Une société ne se coupe pas en deux : tout va dans le nom.
+    var d = (x.civilite==='Societe') ? {prenom:'', nom:x.apres} : _repartirNom(x.apres);
+    var cible = (x.src==='carnet')
+      ? (window.dctContacts||{})[x.id]
+      : ((clientsParCollecte[x.col]||{})[x.id]);
+    if(!cible) return;
+    cible.civilite=x.civilite;
+    cible.prenom=d.prenom;
+    cible.nom=d.nom;
+    cible.name=_composeNom(x.civilite, d.prenom, d.nom);
+    nDct++;
   });
-  db.ref('france').update(maj).then(function(){
+  var _fin=function(){
     showToastNew('✅ '+l.length+' fiche'+(l.length>1?'s corrigées':' corrigée'));
     _activiteFrance('👤', 'a corrigé la civilité de <strong>'+l.length+' fiche'+(l.length>1?'s':'')+'</strong>');
     try{ renderAdminSecurite(); }catch(e){}
     try{ renderFrance(); }catch(e){}
-  }).catch(function(e){
-    showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
-  });
+    try{ renderCollecteContent(); }catch(e){}
+  };
+  if(nDct){ try{ sauvegarder(); }catch(e){} }
+  if(Object.keys(maj).length){
+    db.ref('france').update(maj).then(_fin).catch(function(e){
+      showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
+    });
+  } else { _fin(); }
 }
 
 // Somme des montants d'une liste de clients
@@ -4925,14 +5017,14 @@ function saveClientConfirme(){
   var id='C'+(Date.now()%999999);
   var collab=COLLABS.find(function(c){return c.name===currentUser.name;})||COLLABS[0];
   if(!clientsParCollecte[currentCollecteId])clientsParCollecte[currentCollecteId]={};
-  clientsParCollecte[currentCollecteId][id]={name:prenom+' '+nom,prenom:prenom,nom:nom,tel:tel.trim(),adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,colis:colis.trim(),prix:prix,bg:collab.bg,color:collab.color,by:currentUser.name};
+  clientsParCollecte[currentCollecteId][id]={name:_composeNom(_civDct.f,prenom,nom),civilite:_civDct.f,prenom:prenom,nom:nom,tel:tel.trim(),adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,colis:colis.trim(),prix:prix,bg:collab.bg,color:collab.color,by:currentUser.name};
   // Infos sauvegardées séparément dans Firebase
   
   if(!dispatchParCollecte[currentCollecteId])dispatchParCollecte[currentCollecteId]={trucks:{},assigned:{}};
   dispatchParCollecte[currentCollecteId].assigned[id]=null;
   if(!window.dctContacts)window.dctContacts={};
   var ckey=tel?tel.replace(/ /g,''):(prenom+'_'+nom).toLowerCase();
-  window.dctContacts[ckey]={prenom:prenom,nom:nom,name:prenom+' '+nom,tel:tel.trim(),adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,by:currentUser.name};
+  window.dctContacts[ckey]={civilite:_civDct.f,prenom:prenom,nom:nom,name:_composeNom(_civDct.f,prenom,nom),tel:tel.trim(),adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,by:currentUser.name};
   addActivity('➕',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a ajouté <strong>'+prenom+' '+nom+'</strong> — '+colis+' — '+prix+' €',"À l'instant");
   sauvegarder();
   var t2=document.getElementById('toast-add');
@@ -5756,6 +5848,8 @@ function openClientFiche(id,retour){
     var key=fid.replace('e-','');
     el.value = (clientData[key] !== undefined && clientData[key] !== null) ? String(clientData[key]) : '';
   });
+  _civDct.e = clientData.civilite || '';
+  _renderCivDct('e');
   var ds=document.getElementById('delete-sub');if(ds)ds.textContent='Supprimer '+c.name+' ?';
   var locked=isLocked();
   var lb=document.getElementById('client-locked-banner');if(lb)lb.style.display=locked?'flex':'none';
@@ -5785,7 +5879,8 @@ function saveClientEdit(){
 
   var ep = document.getElementById('e-prix');
   newData.prix = ep ? (parseFloat(ep.value)||0) : (clientsParCollecte[colId][id].prix||0);
-  newData.name = (newData.prenom||'')+' '+(newData.nom||'');
+  newData.civilite = _civDct.e;
+  newData.name = _composeNom(_civDct.e, newData.prenom, newData.nom);
   newData.dept = (newData.cp||'').substring(0,2);
 
   // Conserver les champs non éditables
@@ -5837,6 +5932,7 @@ function ouvrirAjoutClient(){
   var lb=document.getElementById('add-collecte-label');if(lb)lb.textContent=c?c.date:'Collecte';
   var ab=document.getElementById('add-by');if(ab){ab.textContent=currentUser.name;ab.style.color=currentUser.color;}
   ['f-prenom','f-nom','f-tel','f-adresse','f-infos','f-ville','f-cp','f-colis','f-prix'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  _civDct.f=''; _renderCivDct('f');
   var sug=document.getElementById('suggestions');if(sug)sug.classList.remove('show');
   goTo('s-add');
 }
@@ -7669,6 +7765,8 @@ function openContactEdit(contactKey){
   
   // Remplir la modal
   document.getElementById('ce-key').value = contactKey;
+  _civDct.ce = c.civilite || '';
+  _renderCivDct('ce');
   document.getElementById('ce-prenom').value = c.prenom||'';
   document.getElementById('ce-nom').value = c.nom||'';
   document.getElementById('ce-tel').value = c.tel||'';
@@ -7781,7 +7879,7 @@ function saveContactEdit(){
   var cp = document.getElementById('ce-cp').value.trim();
   var ville = document.getElementById('ce-ville').value.trim();
   
-  if(!prenom||!nom){ showToastNew('Prénom et nom requis.'); return; }
+  if(!prenom && !nom){ showToastNew('Indiquez au moins un nom.'); return; }
   
   // Vérifier doublon téléphone (sauf le contact lui-même)
   if(tel && window.dctContacts){
@@ -7800,7 +7898,7 @@ function saveContactEdit(){
   var oldContact = window.dctContacts[key] || {};
   var newKey = tel ? tel.replace(/ /g,'') : (prenom+'_'+nom).toLowerCase();
   var updatedContact = {
-    prenom:prenom, nom:nom, name:prenom+' '+nom,
+    civilite:_civDct.ce, prenom:prenom, nom:nom, name:_composeNom(_civDct.ce,prenom,nom),
     tel:tel, adresse:adresse, infos:infos, cp:cp, ville:ville,
     dept:cp.substring(0,2), by:oldContact.by
   };
@@ -7818,9 +7916,10 @@ function saveContactEdit(){
       // Matcher par ancienne clé tel ou nom
       var clientKey = c.tel ? c.tel.replace(/ /g,'') : (c.prenom+'_'+c.nom).toLowerCase();
       if(clientKey === key || c.name === oldContact.name){
+        cls[clientId].civilite = _civDct.ce;
         cls[clientId].prenom = prenom;
         cls[clientId].nom = nom;
-        cls[clientId].name = prenom+' '+nom;
+        cls[clientId].name = _composeNom(_civDct.ce,prenom,nom);
         cls[clientId].tel = tel;
         cls[clientId].adresse = adresse;
         cls[clientId].infos = infos;
