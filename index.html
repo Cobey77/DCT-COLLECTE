@@ -362,9 +362,11 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
   </div>
   <div class="content">
     <div class="info-banner">🇪🇺 Ramassage France &amp; Europe · Inscrit par <strong id="fadd-by" style="margin-left:4px;"></strong></div>
-    <div class="form-row">
-      <div class="fg"><label class="fl">Prénom</label><input class="fi" id="fa-prenom" placeholder="Fatou"></div>
-      <div class="fg"><label class="fl">Nom</label><input class="fi" id="fa-nom" placeholder="Ndiaye"></div>
+    <div class="fg"><label class="fl">Civilité</label>
+      <div id="fa-civ" style="display:flex;gap:6px;"></div></div>
+    <div class="form-row" id="fa-ligne-nom">
+      <div class="fg" id="fa-bloc-prenom"><label class="fl">Prénom</label><input class="fi" id="fa-prenom" placeholder="Fatou"></div>
+      <div class="fg"><label class="fl" id="fa-lab-nom">Nom</label><input class="fi" id="fa-nom" placeholder="Ndiaye"></div>
     </div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="fa-tel" type="tel" placeholder="06 00 00 00 00"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="fa-adresse" placeholder="27 bd du Président Wilson"></div>
@@ -1413,8 +1415,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.19.0';
-var APP_UPDATE = '11/08/2026 à 12:00';
+var APP_VERSION = 'v3.20.0';
+var APP_UPDATE = '11/08/2026 à 14:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2405,7 +2407,7 @@ function _htmlVivierDanny(){
     h+='<div onclick="toggleSelDanny(\''+c._id+'\')" style="background:'+(on?'#f5f6fc':'#fff')+';border:1.5px solid '+(on?'#1a237e':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:9px;display:flex;gap:11px;align-items:flex-start;cursor:pointer;box-shadow:var(--shadow);">'
       +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'#1a237e':'#ccc')+';background:'+(on?'#1a237e':'#fff')+';color:#fff;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">'+(on?'✓':'')+'</div>'
       +'<div style="flex:1;min-width:0;">'
-      +  '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div>'
+      +  '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+_nomAffiche(c)+'</div>'
       +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       +  '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
       +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></div>'
@@ -2481,7 +2483,7 @@ function _renderCreationTournee(){
     var ok=_dtConfirmes.indexOf(id)>=0;
     h+='<div style="background:'+(ok?'#f2fbf5':'#fffbeb')+';border:1.5px solid '+(ok?'#009A44':'#fcd34d')+';border-radius:var(--radius);padding:12px;margin-bottom:9px;">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-      +  '<div style="font-size:14.5px;font-weight:700;">'+(c.nom||'')+'</div>'
+      +  '<div style="font-size:14.5px;font-weight:700;">'+_nomAffiche(c)+'</div>'
       +  '<span class="badge '+(ok?'badge-green':'badge-orange')+'">'+(ok?'✓ Confirmé':'En attente')+'</span></div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis</div>'
@@ -2641,7 +2643,7 @@ function _htmlPoste(){
   (mienne.clients||[]).forEach(function(id){
     var c=(franceData.clients||{})[id]; if(!c) return;
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
-      +'<div style="font-size:14.5px;font-weight:700;">'+(c.nom||'')+'</div>'
+      +'<div style="font-size:14.5px;font-weight:700;">'+_nomAffiche(c)+'</div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis'+'</div>'
       +'</div>';
@@ -2969,6 +2971,50 @@ function viderHistorique(){
   _supprimerFiches(ids, 'en vidant l\'historique');
 }
 
+// ═══════════ CIVILITÉ — v3.20.0 ═══════════
+// Beaucoup de clients sont connus sous « Mme Diallo » sans prénom.
+// La civilité se choisit à part, et les deux cases restent facultatives.
+var CIVILITES = [
+  {v:'M.',      lib:'M.'},
+  {v:'Mme',     lib:'Mme'},
+  {v:'Societe', lib:'Société'}
+];
+var _faCivilite = '';
+
+// Ce qu'on lit à l'écran : « Mme Diallo », « 🏢 Teranga Market », « Awa Diallo ».
+function _nomAffiche(c){
+  c = c || {};
+  var n = c.nom || '';
+  if(c.civilite==='Societe') return n ? ('🏢 '+n) : '🏢';
+  if(c.civilite==='M.' || c.civilite==='Mme') return (c.civilite+' '+n).trim();
+  return n || '—';
+}
+
+function setCivilite(v){
+  _faCivilite = (_faCivilite===v) ? '' : v;
+  _renderCivilite();
+}
+
+function _renderCivilite(){
+  var box=document.getElementById('fa-civ');
+  if(box){
+    box.innerHTML = CIVILITES.map(function(x){
+      var on=(_faCivilite===x.v);
+      return '<div onclick="setCivilite(\''+x.v+'\')" style="flex:1;text-align:center;padding:9px 4px;'
+           + 'border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;'
+           + (on ? 'background:#009A44;color:#fff;border:1.5px solid #009A44;'
+                 : 'background:#fff;color:#555;border:1.5px solid var(--border);')
+           + '">'+x.lib+'</div>';
+    }).join('');
+  }
+  // Une société n'a pas de prénom : la case disparaît, l'autre change de nom.
+  var soc=(_faCivilite==='Societe');
+  var bp=document.getElementById('fa-bloc-prenom'); if(bp) bp.style.display = soc?'none':'block';
+  var ln=document.getElementById('fa-lab-nom');     if(ln) ln.textContent = soc?'Nom de la société':'Nom';
+  var ni=document.getElementById('fa-nom');         if(ni) ni.placeholder = soc?'Teranga Market':'Ndiaye';
+  if(soc){ var pi=document.getElementById('fa-prenom'); if(pi) pi.value=''; }
+}
+
 // Somme des montants d'une liste de clients
 function _totalPrix(ids){
   var t=0;
@@ -3047,7 +3093,7 @@ function _frCarte(c){
   return '<div onclick="'+act+'" style="'+cadre+'border-radius:var(--radius);padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);cursor:pointer;">'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
     +   '<div style="display:flex;align-items:center;flex:1;min-width:0;">'+boite
-    +   '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div></div>'+lieu+'</div>'
+    +   '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+_nomAffiche(c)+'</div></div>'+lieu+'</div>'
     + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+(c.cp?(' · '+c.cp+' '+(c.ville||'')):'')+'</div>'
     + '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'
     +   (_montantsVisibles()?(' · <b style="color:#006b2d;">'+(c.prix||0)+' €</b>'):'')+'</div>'
@@ -3175,9 +3221,23 @@ function modifierClientFrance(){
   if(!c){ showToastNew('⚠️ Fiche introuvable.'); return; }
   _faEditId=id;
   var g=function(k,v){ var e=document.getElementById(k); if(e) e.value=v||''; };
-  var nom=(c.nom||'').trim().split(' ');
-  g('fa-prenom', nom[0]||'');
-  g('fa-nom', nom.slice(1).join(' '));
+  _faCivilite=c.civilite||'';
+  _renderCivilite();
+  if(_faCivilite==='Societe'){
+    g('fa-prenom','');
+    g('fa-nom', c.nom||'');
+  } else {
+    // Un seul mot, c'est un nom de famille — pas un prénom.
+    // Sans ça, « Mme Diallo » revenait avec Diallo dans la case Prénom.
+    var mots=(c.nom||'').trim().split(/\s+/).filter(Boolean);
+    if(mots.length<=1){
+      g('fa-prenom','');
+      g('fa-nom', mots[0]||'');
+    } else {
+      g('fa-prenom', mots[0]);
+      g('fa-nom', mots.slice(1).join(' '));
+    }
+  }
   g('fa-tel', c.tel);
   g('fa-adresse', c.adresse);
   g('fa-infos', c.infos);
@@ -3203,6 +3263,7 @@ function ouvrirAjoutFrance(){
   });
   var nb=document.getElementById('fa-nb'); if(nb) nb.value='1';
   _faPays='FR'; _renderPaysChoix();
+  _faCivilite=''; _renderCivilite();
   var _cp=document.getElementById('fa-cp'); if(_cp) _cp.placeholder='33200';
   var z=document.getElementById('fa-zone');
   if(z){ z.textContent='Zone — saisissez le code postal'; z.style.background='#f0f0f0'; z.style.color='#888'; }
@@ -3261,6 +3322,7 @@ function saveClientFrance(){
   if(_faEditId){ _enregistrerModifFrance(z); return; }
   var id='c'+Date.now();
   var obj={
+    civilite:_faCivilite,
     nom:(prenom+' '+nom).trim(),
     tel:tel,
     adresse:g('fa-adresse'),
@@ -3276,7 +3338,7 @@ function saveClientFrance(){
   };
   var maj={}; maj[id]=obj;
   db.ref('france/clients').update(maj).then(function(){
-    showToastNew('✅ '+obj.ref+' — client inscrit');
+    showToastNew('✅ '+_nomAffiche(obj)+' — client inscrit');
     _activiteFrance('🇪🇺', 'a inscrit <strong>'+obj.nom+'</strong> — '+obj.ville+' · '+obj.region);
     goTo('s-france');
   }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
@@ -3288,6 +3350,7 @@ function _enregistrerModifFrance(z){
   var c=(franceData.clients||{})[id]||{};
   var qui=(currentUser||{}).name||'';
   var nouveau={
+    civilite:_faCivilite,
     nom:(g('fa-prenom')+' '+g('fa-nom')).trim(),
     tel:g('fa-tel'), adresse:g('fa-adresse'), infos:g('fa-infos'),
     cp:g('fa-cp'), ville:g('fa-ville'),
@@ -3298,7 +3361,7 @@ function _enregistrerModifFrance(z){
   };
   // On note ce qui change vraiment, pour l'historique
   var change=[];
-  if(nouveau.nom!==(c.nom||'')) change.push('nom');
+  if(nouveau.nom!==(c.nom||'') || nouveau.civilite!==(c.civilite||'')) change.push('nom');
   if(nouveau.tel!==(c.tel||'')) change.push('téléphone');
   if(nouveau.adresse!==(c.adresse||'')||nouveau.cp!==(c.cp||'')||nouveau.ville!==(c.ville||'')) change.push('adresse');
   if(nouveau.nb!==(c.nb||1)||nouveau.colis!==(c.colis||'')) change.push('colis');
@@ -3331,7 +3394,7 @@ function _renderFicheFrance(){
   var box=document.getElementById('fc-content');
   if(!box) return;
   if(!c){ box.innerHTML=_frVide('Fiche introuvable.'); return; }
-  var e=document.getElementById('fc-nom'); if(e) e.textContent=c.nom||'';
+  var e=document.getElementById('fc-nom'); if(e) e.textContent=_nomAffiche(c);
   e=document.getElementById('fc-lieu');
   if(e){
     e.textContent = c.statut==='parti' ? '✈️ Parti pour Dakar'
@@ -3391,7 +3454,7 @@ function supprimerClientFrance(){
   if(!confirm('Supprimer la fiche de '+(c.nom||'ce client')+' ?')) return;
   db.ref('france/clients/'+franceClientId).remove().then(function(){
     showToastNew('🗑️ Fiche supprimée');
-    _activiteFrance('🗑️', 'a supprimé la fiche de <strong>'+(c.nom||'')+'</strong>');
+    _activiteFrance('🗑️', 'a supprimé la fiche de <strong>'+_nomAffiche(c)+'</strong>');
     goTo('s-france');
   });
 }
@@ -3536,7 +3599,7 @@ function _listeAdresses(to){
     h+='<div style="display:flex;gap:9px;align-items:flex-start;padding:7px 0;'+(i?'border-top:1px dashed #eee;':'')+'">'
      + '<div style="width:20px;height:20px;border-radius:50%;background:#e8eaf6;color:#1a237e;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+(i+1)+'</div>'
      + '<div style="flex:1;min-width:0;">'
-     +   '<div style="font-size:12.5px;font-weight:700;color:var(--text);">'+(c.nom||'')+'</div>'
+     +   '<div style="font-size:12.5px;font-weight:700;color:var(--text);">'+_nomAffiche(c)+'</div>'
      +   '<div style="font-size:11.5px;color:var(--text3);margin-top:2px;line-height:1.4;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
      +   '<div style="font-size:11px;color:#555;margin-top:2px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
      + '</div></div>';
@@ -3729,14 +3792,14 @@ function _carteArret(id, num, to, fait){
     return '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:9px;opacity:.7;">'
       +'<div style="display:flex;align-items:center;gap:9px;">'
       +  '<div style="width:22px;height:22px;border-radius:50%;background:#ccc;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+num+'</div>'
-      +  '<div style="font-size:14.5px;font-weight:700;">'+(c.nom||'')+'</div></div>'
+      +  '<div style="font-size:14.5px;font-weight:700;">'+_nomAffiche(c)+'</div></div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       + bandeau + '</div>';
   }
   return '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:12px;margin-bottom:10px;box-shadow:var(--shadow);">'
     +'<div style="display:flex;align-items:center;gap:9px;">'
     +  '<div style="width:22px;height:22px;border-radius:50%;background:#1a237e;color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;">'+num+'</div>'
-    +  '<div style="font-size:15px;font-weight:700;">'+(c.nom||'')+'</div></div>'
+    +  '<div style="font-size:15px;font-weight:700;">'+_nomAffiche(c)+'</div></div>'
     +'<div style="font-size:12px;color:#555;margin-top:5px;line-height:1.4;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+(c.infos?('<br><i>'+c.infos+'</i>'):'')+'</div>'
     +'<div style="font-size:11.5px;color:var(--text3);margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
     +'<div style="display:flex;gap:7px;margin-top:9px;">'
@@ -3769,7 +3832,7 @@ function marquerRamasse(id){
   maj['clients/'+id+'/ramasseTs']=Date.now();
   maj['clients/'+id+'/hist']=hist;
   db.ref('france').update(maj).then(function(){
-    _activiteFrance('✅', 'a ramassé <strong>'+(c.nom||'')+'</strong>');
+    _activiteFrance('✅', 'a ramassé <strong>'+_nomAffiche(c)+'</strong>');
     renderPosteTournee();
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
@@ -3778,7 +3841,7 @@ function ouvrirMotif(id){
   _motifChoisi='';
   var c=(franceData.clients||{})[id]||{};
   var e=document.getElementById('mm-id'); if(e) e.value=id;
-  e=document.getElementById('mm-client'); if(e) e.textContent=(c.nom||'')+' · '+(c.cp||'')+' '+(c.ville||'');
+  e=document.getElementById('mm-client'); if(e) e.textContent=_nomAffiche(c)+' · '+(c.cp||'')+' '+(c.ville||'');
   _renderMotifs();
   openModal('modal-motif');
 }
@@ -3825,7 +3888,7 @@ function validerMotif(){
     maj['clients/'+id+'/dateLib']='';
   }
   db.ref('france').update(maj).then(function(){
-    _activiteFrance('❌', 'n\'a pas ramassé <strong>'+(c.nom||'')+'</strong> — '+m.lib);
+    _activiteFrance('❌', 'n\'a pas ramassé <strong>'+_nomAffiche(c)+'</strong> — '+m.lib);
     closeModal('modal-motif');
     renderPosteTournee();
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
@@ -3927,7 +3990,7 @@ function _renderDepot(){
       var on=_depotSel.indexOf(id)>=0;
       h+='<div onclick="_toggleDepot(\''+id+'\')" style="background:'+(on?'#f2fbf5':'#fff')+';border:1.5px solid '+(on?'#009A44':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;display:flex;gap:11px;align-items:center;cursor:pointer;">'
         +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'#009A44':'#ccc')+';background:'+(on?'#009A44':'#fff')+';color:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">'+(on?'✓':'')+'</div>'
-        +'<div style="flex:1;"><div style="font-size:14px;font-weight:700;">'+(c.nom||'')+'</div>'
+        +'<div style="flex:1;"><div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
         +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.ville||'')+' ('+(c.dept||c.cp||'')+') · '+(c.nb||1)+' colis</div></div></div>';
     });
   }
@@ -4002,7 +4065,7 @@ function renderFinTournee(){
      + '<b>'+ks.length+' client'+(ks.length>1?'s':'')+' non ramassé'+(ks.length>1?'s':'')+'</b><br>';
     ks.forEach(function(id){
       var c=(franceData.clients||{})[id]||{};
-      h+=(c.nom||'')+' — '+_libMotif(nonR[id])+'<br>';
+      h+=_nomAffiche(c)+' — '+_libMotif(nonR[id])+'<br>';
     });
     h+='</div>';
   }
@@ -4158,7 +4221,7 @@ function _htmlArretChartres(k){
     var jours=_joursDepuis(c.depotTs);
     h+='<div onclick="_toggleCharge(\''+c._id+'\')" style="background:'+(on?'#f2fbf5':'#fff')+';border:1.5px solid '+(on?'#009A44':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;display:flex;gap:11px;align-items:flex-start;cursor:pointer;">'
      +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'#009A44':'#ccc')+';background:'+(on?'#009A44':'#fff')+';color:#fff;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">'+(on?'✓':'')+'</div>'
-     +'<div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+(c.nom||'')+'</div>'
+     +'<div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+_nomAffiche(c)+'</div>'
      +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.ville||'')+' ('+(c.dept||'')+')</div>'
      +'<div style="font-size:11.5px;color:#555;margin-top:3px;">📦 '+(c.nb||1)+' colis · à Chartres depuis '+jours+' j</div></div></div>';
   });
@@ -4185,7 +4248,7 @@ function validerChargementChartres(){
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var noms=_chargeSel.map(function(id){
     var c=(franceData.clients||{})[id]||{};
-    return '· '+(c.nom||'')+' — '+(c.ville||'');
+    return '· '+_nomAffiche(c)+' — '+(c.ville||'');
   }).join('\n');
   if(!confirm('Charger '+_chargeSel.length+' client(s) ?\n\n'+noms+'\n\nIls passeront en 📍 Mitry-Mory.')) return;
   var qui=(currentUser||{}).name||'';
@@ -9145,7 +9208,7 @@ function _construireCarteFrance(){
           col = fait ? {bg:'#009A44',txt:'#fff'} : (nonR ? {bg:'#c0392b',txt:'#fff'} : {bg:pc.bar,txt:'#fff'});
         }
         var mk=L.marker([lat,lng],{icon:_iconePointFr(o, col)}).addTo(_carteFr);
-        mk.bindPopup('<b>'+(o.c.nom||'')+'</b><br>'+(o.c.adresse||'')+'<br>'+(o.c.cp||'')+' '+(o.c.ville||'')
+        mk.bindPopup('<b>'+_nomAffiche(o.c)+'</b><br>'+(o.c.adresse||'')+'<br>'+(o.c.cp||'')+' '+(o.c.ville||'')
           +'<br>📦 '+(o.c.nb||1)+' colis'+(o.c.colis?(' · '+o.c.colis):''));
         mk._cid=o.c._id; mk._o=o; mk._col=col;
         if(_carteSelectionPossible()){
@@ -9403,7 +9466,7 @@ function _renderEditionTournee(){
     var c=(franceData.clients||{})[id]; if(!c) return;
     var traite=_clientTraite(to,id);
     h+='<div style="background:#fff;border:1.5px solid '+(traite?'#ccc':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;'+(traite?'opacity:.6;':'')+'">'
-     + '<div style="font-size:14px;font-weight:700;">'+(c.nom||'')+'</div>'
+     + '<div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
      + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+' · '+(c.nb||1)+' colis</div>'
      + (traite
         ? '<div style="font-size:11.5px;color:#888;margin-top:7px;">Déjà traité — impossible de le retirer</div>'
@@ -9426,7 +9489,7 @@ function _renderEditionTournee(){
     var memeRegion=(c.region===to.region);
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;">'
      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-     +   '<div style="font-size:14px;font-weight:700;">'+(c.nom||'')+'</div>'
+     +   '<div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
      +   (memeRegion?'':'<span class="badge badge-orange">Autre région</span>')+'</div>'
      + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+' · '+(c.nb||1)+' colis</div>'
      + '<div onclick="ajouterClientTournee(\''+c._id+'\')" style="margin-top:8px;text-align:center;background:#d4f0e0;color:#006b2d;border-radius:9px;padding:9px;font-size:12.5px;font-weight:700;cursor:pointer;">+ Ajouter à la tournée</div>'
@@ -9456,7 +9519,7 @@ function retirerClientTournee(id){
   maj['clients/'+id+'/hist']=hist;
   db.ref('france').update(maj).then(function(){
     showToastNew('✕ Client retiré');
-    _activiteFrance('🔄', 'a retiré <strong>'+(c.nom||'')+'</strong> de la tournée '+_titreTournee(to));
+    _activiteFrance('🔄', 'a retiré <strong>'+_nomAffiche(c)+'</strong> de la tournée '+_titreTournee(to));
     _renderEditionTournee();
     try{ renderFrance(); }catch(e){}
     try{ renderDanny(); }catch(e){}
@@ -9485,7 +9548,7 @@ function ajouterClientTournee(id){
   maj['clients/'+id+'/hist']=hist;
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Client ajouté');
-    _activiteFrance('🔄', 'a ajouté <strong>'+(c.nom||'')+'</strong> à la tournée '+_titreTournee(to));
+    _activiteFrance('🔄', 'a ajouté <strong>'+_nomAffiche(c)+'</strong> à la tournée '+_titreTournee(to));
     _renderEditionTournee();
     try{ renderFrance(); }catch(e){}
     try{ renderDanny(); }catch(e){}
