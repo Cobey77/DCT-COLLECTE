@@ -355,7 +355,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div class="screen" id="s-france-add">
   <div class="header">
     <button class="btn-back" onclick="goTo('s-france')">← Retour</button>
-    <div class="h-title">Inscrire un client</div>
+    <div class="h-title" id="fadd-titre">Inscrire un client</div>
     <div style="width:60px;"></div>
   </div>
   <div class="content">
@@ -379,7 +379,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     </div>
     <div class="fg"><label class="fl">Description du colis</label><textarea class="fi" id="fa-colis" rows="3" placeholder="ex : 1 valise + 2 cartons" style="resize:none;"></textarea></div>
     <div style="margin-top:10px;">
-      <button class="btn btn-green" onclick="saveClientFrance()">✅ Enregistrer</button>
+      <button class="btn btn-green" id="fa-btn" onclick="saveClientFrance()">✅ Enregistrer</button>
       <button class="btn btn-gray" onclick="goTo('s-france')">✕ Annuler</button>
     </div>
   </div>
@@ -1410,8 +1410,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.12.2';
-var APP_UPDATE = '09/08/2026 à 19:50';
+var APP_VERSION = 'v3.14.0';
+var APP_UPDATE = '09/08/2026 à 22:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2417,7 +2417,7 @@ function _majBarreDanny(){
 
 // ── Création de tournée ──
 function retourDepuisCreation(){
-  if(_estAdmin()){ goTo('s-france'); renderFrance(); }
+  if(_peutGererFrance()){ goTo('s-france'); renderFrance(); }
   else { goTo('s-partenaire'); renderDanny(); }
 }
 
@@ -2479,7 +2479,7 @@ function _dtRetirer(id){
   var i=dannySel.indexOf(id); if(i>=0) dannySel.splice(i,1);
   var j=_dtConfirmes.indexOf(id); if(j>=0) _dtConfirmes.splice(j,1);
   if(!dannySel.length){
-    if(_estAdmin()){ goTo('s-france'); renderFrance(); }
+    if(_peutGererFrance()){ goTo('s-france'); renderFrance(); }
     else { goTo('s-partenaire'); renderDanny(); }
     return;
   }
@@ -2533,8 +2533,9 @@ function validerTourneeDanny(){
 
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Tournée du '+lib+' créée');
+    _activiteFrance('📅', 'a préparé la tournée <strong>'+reg+' · '+lib+'</strong> — '+dannySel.length+' client'+(dannySel.length>1?'s':''));
     dannySel=[]; _dtConfirmes=[]; _dtPoste='';
-    if(_estAdmin()){ switchFranceTab('tournees'); goTo('s-france'); }
+    if(_peutGererFrance()){ switchFranceTab('tournees'); goTo('s-france'); }
     else { switchDannyTab('tournees'); goTo('s-partenaire'); }
   }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
 }
@@ -2826,7 +2827,13 @@ function _auteurPourPartenaire(nom){
 }
 
 function _estAdmin(){ return !!(currentUser && currentUser.admin); }
-function _selectionPossible(){ return _estAdmin() && franceTab==='suivi' && franceFiltre==='attente'; }
+// Tout le monde chez Dakar City gère le ramassage : administrateurs
+// et collaborateurs ont exactement les mêmes droits sur ce module.
+function _peutGererFrance(){
+  if(_vueAdmin) return false;
+  return !!(currentUser && !currentUser.societe);
+}
+function _selectionPossible(){ return _peutGererFrance() && franceTab==='suivi' && franceFiltre==='attente'; }
 
 function toggleSelAdmin(id){
   var i=dannySel.indexOf(id);
@@ -2976,7 +2983,38 @@ function _frTournees(){
 }
 
 // ── Inscription ──
+var _faEditId='';
+
+// Ouvre le formulaire sur un client existant
+function modifierClientFrance(){
+  var id=franceClientId;
+  var c=(franceData.clients||{})[id];
+  if(!c){ showToastNew('⚠️ Fiche introuvable.'); return; }
+  _faEditId=id;
+  var g=function(k,v){ var e=document.getElementById(k); if(e) e.value=v||''; };
+  var nom=(c.nom||'').trim().split(' ');
+  g('fa-prenom', nom[0]||'');
+  g('fa-nom', nom.slice(1).join(' '));
+  g('fa-tel', c.tel);
+  g('fa-adresse', c.adresse);
+  g('fa-infos', c.infos);
+  g('fa-cp', c.cp);
+  g('fa-ville', c.ville);
+  g('fa-colis', c.colis);
+  g('fa-prix', c.prix?String(c.prix):'');
+  var nb=document.getElementById('fa-nb'); if(nb) nb.value=String(c.nb||1);
+  _faPays=c.pays||'FR'; _renderPaysChoix();
+  majZoneFrance();
+  var t=document.getElementById('fadd-titre'); if(t) t.textContent='Modifier la fiche';
+  var b=document.getElementById('fa-btn'); if(b) b.textContent='✅ Enregistrer les modifications';
+  var by=document.getElementById('fadd-by'); if(by) by.textContent=(currentUser||{}).name||'';
+  goTo('s-france-add');
+}
+
 function ouvrirAjoutFrance(){
+  _faEditId='';
+  var t=document.getElementById('fadd-titre'); if(t) t.textContent='Inscrire un client';
+  var b=document.getElementById('fa-btn'); if(b) b.textContent='✅ Enregistrer';
   ['fa-prenom','fa-nom','fa-tel','fa-adresse','fa-infos','fa-cp','fa-ville','fa-colis','fa-prix'].forEach(function(id){
     var e=document.getElementById(id); if(e) e.value='';
   });
@@ -3045,6 +3083,7 @@ function saveClientFrance(){
   if(!z.ok){ showToastNew('⚠️ '+z.motif); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
 
+  if(_faEditId){ _enregistrerModifFrance(z); return; }
   var id='c'+Date.now();
   var obj={
     ref:_nouvelleRefFrance(),
@@ -3064,9 +3103,47 @@ function saveClientFrance(){
   var maj={}; maj[id]=obj;
   db.ref('france/clients').update(maj).then(function(){
     showToastNew('✅ '+obj.ref+' — client inscrit');
-    try{ addActivity((currentUser||{}).name||'', 'a inscrit '+obj.nom+' au ramassage France'); }catch(e){}
+    _activiteFrance('🇪🇺', 'a inscrit <strong>'+obj.nom+'</strong> — '+obj.ref+' · '+obj.region);
     goTo('s-france');
   }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
+}
+
+function _enregistrerModifFrance(z){
+  var g=function(k){ return String(((document.getElementById(k)||{}).value)||'').trim(); };
+  var id=_faEditId;
+  var c=(franceData.clients||{})[id]||{};
+  var qui=(currentUser||{}).name||'';
+  var nouveau={
+    nom:(g('fa-prenom')+' '+g('fa-nom')).trim(),
+    tel:g('fa-tel'), adresse:g('fa-adresse'), infos:g('fa-infos'),
+    cp:g('fa-cp'), ville:g('fa-ville'),
+    pays:z.pays, region:z.region, dept:z.dept||'',
+    nb:parseInt(g('fa-nb')||'1',10)||1,
+    colis:g('fa-colis'),
+    prix:parseInt(g('fa-prix')||'0',10)||0
+  };
+  // On note ce qui change vraiment, pour l'historique
+  var change=[];
+  if(nouveau.nom!==(c.nom||'')) change.push('nom');
+  if(nouveau.tel!==(c.tel||'')) change.push('téléphone');
+  if(nouveau.adresse!==(c.adresse||'')||nouveau.cp!==(c.cp||'')||nouveau.ville!==(c.ville||'')) change.push('adresse');
+  if(nouveau.nb!==(c.nb||1)||nouveau.colis!==(c.colis||'')) change.push('colis');
+  if(nouveau.prix!==(c.prix||0)) change.push('montant');
+  var hist=(c.hist||[]).slice();
+  hist.push({q:qui, a:'a modifié la fiche'+(change.length?(' — '+change.join(', ')):''), ts:Date.now()});
+
+  var maj={};
+  Object.keys(nouveau).forEach(function(k){ maj['clients/'+id+'/'+k]=nouveau[k]; });
+  maj['clients/'+id+'/hist']=hist;
+  // l'adresse a bougé : les coordonnées ne valent plus rien
+  if(change.indexOf('adresse')>=0){ maj['clients/'+id+'/lat']=null; maj['clients/'+id+'/lng']=null; }
+
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ Fiche mise à jour');
+    _activiteFrance('✏️', 'a modifié la fiche de <strong>'+(nouveau.nom||'')+'</strong>'+(change.length?(' — '+change.join(', ')):''));
+    _faEditId='';
+    ouvrirFicheFrance(id);
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
 
 // ── Fiche client ──
@@ -3125,7 +3202,10 @@ function _renderFicheFrance(){
      + '</div></div>';
 
   // Actions
-  html+='<button class="btn btn-gray" onclick="supprimerClientFrance()" style="background:#fde0e0;color:#992020;border:1.5px solid #c0392b;">🗑️ Supprimer cette fiche</button>';
+  if(_peutGererFrance()){
+    html+='<button class="btn btn-green" onclick="modifierClientFrance()">✏️ Modifier la fiche</button>';
+    html+='<button class="btn btn-gray" onclick="supprimerClientFrance()" style="background:#fde0e0;color:#992020;border:1.5px solid #c0392b;">🗑️ Supprimer cette fiche</button>';
+  }
   box.innerHTML=html;
 }
 function supprimerClientFrance(){
@@ -3135,6 +3215,7 @@ function supprimerClientFrance(){
   if(!confirm('Supprimer la fiche de '+(c.nom||'ce client')+' ?')) return;
   db.ref('france/clients/'+franceClientId).remove().then(function(){
     showToastNew('🗑️ Fiche supprimée');
+    _activiteFrance('🗑️', 'a supprimé la fiche de <strong>'+(c.nom||'')+'</strong>');
     goTo('s-france');
   });
 }
@@ -3395,6 +3476,7 @@ function demarrerTournee(){
     }
     var fin=function(){
       showToastNew('🚚 Bonne tournée, '+nom.split(' ')[0]+' !');
+      _activiteFrance('🚚', 'a pris la tournée <strong>'+_titreTournee(to)+'</strong>');
       renderPosteTournee();
       goTo('s-poste-tournee');
     };
@@ -3510,8 +3592,10 @@ function marquerRamasse(id){
   maj['clients/'+id+'/ramassePar']=qui;
   maj['clients/'+id+'/ramasseTs']=Date.now();
   maj['clients/'+id+'/hist']=hist;
-  db.ref('france').update(maj).then(function(){ renderPosteTournee(); })
-    .catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+  db.ref('france').update(maj).then(function(){
+    _activiteFrance('✅', 'a ramassé <strong>'+(c.nom||'')+'</strong>');
+    renderPosteTournee();
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
 
 function ouvrirMotif(id){
@@ -3565,6 +3649,7 @@ function validerMotif(){
     maj['clients/'+id+'/dateLib']='';
   }
   db.ref('france').update(maj).then(function(){
+    _activiteFrance('❌', 'n\'a pas ramassé <strong>'+(c.nom||'')+'</strong> — '+m.lib);
     closeModal('modal-motif');
     renderPosteTournee();
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
@@ -3634,7 +3719,7 @@ function rendreTournee(){
   }
   db.ref('france').update(maj).then(function(){
     showToastNew('↩ Tournée relâchée — choisis-en une autre');
-    try{ addActivity(qui, 'a relâché la tournée '+_titreTournee(to)); }catch(e){}
+    _activiteFrance('↩️', 'a relâché la tournée <strong>'+_titreTournee(to)+'</strong>');
     _posteTourneeId='';
     if(p.role==='poste'){ _renderChoixTournee(); goTo('s-poste-choix'); }
     else { renderDanny(); goTo('s-partenaire'); }
@@ -3704,6 +3789,7 @@ function validerDepot(lieu){
   maj['tournees/'+to.id+'/depots']=depots;
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ '+_depotSel.length+' colis à '+(lieu==='mitry'?'Mitry-Mory':'Chartres'));
+    _activiteFrance(lieu==='mitry'?'📍':'🏭', 'a déposé <strong>'+_depotSel.length+' client'+(_depotSel.length>1?'s':'')+'</strong> à '+(lieu==='mitry'?'Mitry-Mory':'Chartres'));
     _depotSel=[];
     if(_aDeclarer().length){ _renderDepot(); }
     else { renderPosteTournee(); goTo('s-poste-tournee'); }
@@ -3764,6 +3850,7 @@ function fermerPoste(){
   }
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Tournée archivée');
+    _activiteFrance('🏁', 'a terminé la tournée <strong>'+_titreTournee(to)+'</strong>');
     _posteTourneeId='';
     deconnexionPartenaire();
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
@@ -3836,6 +3923,8 @@ function affecterLotChartres(k){
   }
   db.ref('france').update(maj).then(function(){
     showToastNew(k?'🏭 Lot Chartres affecté':'Lot retiré');
+    if(k){ var _t=(typeof getTrucks==='function'?getTrucks():{})[k]||{};
+      _activiteFrance('🏭', 'a affecté le <strong>lot Chartres</strong> → '+( _t.name||('Camion '+k) )); }
     try{ renderDispatchTab(); }catch(e){}
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
@@ -3906,7 +3995,7 @@ function validerChargementChartres(){
   });
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ '+_chargeSel.length+' référence(s) à Mitry-Mory');
-    try{ addActivity(qui, 'a chargé '+_chargeSel.length+' colis France à Chartres'); }catch(e){}
+    _activiteFrance('🏭', 'a chargé <strong>'+_chargeSel.length+' colis</strong> à Chartres → Mitry-Mory');
     _chargeSel=[];
     if(!_refsChartres().length && currentCollecteId){
       db.ref('france/lots/'+currentCollecteId).remove();
@@ -8536,7 +8625,7 @@ function _redessinerTraceFr(){
 function _carteSelectionPossible(){
   if(_carteFrMode!=='suivi' || franceFiltre!=='attente') return false;
   if(_vueAdmin) return false;
-  return _estAdmin() || (currentUser && currentUser.role==='responsable');
+  return _peutGererFrance() || (currentUser && currentUser.role==='responsable');
 }
 
 function _chargerLeaflet(cb){
@@ -8767,6 +8856,32 @@ function _construireCarteFrance(){
   });
 }
 
+
+// ═══════════ ACTIVITÉ DU RAMASSAGE — v3.14.0 ═══════════
+// On se branche sur le fil existant, avec la bonne signature :
+// addActivity(emoji, couleurDeFond, texteHtml, heure)
+function _activiteFrance(emoji, texte){
+  try{
+    var u = currentUser || {};
+    var bg = u.bg || '#e8eaf6';
+    var col = u.color || '#1a237e';
+    var nom = u.name || '';
+    // Un chauffeur agit sous le nom saisi à l'ouverture du poste
+    if(u.role==='poste'){
+      var pc = getPc(u.id);
+      bg = pc.bg; col = pc.color;
+      var st = (franceData.postes||{})[u.id] || {};
+      nom = st.chauffeur || u.name || '';
+    } else if(u.role==='responsable'){
+      bg = '#e8eaf6'; col = '#1a237e';
+    }
+    var suffixe = u.societe ? ' <span style="color:#888;">· Global Logistique</span>' : '';
+    addActivity(emoji, bg,
+      '<strong style="color:'+col+'">'+nom+'</strong> '+texte+suffixe,
+      "À l'instant");
+  }catch(e){ console.warn('[ACTIVITE FRANCE]', e); }
+}
+
 // ═══════════ COULEURS DES POSTES — v3.9.0 ═══════════
 // Même principe que tes camions : chaque poste a sa couleur,
 // et la tournée prend celle du poste qui l'a prise.
@@ -8833,8 +8948,8 @@ function supprimerTournee(tid){
   var to=(franceData.tournees||{})[tid];
   if(!to){ showToastNew('⚠️ Tournée introuvable.'); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
-  var estAdmin = currentUser && currentUser.admin;
-  if(!estAdmin && to.statut!=='a_prendre'){
+  var cotéDCT = _peutGererFrance();
+  if(!cotéDCT && to.statut!=='a_prendre'){
     showToastNew('⚠️ Tournée déjà prise — seul un administrateur peut la supprimer.');
     return;
   }
@@ -8867,7 +8982,7 @@ function supprimerTournee(tid){
   maj['tournees/'+tid]=null;
   db.ref('france').update(maj).then(function(){
     showToastNew('🗑️ Tournée supprimée');
-    try{ addActivity(qui, 'a supprimé la tournée '+_titreTournee(to)); }catch(e){}
+    _activiteFrance('🗑️', 'a supprimé la tournée <strong>'+_titreTournee(to)+'</strong>');
     if(_posteTourneeId===tid) _posteTourneeId='';
     try{ renderFrance(); }catch(e){}
     try{ renderDanny(); }catch(e){}
@@ -9019,6 +9134,7 @@ function retirerClientTournee(id){
   maj['clients/'+id+'/hist']=hist;
   db.ref('france').update(maj).then(function(){
     showToastNew('✕ Client retiré');
+    _activiteFrance('🔄', 'a retiré <strong>'+(c.nom||'')+'</strong> de la tournée '+_titreTournee(to));
     _renderEditionTournee();
     try{ renderFrance(); }catch(e){}
     try{ renderDanny(); }catch(e){}
@@ -9047,6 +9163,7 @@ function ajouterClientTournee(id){
   maj['clients/'+id+'/hist']=hist;
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Client ajouté');
+    _activiteFrance('🔄', 'a ajouté <strong>'+(c.nom||'')+'</strong> à la tournée '+_titreTournee(to));
     _renderEditionTournee();
     try{ renderFrance(); }catch(e){}
     try{ renderDanny(); }catch(e){}
@@ -9054,7 +9171,7 @@ function ajouterClientTournee(id){
 }
 
 function retourDepuisEdition(){
-  if(_estAdmin()){ switchFranceTab('tournees'); goTo('s-france'); }
+  if(_peutGererFrance()){ switchFranceTab('tournees'); goTo('s-france'); }
   else { switchDannyTab('tournees'); goTo('s-partenaire'); }
 }
 
@@ -9069,7 +9186,7 @@ var STATUTS_TOURNEE = [
 function _peutEditerTournee(to){
   if(!to) return false;
   if(_vueAdmin) return false;
-  if(currentUser && currentUser.admin) return true;
+  if(_peutGererFrance()) return true;
   if(currentUser && currentUser.role==='responsable') return to.statut==='a_prendre';
   return false;
 }
@@ -9145,7 +9262,7 @@ function changerStatutTournee(nouveau){
   }
   db.ref('france').update(maj).then(function(){
     showToastNew('✅ Tournée « '+st.lib+' »');
-    try{ addActivity(qui, 'a passé la tournée '+_titreTournee(to)+' en '+st.lib); }catch(e){}
+    _activiteFrance('✏️', 'a passé la tournée <strong>'+_titreTournee(to)+'</strong> en '+st.lib);
     closeModal('modal-statut-tournee');
     try{ renderFrance(); }catch(e){}
     try{ renderDanny(); }catch(e){}
