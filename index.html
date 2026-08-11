@@ -1223,7 +1223,7 @@ function ecouterChangements(){
     try{ nettoyerCamionFantome(); }catch(e){}
     // Cacher l'écran de chargement → app prête
     _cacherEcranChargement();
-    buildLogin();
+    buildLogin(true);
     try{ renderCollectesList(); }catch(e){}
     // Mettre à jour les statuts automatiquement selon la date
     setTimeout(function(){ _mettreAJourStatuts(); }, 500);
@@ -1412,8 +1412,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.18.0';
-var APP_UPDATE = '11/08/2026 à 09:30';
+var APP_VERSION = 'v3.18.1';
+var APP_UPDATE = '11/08/2026 à 10:15';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2128,16 +2128,19 @@ function openModal(id){var el=document.getElementById(id);if(el)el.classList.add
 function closeModal(id){var el=document.getElementById(id);if(el)el.classList.remove('show');}
 
 // LOGIN
-function buildLogin(){
-  retourEspaces();
+// garder = ne pas faire reculer quelqu'un qui a déjà ouvert un espace.
+// Les données finissent de charger une seconde après l'affichage :
+// sans ça, l'écran repartait au choix des espaces en pleine connexion.
+var _espaceOuvertUI = '';
+function buildLogin(garder){
+  if(garder && _espaceOuvertUI) ouvrirEspace(_espaceOuvertUI);
+  else retourEspaces();
   var v=document.getElementById('app-version');
   if(v)v.textContent=APP_VERSION;
   var u=document.getElementById('app-update');
   if(u)u.textContent='Mise à jour : '+APP_UPDATE;
   chargerMessageAdmin();
 }
-
-var _espaceOuvertUI = '';
 
 // Rafraîchit l'écran de connexion SANS faire reculer l'utilisateur.
 // Les écouteurs Firebase répondent une seconde après l'ouverture :
