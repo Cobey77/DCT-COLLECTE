@@ -336,7 +336,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div class="subtab" id="ftab-tournees" onclick="switchFranceTab('tournees')">📅 Tournées</div>
   </div>
   <div id="fr-recherche" style="background:#fff;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;">
-    <input class="fi" id="fr-q" placeholder="🔍 Nom, téléphone ou référence…" oninput="renderFrance()" style="margin:0;">
+    <input class="fi" id="fr-q" placeholder="🔍 Nom, téléphone ou ville…" oninput="renderFrance()" style="margin:0;">
   </div>
   <div class="content" id="france-content" style="background:#F2F3F5;"></div>
   <div id="fr-barre" style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 12px;flex-shrink:0;display:none;">
@@ -1409,8 +1409,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.15.1';
-var APP_UPDATE = '10/08/2026 à 01:35';
+var APP_VERSION = 'v3.16.1';
+var APP_UPDATE = '10/08/2026 à 02:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2691,7 +2691,6 @@ function _frMatch(c,q){
   var tel=(c.tel||'').toLowerCase().replace(/\s/g,'');
   return (c.nom||'').toLowerCase().indexOf(q)>=0
       || tel.indexOf(q)>=0
-      || (c.ref||'').toLowerCase().indexOf(q)>=0
       || (c.ville||'').toLowerCase().indexOf(q)>=0;
 }
 function _frDansFiltre(c){
@@ -2756,10 +2755,6 @@ function renderFrance(){
        + '</div>';
   }
 
-  if(_selectionPossible()){
-    html+='<div style="background:#e8eaf6;border:1.5px solid #c5cae9;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
-       +'📋 <b>Préparer une tournée</b><br><span style="opacity:.85;">Coche la case des clients à ramasser. Tape ailleurs sur la carte pour ouvrir la fiche.</span></div>';
-  }
   var liste=tous.filter(_frDansFiltre);
   // Filtres géographiques calculés sur la liste courante
   html+=_frBarresGeo(liste);
@@ -2926,7 +2921,7 @@ function _frCarte(c){
     +   '<div style="display:flex;align-items:center;flex:1;min-width:0;">'+boite
     +   '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+(c.nom||'—')+'</div></div>'+lieu+'</div>'
     + '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+(c.cp?(' · '+c.cp+' '+(c.ville||'')):'')+'</div>'
-    + '<div style="font-size:11.5px;color:#555;margin-top:5px;"><span style="font-family:ui-monospace,monospace;">'+(c.ref||'')+'</span> · 📦 '+(c.nb||1)+' colis'
+    + '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'
     +   (_montantsVisibles()?(' · <b style="color:#006b2d;">'+(c.prix||0)+' €</b>'):'')+'</div>'
     + '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:5px;">'
     +   '<span style="font-size:11.5px;color:var(--text3);">🗓 '+_dateFr(c.creeTs)
@@ -3122,14 +3117,6 @@ function majZoneFrance(){
     z.style.background='#fde0e0'; z.style.color='#992020';
   }
 }
-function _nouvelleRefFrance(){
-  var n=1;
-  Object.keys(franceData.clients||{}).forEach(function(k){
-    var m=/^FR-(\d+)$/.exec((franceData.clients[k]||{}).ref||'');
-    if(m){ var v=parseInt(m[1],10); if(v>=n) n=v+1; }
-  });
-  return 'FR-'+('000'+n).slice(-4);
-}
 function saveClientFrance(){
   var g=function(id){ return ((document.getElementById(id)||{}).value||'').trim(); };
   var prenom=g('fa-prenom'), nom=g('fa-nom'), tel=g('fa-tel'), cp=g('fa-cp');
@@ -3142,7 +3129,6 @@ function saveClientFrance(){
   if(_faEditId){ _enregistrerModifFrance(z); return; }
   var id='c'+Date.now();
   var obj={
-    ref:_nouvelleRefFrance(),
     nom:(prenom+' '+nom).trim(),
     tel:tel,
     adresse:g('fa-adresse'),
@@ -3159,7 +3145,7 @@ function saveClientFrance(){
   var maj={}; maj[id]=obj;
   db.ref('france/clients').update(maj).then(function(){
     showToastNew('✅ '+obj.ref+' — client inscrit');
-    _activiteFrance('🇪🇺', 'a inscrit <strong>'+obj.nom+'</strong> — '+obj.ref+' · '+obj.region);
+    _activiteFrance('🇪🇺', 'a inscrit <strong>'+obj.nom+'</strong> — '+obj.ville+' · '+obj.region);
     goTo('s-france');
   }).catch(function(){ showToastNew('❌ Enregistrement impossible.'); });
 }
@@ -3221,7 +3207,6 @@ function _renderFicheFrance(){
   }
   var kv=function(k,v){ return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:7px 0;border-bottom:1px dashed var(--border);"><span style="color:var(--text3);flex-shrink:0;">'+k+'</span><span style="font-weight:600;text-align:right;">'+v+'</span></div>'; };
   var html='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:6px 14px 10px;margin-bottom:10px;box-shadow:var(--shadow);">'
-    + kv('Référence','<span style="font-family:ui-monospace,monospace;">'+(c.ref||'')+'</span>')
     + kv('Inscrit le', _dateFr(c.creeTs)+(c.creePar?(' &nbsp;'+_pastilleAuteur(c.creePar)):''))
     + kv('Téléphone','<a href="tel:'+(c.tel||'')+'" style="color:#009A44;font-weight:700;">'+(c.tel||'')+'</a>')
     + kv('Adresse',(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||''))
@@ -3948,7 +3933,7 @@ function _htmlLotChartres(){
    +     '<div style="font-size:14px;font-weight:800;color:#111;">🏭 Entrepôt Chartres</div>'
    +     (l?'<span class="badge badge-orange">Affecté au '+nomCam+'</span>':'<span class="badge badge-gray">Non affecté</span>')
    +   '</div>'
-   +   '<div style="font-size:12px;color:#92400e;margin-top:5px;line-height:1.5;">'+refs.length+' référence'+(refs.length>1?'s':'')+' · '+colis+' colis<br>12 rue de l\'Industrie · 28000 Chartres</div>';
+   +   '<div style="font-size:12px;color:#92400e;margin-top:5px;line-height:1.5;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis<br>12 rue de l\'Industrie · 28000 Chartres</div>';
   if(Object.keys(trks).length){
     h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">';
     Object.keys(trks).forEach(function(k){
@@ -3997,7 +3982,7 @@ function _htmlArretChartres(k){
    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
    +   '<div style="font-size:14px;font-weight:800;">🏭 Entrepôt Chartres</div>'
    +   '<span class="badge badge-orange">Lot France</span></div>'
-   + '<div style="font-size:12px;color:#92400e;margin-top:5px;line-height:1.5;">12 rue de l\'Industrie · 28000 Chartres<br>'+refs.length+' référence'+(refs.length>1?'s':'')+' · '+colis+' colis</div>'
+   + '<div style="font-size:12px;color:#92400e;margin-top:5px;line-height:1.5;">12 rue de l\'Industrie · 28000 Chartres<br>'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</div>'
    + '<a href="https://waze.com/ul?q='+encodeURIComponent('12 rue de l\'Industrie 28000 Chartres')+'&navigate=yes" target="_blank" style="display:block;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #fcd34d;color:#92400e;border-radius:10px;padding:9px;font-size:12.5px;font-weight:700;margin-top:10px;">🧭 Itinéraire</a>'
    + '</div>'
    + '<div class="slabel">Lot France · à charger</div>';
@@ -4006,8 +3991,8 @@ function _htmlArretChartres(k){
     var jours=_joursDepuis(c.depotTs);
     h+='<div onclick="_toggleCharge(\''+c._id+'\')" style="background:'+(on?'#f2fbf5':'#fff')+';border:1.5px solid '+(on?'#009A44':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;display:flex;gap:11px;align-items:flex-start;cursor:pointer;">'
      +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'#009A44':'#ccc')+';background:'+(on?'#009A44':'#fff')+';color:#fff;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">'+(on?'✓':'')+'</div>'
-     +'<div style="flex:1;"><div style="font-family:ui-monospace,monospace;font-size:12px;font-weight:700;">'+(c.ref||'')+'</div>'
-     +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.nom||'')+' · '+(c.ville||'')+' ('+(c.dept||'')+')</div>'
+     +'<div style="flex:1;"><div style="font-size:13px;font-weight:700;">'+(c.nom||'')+'</div>'
+     +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.ville||'')+' ('+(c.dept||'')+')</div>'
      +'<div style="font-size:11.5px;color:#555;margin-top:3px;">📦 '+(c.nb||1)+' colis · à Chartres depuis '+jours+' j</div></div></div>';
   });
   var nb=_chargeSel.length, cs=0;
@@ -4029,13 +4014,13 @@ function _toutCharger(){
   if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
 }
 function validerChargementChartres(){
-  if(!_chargeSel.length){ showToastNew('⚠️ Cochez au moins une référence.'); return; }
+  if(!_chargeSel.length){ showToastNew('⚠️ Cochez au moins un client.'); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var noms=_chargeSel.map(function(id){
     var c=(franceData.clients||{})[id]||{};
-    return '· '+(c.ref||'')+' — '+(c.nom||'');
+    return '· '+(c.nom||'')+' — '+(c.ville||'');
   }).join('\n');
-  if(!confirm('Charger '+_chargeSel.length+' référence(s) ?\n\n'+noms+'\n\nElles passeront en 📍 Mitry-Mory.')) return;
+  if(!confirm('Charger '+_chargeSel.length+' client(s) ?\n\n'+noms+'\n\nIls passeront en 📍 Mitry-Mory.')) return;
   var qui=(currentUser||{}).name||'';
   var maj={};
   _chargeSel.forEach(function(id){
@@ -4050,7 +4035,7 @@ function validerChargementChartres(){
     maj['clients/'+id+'/hist']=hist;
   });
   db.ref('france').update(maj).then(function(){
-    showToastNew('✅ '+_chargeSel.length+' référence(s) à Mitry-Mory');
+    showToastNew('✅ '+_chargeSel.length+' client(s) à Mitry-Mory');
     _activiteFrance('🏭', 'a chargé <strong>'+_chargeSel.length+' colis</strong> à Chartres → Mitry-Mory');
     _chargeSel=[];
     if(!_refsChartres().length && currentCollecteId){
@@ -8889,8 +8874,7 @@ function _construireCarteFrance(){
         }
         var mk=L.marker([lat,lng],{icon:_iconePointFr(o, col)}).addTo(_carteFr);
         mk.bindPopup('<b>'+(o.c.nom||'')+'</b><br>'+(o.c.adresse||'')+'<br>'+(o.c.cp||'')+' '+(o.c.ville||'')
-          +'<br>📦 '+(o.c.nb||1)+' colis'+(o.c.colis?(' · '+o.c.colis):'')
-          +'<br><span style="color:#888;">'+(o.c.ref||'')+'</span>');
+          +'<br>📦 '+(o.c.nb||1)+' colis'+(o.c.colis?(' · '+o.c.colis):''));
         mk._cid=o.c._id; mk._o=o; mk._col=col;
         if(_carteSelectionPossible()){
           mk.on('click', function(){ basculerPointFr(o.c._id); });
