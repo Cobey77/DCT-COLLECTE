@@ -1410,8 +1410,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.14.0';
-var APP_UPDATE = '09/08/2026 à 22:00';
+var APP_VERSION = 'v3.14.1';
+var APP_UPDATE = '09/08/2026 à 22:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2739,7 +2739,7 @@ function renderFrance(){
 
   if(_selectionPossible()){
     html+='<div style="background:#e8eaf6;border:1.5px solid #c5cae9;border-radius:var(--radius);padding:10px 12px;margin-bottom:12px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
-       +'📋 <b>Préparer une tournée</b><br><span style="opacity:.85;">Coche des clients, elle sera proposée aux chauffeurs de Global Logistique.</span></div>';
+       +'📋 <b>Préparer une tournée</b><br><span style="opacity:.85;">Coche la case des clients à ramasser. Tape ailleurs sur la carte pour ouvrir la fiche.</span></div>';
   }
   var liste=tous.filter(_frDansFiltre);
   // Filtres géographiques calculés sur la liste courante
@@ -2865,10 +2865,11 @@ function _frCarte(c){
   var vieux=(c.statut==='attente' && j>=14);
   var sel=_selectionPossible();
   var coche=(dannySel.indexOf(c._id)>=0);
-  var act = sel ? 'toggleSelAdmin(\''+c._id+'\')' : 'ouvrirFicheFrance(\''+c._id+'\')';
+  // La case coche, le reste de la carte ouvre la fiche.
+  var act = 'ouvrirFicheFrance(\''+c._id+'\')';
   var cadre = sel&&coche ? 'border:1.5px solid #009A44;background:#f2fbf5;' : 'border:1.5px solid var(--border);background:#fff;';
   var boite = sel
-    ? '<div style="width:21px;height:21px;border-radius:6px;border:2px solid '+(coche?'#009A44':'#ccc')+';background:'+(coche?'#009A44':'#fff')+';color:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;margin-right:9px;">'+(coche?'✓':'')+'</div>'
+    ? '<div onclick="event.stopPropagation();toggleSelAdmin(\''+c._id+'\')" style="width:26px;height:26px;border-radius:7px;border:2px solid '+(coche?'#009A44':'#ccc')+';background:'+(coche?'#009A44':'#fff')+';color:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;margin-right:10px;cursor:pointer;">'+(coche?'✓':'')+'</div>'
     : '';
   return '<div onclick="'+act+'" style="'+cadre+'border-radius:var(--radius);padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);cursor:pointer;">'
     + '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
