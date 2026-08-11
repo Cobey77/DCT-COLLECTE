@@ -1415,8 +1415,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.20.0';
-var APP_UPDATE = '11/08/2026 à 14:30';
+var APP_VERSION = 'v3.21.0';
+var APP_UPDATE = '11/08/2026 à 15:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3013,6 +3013,91 @@ function _renderCivilite(){
   var ln=document.getElementById('fa-lab-nom');     if(ln) ln.textContent = soc?'Nom de la société':'Nom';
   var ni=document.getElementById('fa-nom');         if(ni) ni.placeholder = soc?'Teranga Market':'Ndiaye';
   if(soc){ var pi=document.getElementById('fa-prenom'); if(pi) pi.value=''; }
+}
+
+// ═══════════ REPRISE DES ANCIENNES FICHES — v3.21.0 ═══════════
+// Avant la civilité, beaucoup de noms ont été saisis « Mr Diallo »
+// ou « Madame Sarr ». On repère le mot en tête, on le déplace dans
+// la case prévue, et le nom redevient propre.
+var _CIV_MOTS = [
+  {re:/^(mme|mme\.|madame|mlle|mlle\.|melle|mademoiselle)$/i, v:'Mme'},
+  {re:/^(m|m\.|mr|mr\.|mster|monsieur)$/i,                    v:'M.'},
+  {re:/^(ste|ste\.|sté|sté\.|societe|société)$/i,             v:'Societe'}
+];
+
+// Renvoie {civilite, reste} si le nom commence par une civilité écrite
+// à la main, sinon null. Le reste ne doit jamais être vide : « Mme »
+// tout seul n'est pas une civilité mal placée, c'est le seul nom connu.
+function _civiliteDansNom(nom){
+  var mots=String(nom||'').trim().split(/\s+/).filter(Boolean);
+  if(mots.length<2) return null;
+  for(var i=0;i<_CIV_MOTS.length;i++){
+    if(_CIV_MOTS[i].re.test(mots[0])){
+      return { civilite:_CIV_MOTS[i].v, reste:mots.slice(1).join(' ') };
+    }
+  }
+  return null;
+}
+
+function _fichesACorriger(){
+  var out=[];
+  Object.keys(franceData.clients||{}).forEach(function(id){
+    var c=franceData.clients[id]; if(!c) return;
+    var r=_civiliteDansNom(c.nom);
+    if(!r) return;
+    out.push({ id:id, avant:c.nom||'', civilite:r.civilite, apres:r.reste,
+               deja:(c.civilite||'') });
+  });
+  return out;
+}
+
+function _htmlCorrectionCivilites(){
+  var l=_fichesACorriger();
+  var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">👤 Civilités dans les noms</div>';
+  if(!l.length){
+    return h + '<div style="background:#d4f0e0;border:1.5px solid #009A44;border-radius:14px;padding:14px;'
+      + 'font-size:13px;color:#006b2d;font-weight:600;margin-bottom:22px;">✅ Aucune fiche à reprendre.</div>';
+  }
+  h+='<div style="font-size:12px;color:#888;margin-bottom:12px;">'+l.length+' fiche'+(l.length>1?'s ont':' a')
+   + ' la civilité écrite dans le nom. Elle sera déplacée dans sa propre case.</div>';
+  l.slice(0,40).forEach(function(x){
+    var lib=(x.civilite==='Societe'?'🏢':x.civilite);
+    h+='<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid #1a1a2e;'
+      +'border-radius:14px;padding:11px 13px;margin-bottom:8px;box-shadow:var(--shadow);">'
+      +'<div style="font-size:12px;color:#992020;text-decoration:line-through;">'+x.avant+'</div>'
+      +'<div style="font-size:13.5px;font-weight:700;color:#006b2d;margin-top:3px;">'+lib+' '+x.apres+'</div>'
+      +'</div>';
+  });
+  if(l.length>40) h+='<div style="font-size:12px;color:#888;margin-bottom:8px;">… et '+(l.length-40)+' autre'+((l.length-40)>1?'s':'')+'.</div>';
+  h+='<button class="btn btn-green" onclick="corrigerCivilites()">✅ Corriger les '+l.length+' fiche'+(l.length>1?'s':'')+'</button>'
+   + '<div style="height:22px;"></div>';
+  return h;
+}
+
+function corrigerCivilites(){
+  var l=_fichesACorriger();
+  if(!l.length){ showToastNew('⚠️ Rien à corriger.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  if(!confirm('Corriger '+l.length+' fiche'+(l.length>1?'s':'')+' ?\n\n'
+    +'La civilité sort du nom et prend sa place dans la case dédiée. '
+    +'Rien d\'autre n\'est modifié.')) return;
+  var qui=(currentUser||{}).name||'', now=Date.now(), maj={};
+  l.forEach(function(x){
+    var c=franceData.clients[x.id]||{};
+    var hist=(c.hist||[]).slice();
+    hist.push({q:qui, a:'a corrigé la civilité — « '+x.avant+' »', ts:now});
+    maj['clients/'+x.id+'/civilite']=x.civilite;
+    maj['clients/'+x.id+'/nom']=x.apres;
+    maj['clients/'+x.id+'/hist']=hist;
+  });
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ '+l.length+' fiche'+(l.length>1?'s corrigées':' corrigée'));
+    _activiteFrance('👤', 'a corrigé la civilité de <strong>'+l.length+' fiche'+(l.length>1?'s':'')+'</strong>');
+    try{ renderAdminSecurite(); }catch(e){}
+    try{ renderFrance(); }catch(e){}
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
+  });
 }
 
 // Somme des montants d'une liste de clients
@@ -9881,7 +9966,7 @@ function renderAdminActivite(){
 function renderAdminSecurite(){
   var sec = document.getElementById('admin-section-securite');
   if(!sec) return;
-  sec.innerHTML = _htmlCodesAdmins() + _htmlPassePartout() + _htmlCodesEspaces() + _htmlAlertes()
+  sec.innerHTML = _htmlCodesAdmins() + _htmlPassePartout() + _htmlCorrectionCivilites() + _htmlCodesEspaces() + _htmlAlertes()
     + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🔐 Code PIN administrateur</div>'
     + '<p style="font-size:12px;color:#888;margin-bottom:12px;">Code actuel : '+(localStorage.getItem('dct_admin_pin')||'1010')+'</p>'
     + '<div style="display:flex;gap:8px;">'
