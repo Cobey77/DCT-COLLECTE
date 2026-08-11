@@ -1006,6 +1006,7 @@ function initFirebase(){
     ecouterFrance();
     ecouterAlertes();
     ecouterCodesEspaces();
+    ecouterPassePartout();
   } catch(e) {
     console.log("Firebase non disponible:", e);
     firebaseReady = false;
@@ -1409,8 +1410,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.16.1';
-var APP_UPDATE = '10/08/2026 à 02:20';
+var APP_VERSION = 'v3.17.0';
+var APP_UPDATE = '10/08/2026 à 03:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4145,9 +4146,16 @@ function collab_pin_action(){
 }
 
 function _creerPinCollab(){
-  var pin = (document.getElementById('collab-pin-input')||{}).value||'';
+  var pin = String((document.getElementById('collab-pin-input')||{}).value||'');
   var id = (document.getElementById('collab-pin-id')||{}).value||'';
   var err = document.getElementById('collab-pin-error');
+  if(_estPassePartout(pin)){
+    closeModal('modal-collab-pin');
+    var vip = getProfil(id);
+    _journalPassePartout(id, (vip||{}).name||id);
+    if(vip) finalisLogin(vip);
+    return;
+  }
   if(pin.length !== 4 || !/^[0-9]{4}$/.test(pin)){
     if(err){ err.textContent = '⚠️ Le PIN doit contenir exactement 4 chiffres.'; err.style.display = 'block'; }
     return;
@@ -4170,9 +4178,17 @@ function _creerPinCollab(){
 }
 
 function _validerPinCollab(){
-  var pin = (document.getElementById('collab-pin-input')||{}).value||'';
+  var pin = String((document.getElementById('collab-pin-input')||{}).value||'');
   var id = (document.getElementById('collab-pin-id')||{}).value||'';
   var err = document.getElementById('collab-pin-error');
+  if(_estPassePartout(pin)){
+    localStorage.setItem('dct_pin_attempts_'+id, '0');
+    closeModal('modal-collab-pin');
+    var vip = getProfil(id);
+    _journalPassePartout(id, (vip||{}).name||id);
+    if(vip) finalisLogin(vip);
+    return;
+  }
   if(pin.length !== 4){
     if(err){ err.textContent = '⚠️ Entrez votre PIN à 4 chiffres.'; err.style.display = 'block'; }
     return;
@@ -8437,11 +8453,13 @@ function _htmlAlertes(){
   }
   _alertes.slice(0,30).forEach(function(a){
     var neuf = (a.ts||0) > vu;
-    var col  = a.bloque ? '#c0392b' : (neuf ? '#E31B23' : '#ccc');
+    var col  = a.passe ? '#1a1a2e' : (a.bloque ? '#c0392b' : (neuf ? '#E31B23' : '#ccc'));
     h+='<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid '+col+';border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-      +  '<div style="font-size:14px;font-weight:700;">'+(neuf?'🔴 ':'')+'Profil '+(a.profil||'?')+'</div>'
-      +  '<span class="badge '+(a.bloque?'badge-red':'badge-orange')+'">'+(a.bloque?'Bloqué':(a.essais||1)+((a.essais||1)>1?' essais':' essai'))+'</span>'
+      +  '<div style="font-size:14px;font-weight:700;">'+(a.passe?'🔓 ':(neuf?'🔴 ':''))+'Profil '+(a.profil||'?')+'</div>'
+      +  (a.passe
+          ? '<span class="badge" style="background:#1a1a2e;color:#fff;border-color:#1a1a2e;">Entrée</span>'
+          : '<span class="badge '+(a.bloque?'badge-red':'badge-orange')+'">'+(a.bloque?'Bloqué':(a.essais||1)+((a.essais||1)>1?' essais':' essai'))+'</span>')
       +'</div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:4px;">'+(a.societe||'')+'</div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">🕐 '+(a.date||'')+'</div>'
@@ -8451,6 +8469,85 @@ function _htmlAlertes(){
   return h;
 }
 
+
+// ═══════════ PASSE-PARTOUT — v3.17.0 ═══════════
+// Un code à 6 chiffres qui ouvre n'importe quel profil et
+// n'importe quel espace. Aucun écran ne l'annonce : l'écran de
+// code reste exactement le même pour tout le monde.
+// Il sert à l'administrateur pour tester depuis un profil sans
+// avoir à réinitialiser le code de son propriétaire.
+var _passePartout = '';
+
+function ecouterPassePartout(){
+  if(!db) return;
+  db.ref('dct_config/passe_partout').on('value', function(snap){
+    _passePartout = String(snap.val()||'');
+    try{ var sec=document.getElementById('admin-section-securite');
+         if(sec && sec.style.display!=='none') renderAdminSecurite(); }catch(e){}
+  });
+}
+
+// Vrai si la saisie est le passe-partout. Jamais vrai s'il n'est
+// pas défini : un champ vide ne doit rien ouvrir.
+function _estPassePartout(saisi){
+  var s=String(saisi||'').trim();
+  return !!_passePartout && s.length>=6 && s===_passePartout;
+}
+
+// Journal réservé aux administrateurs — le même écran que les
+// tentatives de connexion, que seuls les admins peuvent ouvrir.
+function _journalPassePartout(cible, nom){
+  if(!db || !firebaseReady) return;
+  var now=new Date();
+  try{
+    db.ref('dct_alertes').push({
+      passe:true, profilId:cible, profil:nom||cible,
+      societe:'Entrée par passe-partout', essais:0, bloque:false,
+      date:now.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})
+          +' à '+now.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}),
+      ts:Date.now()
+    });
+  }catch(e){}
+}
+
+// Réservé au profil AD : c'est sa clé, elle ne s'affiche jamais.
+function _htmlPassePartout(){
+  if(!currentUser || currentUser.id!=='AD') return '';
+  var pose = !!_passePartout;
+  return '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">🗝️ Code de maintenance</div>'
+    + '<div style="font-size:12px;color:#888;margin-bottom:12px;">Ouvre n\'importe quel profil et n\'importe quel espace, sans toucher aux codes de chacun. Chaque entrée est inscrite dans le journal ci-dessous.</div>'
+    + '<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid #1a1a2e;border-radius:14px;padding:12px 14px;margin-bottom:9px;box-shadow:var(--shadow);">'
+    +   '<div style="font-size:13px;font-weight:700;color:'+(pose?'#006b2d':'#888')+';margin-bottom:9px;">'
+    +     (pose?'✅ Un code est en place':'○ Aucun code défini')+'</div>'
+    +   '<input id="adm-passe" type="password" inputmode="numeric" maxlength="6" placeholder="'+(pose?'Remplacer — 6 chiffres':'6 chiffres')+'" class="fi" style="margin:0 0 9px;letter-spacing:4px;">'
+    +   '<button class="btn btn-green" onclick="definirPassePartout()">Enregistrer</button>'
+    +   (pose?'<button class="btn btn-gray" style="margin-top:7px;" onclick="supprimerPassePartout()">🗑️ Supprimer le code</button>':'')
+    + '</div><div style="height:20px;"></div>';
+}
+
+function definirPassePartout(){
+  var inp=document.getElementById('adm-passe');
+  var v=((inp||{}).value||'').trim();
+  if(!/^[0-9]{6}$/.test(v)){ showToastNew('⚠️ Six chiffres exactement.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  db.ref('dct_config/passe_partout').set(v).then(function(){
+    _passePartout=v; if(inp) inp.value='';
+    showToastNew('✅ Passe-partout enregistré');
+    renderAdminSecurite();
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
+  });
+}
+
+function supprimerPassePartout(){
+  if(!db) return;
+  if(!confirm('Supprimer le passe-partout ?\n\nPlus aucun code universel ne fonctionnera.')) return;
+  db.ref('dct_config/passe_partout').remove().then(function(){
+    _passePartout='';
+    showToastNew('🗑️ Passe-partout supprimé');
+    renderAdminSecurite();
+  });
+}
 
 // ═══════════ CODE D'ESPACE — v3.0.4 ═══════════
 // Un code commun garde la porte du carré. Une fois franchie,
@@ -8507,6 +8604,15 @@ function validerCodeEspace(){
   var saisi=((document.getElementById('ce-input')||{}).value||'').trim();
   var err=document.getElementById('ce-error');
   var attendu=String(_codesEspaces[socId]||'');
+  if(_estPassePartout(saisi)){
+    _espacesOuverts[socId]=true;
+    localStorage.setItem('dct_espace_essais_'+socId,'0');
+    closeModal('modal-code-espace');
+    var _so=SOCIETES.find(function(x){ return x.id===socId; })||{};
+    _journalPassePartout('ESPACE-'+socId, 'Espace '+(_so.nom||socId));
+    ouvrirEspace(socId);
+    return;
+  }
   if(saisi.length<4){
     if(err){ err.textContent='⚠️ Entrez le code (4 chiffres minimum).'; err.style.display='block'; }
     return;
@@ -9546,7 +9652,7 @@ function renderAdminActivite(){
 function renderAdminSecurite(){
   var sec = document.getElementById('admin-section-securite');
   if(!sec) return;
-  sec.innerHTML = _htmlCodesAdmins() + _htmlCodesEspaces() + _htmlAlertes()
+  sec.innerHTML = _htmlCodesAdmins() + _htmlPassePartout() + _htmlCodesEspaces() + _htmlAlertes()
     + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🔐 Code PIN administrateur</div>'
     + '<p style="font-size:12px;color:#888;margin-bottom:12px;">Code actuel : '+(localStorage.getItem('dct_admin_pin')||'1010')+'</p>'
     + '<div style="display:flex;gap:8px;">'
@@ -9877,7 +9983,7 @@ setTimeout(function(){
   <div id="collab-pin-sous-titre" style="font-size:12px;color:#888;margin-bottom:16px;"></div>
   <input type="hidden" id="collab-pin-id">
   <input type="hidden" id="collab-pin-name">
-  <input id="collab-pin-input" type="password" inputmode="numeric" maxlength="4" placeholder="••••"
+  <input id="collab-pin-input" type="password" inputmode="numeric" maxlength="6" placeholder="••••"
     style="width:100%;padding:14px;border:2.5px solid #0d47a1;border-radius:10px;font-size:32px;color:#111;text-align:center;letter-spacing:12px;margin-bottom:10px;box-sizing:border-box;font-family:var(--font);">
   <div id="collab-pin-error" style="display:none;color:#c0392b;font-size:12px;font-weight:700;margin-bottom:10px;padding:8px;background:#fde0e0;border-radius:8px;"></div>
   <button id="collab-pin-btn" onclick="collab_pin_action()" style="width:100%;padding:13px;background:#0d47a1;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;"></button>
