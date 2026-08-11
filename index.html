@@ -1035,8 +1035,7 @@ function ecouterFrance(){
     var _avant = window._glDesactive;
     window._glDesactive = !!((d.societes||{}).GL||{}).desactive;
     if(_avant !== window._glDesactive){
-      try{ var _sc=document.querySelector('.screen.active');
-           if(_sc && _sc.id==='s-login') retourEspaces(); }catch(e){}
+      _rafraichirLogin();
       try{ var _sp=document.getElementById('admin-section-partenaires');
            if(_sp && _sp.style.display!=='none') renderAdminPartenaires(); }catch(e){}
     }
@@ -1410,8 +1409,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.14.1';
-var APP_UPDATE = '09/08/2026 à 22:40';
+var APP_VERSION = 'v3.14.2';
+var APP_UPDATE = '09/08/2026 à 23:10';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2133,8 +2132,23 @@ function buildLogin(){
   chargerMessageAdmin();
 }
 
+var _espaceOuvertUI = '';
+
+// Rafraîchit l'écran de connexion SANS faire reculer l'utilisateur.
+// Les écouteurs Firebase répondent une seconde après l'ouverture :
+// sans ça, ils ramenaient au choix des espaces en pleine saisie.
+function _rafraichirLogin(){
+  try{
+    var sc=document.querySelector('.screen.active');
+    if(!sc || sc.id!=='s-login') return;
+    if(_espaceOuvertUI) ouvrirEspace(_espaceOuvertUI);
+    else retourEspaces();
+  }catch(e){}
+}
+
 // ── Niveau 1 : les trois espaces ──
 function retourEspaces(){
+  _espaceOuvertUI='';
   var esp=document.getElementById('login-espaces');
   var cards=document.getElementById('login-cards');
   var ret=document.getElementById('login-retour');
@@ -2207,6 +2221,7 @@ function _detailSociete(id){
 function ouvrirEspace(socId){
   var so=SOCIETES.find(function(x){return x.id===socId;});
   if(!so) return;
+  _espaceOuvertUI=socId;
   var esp=document.getElementById('login-espaces');
   var cards=document.getElementById('login-cards');
   var ret=document.getElementById('login-retour');
@@ -8422,8 +8437,7 @@ function ecouterCodesEspaces(){
   if(!db) return;
   db.ref('dct_config/codes_espaces').on('value', function(snap){
     _codesEspaces = snap.val() || {};
-    try{ if(document.querySelector('.screen.active') &&
-            document.querySelector('.screen.active').id==='s-login') retourEspaces(); }catch(e){}
+    _rafraichirLogin();
     try{ var sec=document.getElementById('admin-section-securite');
          if(sec && sec.style.display!=='none') renderAdminSecurite(); }catch(e){}
   });
@@ -9540,7 +9554,8 @@ function chargerConfigFirebase(){
       admins.forEach(function(a){
         if(!COLLABS.some(function(c){ return c.id===a.id; })) COLLABS.push(a);
       });
-      buildLogin();
+      var v=document.getElementById('app-version'); if(v) v.textContent=APP_VERSION;
+      _rafraichirLogin();
     }
   });
   db.ref('dct_config/pin').once('value', function(snap){
