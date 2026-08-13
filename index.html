@@ -1422,8 +1422,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.26.1';
-var APP_UPDATE = '13/08/2026 à 14:05';
+var APP_VERSION = 'v3.26.2';
+var APP_UPDATE = '13/08/2026 à 15:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -1743,16 +1743,8 @@ function setNav(tab){
     // Afficher connexions si admin (léger délai pour que le DOM soit prêt)
     if(currentUser && currentUser.admin) setTimeout(function(){ afficherConnexionsAdmin(); }, 100);
     // Marquer tout comme vu
-    if(firebaseReady && db){
-      db.ref('dct_notifs/'+currentUser.id).once('value', function(snap){
-        var total = snap.val() || 0;
-        localStorage.setItem('dct_notif_seen_'+currentUser.id, total);
-        updateNotifBadge();try{majPastilleSuivi();}catch(e){}
-      });
-    } else {
-      localStorage.setItem('dct_notif_'+currentUser.id, '0');
-      updateNotifBadge();try{majPastilleSuivi();}catch(e){}
-    }
+    _notifsVues();
+    try{majPastilleSuivi();}catch(e){}
   }
 }
 
@@ -4522,19 +4514,45 @@ function majPastilleSuivi(){
   var d = document.querySelectorAll('.suivi-dot');
   for(var i=0;i<d.length;i++) d[i].style.display = actif ? 'block' : 'none';
 }
-function updateNotifBadge(){
-  var count = parseInt(localStorage.getItem('dct_notif_'+currentUser.id)||'0');
-  var txt = count > 99 ? '99+' : String(count);
-  // Mettre à jour tous les badges (id + class)
-  var badges = document.querySelectorAll('#notif-badge, .notif-badge-tab');
-  badges.forEach(function(badge){
-    if(count > 0){
-      badge.textContent = txt;
-      badge.style.display = 'flex';
-    } else {
-      badge.style.display = 'none';
-    }
+// Total des notifications reçues, tenu à jour par Firebase.
+// Avant, la pastille lisait une clé locale toujours à zéro : elle
+// s'allumait une seconde puis s'éteignait à la première navigation.
+var _notifTotal = 0, _notifRef = null;
+
+function _ecouterNotifs(id){
+  if(!id) return;
+  // Firebase met parfois deux secondes à répondre après la connexion :
+  // sans cette relance, l'écouteur n'était jamais posé.
+  if(!firebaseReady || !db){ setTimeout(function(){ _ecouterNotifs(id); }, 1500); return; }
+  try{ if(_notifRef) _notifRef.off(); }catch(e){}
+  _notifRef = db.ref('dct_notifs/'+id);
+  _notifRef.on('value', function(snap){
+    _notifTotal = snap.val() || 0;
+    updateNotifBadge();
   });
+}
+
+function _notifsVues(){
+  var id=(currentUser||{}).id;
+  if(!id) return;
+  localStorage.setItem('dct_notif_seen_'+id, String(_notifTotal));
+  updateNotifBadge();
+}
+
+function updateNotifBadge(){
+  var id=(currentUser||{}).id||'';
+  var vu = parseInt(localStorage.getItem('dct_notif_seen_'+id)||'0');
+  var count = Math.max(0, _notifTotal - vu);
+  var txt = count > 99 ? '99+' : String(count);
+  var badges = document.querySelectorAll('#notif-badge, .notif-badge-tab');
+  for(var i=0;i<badges.length;i++){
+    if(count > 0){
+      badges[i].textContent = txt;
+      badges[i].style.display = 'flex';
+    } else {
+      badges[i].style.display = 'none';
+    }
+  }
 }
 
 function login(id){
@@ -4842,23 +4860,8 @@ function _finalisLoginCore(collab){
   // Si admin → aller sur s-home comme les autres
   // Le panneau admin est accessible via le bouton dans l'accueil
   // Écouter les notifs Firebase en temps réel
-  if(firebaseReady && db){
-    db.ref('dct_notifs/'+collab.id).on('value', function(snap){
-      var total = snap.val() || 0;
-      var seen = parseInt(localStorage.getItem('dct_notif_seen_'+collab.id)||'0');
-      var unseen = Math.max(0, total - seen);
-      // Mettre à jour badge
-      var badges = document.querySelectorAll('#notif-badge, .notif-badge-tab');
-      badges.forEach(function(badge){
-        if(unseen > 0){
-          badge.textContent = unseen > 99 ? '99+' : String(unseen);
-          badge.style.display = 'flex';
-        } else {
-          badge.style.display = 'none';
-        }
-      });
-    });
-  }
+  _notifTotal = 0;
+  _ecouterNotifs(collab.id);
   goTo('s-home');
   renderCollectesList();
   setTimeout(function(){ _mettreAJourStatuts(); }, 300);
