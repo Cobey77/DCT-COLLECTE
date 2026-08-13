@@ -1422,8 +1422,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.27.0';
-var APP_UPDATE = '13/08/2026 à 16:15';
+var APP_VERSION = 'v3.27.1';
+var APP_UPDATE = '13/08/2026 à 17:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4518,7 +4518,8 @@ function majPastilleSuivi(){
 // Elle compte directement les lignes du fil plus récentes que la
 // dernière visite. Plus de compteur séparé à tenir à jour : la
 // source est celle que tout le monde écrit déjà.
-var _notifTotal = 0, _notifRef = null;
+var _notifTotal = 0, _notifRef = null, _notifConnRef = null;
+var _nActs = 0, _nConn = 0;
 
 function _vuTs(){
   var id=(currentUser||{}).id||'';
@@ -4550,16 +4551,37 @@ function _ecouterNotifs(id){
       if(_estDeMoi(it.text)) return;
       n++;
     });
-    _notifTotal = n;
+    _nActs = n;
+    _notifTotal = _nActs + _nConn;
     updateNotifBadge();
   });
+
+  // Les connexions vivent dans leur propre réserve et ne sont
+  // visibles que des administrateurs : eux seuls les comptent.
+  try{ if(_notifConnRef) _notifConnRef.off(); }catch(e){}
+  _notifConnRef = null; _nConn = 0;
+  if((currentUser||{}).admin){
+    _notifConnRef = db.ref('dct_connexions').limitToLast(200);
+    _notifConnRef.on('value', function(snap){
+      var v=snap.val()||{}, vu=_vuTs(), n=0, moi=(currentUser||{}).name||'';
+      Object.keys(v).forEach(function(k){
+        var it=v[k];
+        if(!it || !it.ts || it.ts<=vu) return;
+        if(moi && String(it.who||'').indexOf(moi)===0) return;
+        n++;
+      });
+      _nConn = n;
+      _notifTotal = _nActs + _nConn;
+      updateNotifBadge();
+    });
+  }
 }
 
 function _notifsVues(){
   var id=(currentUser||{}).id;
   if(!id) return;
   localStorage.setItem('dct_activite_vu_'+id, String(Date.now()));
-  _notifTotal = 0;
+  _nActs = 0; _nConn = 0; _notifTotal = 0;
   updateNotifBadge();
 }
 
