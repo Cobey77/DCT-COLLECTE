@@ -369,6 +369,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div class="fg"><label class="fl" id="fa-lab-nom">Nom</label><input class="fi" id="fa-nom" placeholder="Ndiaye"></div>
     </div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="fa-tel" type="tel" placeholder="06 00 00 00 00"></div>
+    <div class="fg"><label class="fl">Deuxième numéro <span style="color:#aaa;font-weight:500;">· facultatif</span></label><input class="fi" id="fa-tel2" type="tel" placeholder="07 00 00 00 00"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="fa-adresse" placeholder="27 bd du Président Wilson"></div>
     <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="fa-infos" placeholder="Appt · Bât · Digicode..."></div>
     <div class="fg"><label class="fl">Pays</label><div id="fa-pays" style="display:flex;gap:6px;overflow-x:auto;padding-bottom:3px;"></div></div>
@@ -789,6 +790,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     </div>
     <div class="suggestions" id="suggestions"></div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="f-tel" placeholder="06 00 00 00 00" type="tel" oninput="_showSuggestionsCombo()"></div>
+    <div class="fg"><label class="fl">Deuxième numéro <span style="color:#aaa;font-weight:500;">· facultatif</span></label><input class="fi" id="f-tel2" type="tel" placeholder="07 00 00 00 00"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="f-adresse" placeholder="12 rue Pasteur"></div>
     
     <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="f-infos" placeholder="Appt 3B · Bât C · Digicode..."></div>
@@ -825,6 +827,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
       <div class="fg"><label class="fl" id="e-lab-nom">Nom</label><input class="fi" id="e-nom"></div>
     </div>
     <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="e-tel" type="tel"></div>
+    <div class="fg"><label class="fl">Deuxième numéro <span style="color:#aaa;font-weight:500;">· facultatif</span></label><input class="fi" id="e-tel2" type="tel"></div>
     <div class="fg"><label class="fl">Adresse</label><input class="fi" id="e-adresse"></div>
     
     <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="e-infos" placeholder="Appt 3B · Bât C · Digicode..."></div>
@@ -930,6 +933,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div class="fg"><label class="fl" id="ce-lab-nom">Nom</label><input class="fi" id="ce-nom"></div>
   </div>
   <div class="fg"><label class="fl">Téléphone</label><input class="fi" id="ce-tel" type="tel"></div>
+  <div class="fg"><label class="fl">Deuxième numéro <span style="color:#aaa;font-weight:500;">· facultatif</span></label><input class="fi" id="ce-tel2" type="tel"></div>
   <div class="fg"><label class="fl">Adresse</label><input class="fi" id="ce-adresse"></div>
   <div class="fg"><label class="fl">Infos complémentaires</label><input class="fi" id="ce-infos" placeholder="Appt 3B · Bât C · Digicode..."></div>
   <div class="form-row">
@@ -1418,8 +1422,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.23.1';
-var APP_UPDATE = '11/08/2026 à 19:10';
+var APP_VERSION = 'v3.24.0';
+var APP_UPDATE = '13/08/2026 à 09:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2492,9 +2496,10 @@ function _renderCreationTournee(){
       +  '<div style="font-size:14.5px;font-weight:700;">'+_nomAffiche(c)+'</div>'
       +  '<span class="badge '+(ok?'badge-green':'badge-orange')+'">'+(ok?'✓ Confirmé':'En attente')+'</span></div>'
       +'<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
-      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+' · 📦 '+(c.nb||1)+' colis</div>'
+      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📞 '+(c.tel||'')+(c.tel2?(' · 📞 '+c.tel2):'')+' · 📦 '+(c.nb||1)+' colis</div>'
       +'<div style="display:flex;gap:7px;margin-top:9px;">'
       +  '<a href="tel:'+(c.tel||'')+'" style="flex:2;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
+      +  _boutonTel2(c,'flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;margin-left:6px;')
       +  '<div onclick="_dtToggleConfirme(\''+id+'\')" style="flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;background:'+(ok?'#009A44':'#d4f0e0')+';color:'+(ok?'#fff':'#006b2d')+';">'+(ok?'✓ Confirmé':'Confirmer')+'</div>'
       +'</div>'
       +'<div onclick="_dtRetirer(\''+id+'\')" style="margin-top:7px;text-align:center;font-size:12.5px;font-weight:700;color:#992020;background:#fde0e0;border-radius:9px;padding:9px;cursor:pointer;">✕ Retirer de la tournée</div>'
@@ -3023,6 +3028,14 @@ function _renderCivilite(){
   if(soc){ var pi=document.getElementById('fa-prenom'); if(pi) pi.value=''; }
 }
 
+// Certains clients donnent deux numéros : un fixe, un portable, ou
+// celui d'un proche. Le second bouton n'apparaît que s'il existe.
+function _boutonTel2(c, style){
+  var t=(c&&c.tel2||'').trim();
+  if(!t) return '';
+  return '<a href="tel:'+t+'" style="'+(style||'')+'">📞 2ᵉ n°</a>';
+}
+
 // ═══════════ CIVILITÉ CÔTÉ DAKAR — v3.22.0 ═══════════
 // Le nom affiché partout est déjà recalculé à l'enregistrement :
 // en y intégrant la civilité, elle apparaît sur tous les écrans
@@ -3422,6 +3435,7 @@ function modifierClientFrance(){
     }
   }
   g('fa-tel', c.tel);
+  g('fa-tel2', c.tel2);
   g('fa-adresse', c.adresse);
   g('fa-infos', c.infos);
   g('fa-cp', c.cp);
@@ -3441,7 +3455,7 @@ function ouvrirAjoutFrance(){
   _faEditId='';
   var t=document.getElementById('fadd-titre'); if(t) t.textContent='Inscrire un client';
   var b=document.getElementById('fa-btn'); if(b) b.textContent='✅ Enregistrer';
-  ['fa-prenom','fa-nom','fa-tel','fa-adresse','fa-infos','fa-cp','fa-ville','fa-colis','fa-prix'].forEach(function(id){
+  ['fa-prenom','fa-nom','fa-tel','fa-tel2','fa-adresse','fa-infos','fa-cp','fa-ville','fa-colis','fa-prix'].forEach(function(id){
     var e=document.getElementById(id); if(e) e.value='';
   });
   var nb=document.getElementById('fa-nb'); if(nb) nb.value='1';
@@ -3507,7 +3521,7 @@ function saveClientFrance(){
   var obj={
     civilite:_faCivilite,
     nom:(prenom+' '+nom).trim(),
-    tel:tel,
+    tel:tel, tel2:g('fa-tel2'),
     adresse:g('fa-adresse'),
     infos:g('fa-infos'),
     cp:cp, ville:g('fa-ville'),
@@ -3535,7 +3549,7 @@ function _enregistrerModifFrance(z){
   var nouveau={
     civilite:_faCivilite,
     nom:(g('fa-prenom')+' '+g('fa-nom')).trim(),
-    tel:g('fa-tel'), adresse:g('fa-adresse'), infos:g('fa-infos'),
+    tel:g('fa-tel'), tel2:g('fa-tel2'), adresse:g('fa-adresse'), infos:g('fa-infos'),
     cp:g('fa-cp'), ville:g('fa-ville'),
     pays:z.pays, region:z.region, dept:z.dept||'',
     nb:parseInt(g('fa-nb')||'1',10)||1,
@@ -3545,7 +3559,7 @@ function _enregistrerModifFrance(z){
   // On note ce qui change vraiment, pour l'historique
   var change=[];
   if(nouveau.nom!==(c.nom||'') || nouveau.civilite!==(c.civilite||'')) change.push('nom');
-  if(nouveau.tel!==(c.tel||'')) change.push('téléphone');
+  if(nouveau.tel!==(c.tel||'') || nouveau.tel2!==(c.tel2||'')) change.push('téléphone');
   if(nouveau.adresse!==(c.adresse||'')||nouveau.cp!==(c.cp||'')||nouveau.ville!==(c.ville||'')) change.push('adresse');
   if(nouveau.nb!==(c.nb||1)||nouveau.colis!==(c.colis||'')) change.push('colis');
   if(nouveau.prix!==(c.prix||0)) change.push('montant');
@@ -3589,6 +3603,7 @@ function _renderFicheFrance(){
   var html='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:6px 14px 10px;margin-bottom:10px;box-shadow:var(--shadow);">'
     + kv('Inscrit le', _dateFr(c.creeTs)+(c.creePar?(' &nbsp;'+_pastilleAuteur(c.creePar)):''))
     + kv('Téléphone','<a href="tel:'+(c.tel||'')+'" style="color:#009A44;font-weight:700;">'+(c.tel||'')+'</a>')
+    + (c.tel2?kv('Deuxième numéro','<a href="tel:'+c.tel2+'" style="color:#009A44;font-weight:700;">'+c.tel2+'</a>'):'')
     + kv('Adresse',(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||''))
     + (c.infos?kv('Infos',c.infos):'')
     + kv('Zone',(c.pays&&c.pays!=='FR'?getPays(c.pays).drapeau+' ':'')+(c.region||'')+(c.dept?(' ('+c.dept+')'):''))
@@ -3989,6 +4004,7 @@ function _carteArret(id, num, to, fait){
       +'margin-top:6px;font-size:12px;font-weight:600;color:#5c4a00;line-height:1.45;">📋 '+c.colis+'</div>'):'')
     +'<div style="display:flex;gap:7px;margin-top:9px;">'
     +  '<a href="tel:'+(c.tel||'')+'" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
+    +  _boutonTel2(c,'flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;')
     +  '<a href="https://waze.com/ul?q='+encodeURIComponent((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||''))+'&navigate=yes" target="_blank" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">🧭 Itinéraire</a>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:8px;">'
@@ -5016,6 +5032,7 @@ function saveClientConfirme(){
   var nom=(document.getElementById('f-nom')||{}).value.trim()||'';
   var cp=(document.getElementById('f-cp')||{}).value.trim()||'';
   var tel=(document.getElementById('f-tel')||{}).value.trim()||'';
+  var tel2=(document.getElementById('f-tel2')||{}).value.trim()||'';
   var adresse=(document.getElementById('f-adresse')||{}).value.trim()||'';
   var infos=(document.getElementById('f-infos')||{}).value.trim()||'';
 
@@ -5026,15 +5043,15 @@ function saveClientConfirme(){
   var id='C'+(Date.now()%999999);
   var collab=COLLABS.find(function(c){return c.name===currentUser.name;})||COLLABS[0];
   if(!clientsParCollecte[currentCollecteId])clientsParCollecte[currentCollecteId]={};
-  clientsParCollecte[currentCollecteId][id]={name:_composeNom(_civDct.f,prenom,nom),civilite:_civDct.f,prenom:prenom,nom:nom,tel:tel.trim(),adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,colis:colis.trim(),prix:prix,bg:collab.bg,color:collab.color,by:currentUser.name};
+  clientsParCollecte[currentCollecteId][id]={name:_composeNom(_civDct.f,prenom,nom),civilite:_civDct.f,prenom:prenom,nom:nom,tel:tel.trim(),tel2:tel2,adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,colis:colis.trim(),prix:prix,bg:collab.bg,color:collab.color,by:currentUser.name};
   // Infos sauvegardées séparément dans Firebase
   
   if(!dispatchParCollecte[currentCollecteId])dispatchParCollecte[currentCollecteId]={trucks:{},assigned:{}};
   dispatchParCollecte[currentCollecteId].assigned[id]=null;
   if(!window.dctContacts)window.dctContacts={};
   var ckey=tel?tel.replace(/ /g,''):(prenom+'_'+nom).toLowerCase();
-  window.dctContacts[ckey]={civilite:_civDct.f,prenom:prenom,nom:nom,name:_composeNom(_civDct.f,prenom,nom),tel:tel.trim(),adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,by:currentUser.name};
-  addActivity('➕',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a ajouté <strong>'+prenom+' '+nom+'</strong> — '+colis+' — '+prix+' €',"À l'instant");
+  window.dctContacts[ckey]={civilite:_civDct.f,prenom:prenom,nom:nom,name:_composeNom(_civDct.f,prenom,nom),tel:tel.trim(),tel2:tel2,adresse:adresse.trim(),infos:infos,ville:ville.trim(),cp:cp,dept:dept,by:currentUser.name};
+  addActivity('➕',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a ajouté <strong>'+prenom+' '+nom+'</strong> — '+colis+' — '+prix+' €'+_sufColl(),"À l'instant");
   sauvegarder();
   var t2=document.getElementById('toast-add');
   if(t2){t2.textContent='✅ '+prenom+' '+nom+' ajouté !';t2.className='toast toast-success show';setTimeout(function(){t2.classList.remove('show');goTo('s-collecte');renderCollecteContent();renderCollectesList();},1500);}
@@ -5847,12 +5864,12 @@ function openClientFiche(id,retour){
   // Copie profonde des données du client pour éviter toute référence partagée
   var clientData = JSON.parse(JSON.stringify(c));
   // Vider TOUS les champs d'abord
-  ['e-prenom','e-nom','e-tel','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-tel2','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     el.value = '';
   });
   // Remplir avec la copie locale
-  ['e-prenom','e-nom','e-tel','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-tel2','e-adresse','e-infos','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     var key=fid.replace('e-','');
     el.value = (clientData[key] !== undefined && clientData[key] !== null) ? String(clientData[key]) : '';
@@ -5863,7 +5880,7 @@ function openClientFiche(id,retour){
   var locked=isLocked();
   var lb=document.getElementById('client-locked-banner');if(lb)lb.style.display=locked?'flex':'none';
   var ca=document.getElementById('client-actions');if(ca)ca.style.display=locked?'none':'block';
-  ['e-prenom','e-nom','e-tel','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
+  ['e-prenom','e-nom','e-tel','e-tel2','e-adresse','e-ville','e-cp','e-colis','e-prix'].forEach(function(fid){
     var el=document.getElementById(fid);if(!el)return;
     el.disabled=locked;el.style.background=locked?'#f5f5f5':'';el.style.color=locked?'#999':'';
   });
@@ -5904,7 +5921,7 @@ function saveClientEdit(){
   clientsParCollecte[colId][id] = newData;
 
   var c = newData;
-  addActivity('✏️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a modifié <strong>'+c.name+'</strong>',"À l'instant");
+  addActivity('✏️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a modifié <strong>'+c.name+'</strong>'+_sufColl(),"À l'instant");
   sauvegarder();
   var t=document.getElementById('toast-client');
   if(t){t.textContent='✅ Modifications enregistrées !';t.className='toast toast-success show';setTimeout(function(){t.classList.remove('show');goTo(clientRetour);if(currentCamion)renderCamion(currentCamion);renderCollecteContent();},1500);}
@@ -5929,7 +5946,7 @@ function confirmDelete(){
     delete asgn[currentClientId];
   }
   delete cls[currentClientId];
-  addActivity('🗑️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a supprimé <strong>'+nom+'</strong>',"À l'instant");
+  addActivity('🗑️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a supprimé <strong>'+nom+'</strong>'+_sufColl(),"À l'instant");
   sauvegarder();
   var t=document.getElementById('toast-client');
   if(t){t.textContent=nom+' supprimé.';t.className='toast toast-error show';setTimeout(function(){t.classList.remove('show');goTo(clientRetour);renderCollecteContent();renderCollectesList();},1500);}
@@ -5940,7 +5957,7 @@ function ouvrirAjoutClient(){
   var c=collectes.find(function(x){return x.id===currentCollecteId;});
   var lb=document.getElementById('add-collecte-label');if(lb)lb.textContent=c?c.date:'Collecte';
   var ab=document.getElementById('add-by');if(ab){ab.textContent=currentUser.name;ab.style.color=currentUser.color;}
-  ['f-prenom','f-nom','f-tel','f-adresse','f-infos','f-ville','f-cp','f-colis','f-prix'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+  ['f-prenom','f-nom','f-tel','f-tel2','f-adresse','f-infos','f-ville','f-cp','f-colis','f-prix'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
   _civDct.f=''; _renderCivDct('f');
   var sug=document.getElementById('suggestions');if(sug)sug.classList.remove('show');
   goTo('s-add');
@@ -6283,7 +6300,7 @@ function _retirerClientDuCamion(id, truckKey){
     var truck = dispatch.trucks[truckKey];
     truck.clients = truck.clients.filter(function(cid){ return cid !== id; });
   }
-  addActivity('🔄',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a retiré <strong>'+clientName+'</strong> de <strong>'+truckName+'</strong>',"À l'instant");
+  addActivity('🔄',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a retiré <strong>'+clientName+'</strong> de <strong>'+truckName+'</strong>'+_sufColl(),"À l'instant");
   // Recalculer et redessiner le tracé du camion
   _redessinerTraceCamion(truckKey);
   sauvegarder();
@@ -6553,7 +6570,7 @@ function validerCarteSelection(){
   var truckName = trks[truckKey] ? trks[truckKey].name : truckKey;
   // Notification globale pour l'affectation
   var clientNames = _mapSelection.map(function(s){ return (getClients()[s.id]||{}).name || s.data.name || ''; }).join(', ');
-  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a affecté <strong>'+clientNames+'</strong> → <strong>'+truckName+'</strong>',"À l'instant");
+  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a affecté <strong>'+clientNames+'</strong> → <strong>'+truckName+'</strong>'+_sufColl(),"À l'instant");
   showToastNew('✅ '+_mapSelection.length+' client(s) affecté(s) à '+truckName+' !');
 
   // Tracer la ligne permanente avec flèches pour ce camion
@@ -6831,7 +6848,7 @@ function _confirmerAddTruck(){
   var couleur = couleurs[(num-1) % couleurs.length];
   trks[k]={name:nom,clients:[],validated:[],refused:[],hours:{},cancelled:[],wazeTs:{},finTs:{},color:couleur};
   truckCount=Object.keys(trks).length;
-  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a ajouté le camion <strong>'+nom+'</strong>',"À l'instant");
+  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a ajouté le camion <strong>'+nom+'</strong>'+_sufColl(),"À l'instant");
   closeModal('modal-add-truck');
   sauvegarder();renderDispatchTab();
   if(_pendingAffect){
@@ -6855,7 +6872,7 @@ function confirmerSupprimerCamion(){
     tk.clients.forEach(function(id){if(asgn[id]===curSupprimerCamion)asgn[id]=null;});
     delete trks[curSupprimerCamion];
   }
-  addActivity('🗑️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a supprimé <strong>'+nomCamion+'</strong>',"À l'instant");
+  addActivity('🗑️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a supprimé <strong>'+nomCamion+'</strong>'+_sufColl(),"À l'instant");
   curSupprimerCamion=null;
   closeModal('modal-del-camion');
   sauvegarder();renderDispatchTab();
@@ -6910,7 +6927,7 @@ function confirmerAnnulation(){
     updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_val;
     db.ref().update(updates);
   }
-  addActivity('🚫',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — annulé : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
+  addActivity('🚫',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — annulé : <strong>'+(getClients()[id]||{}).name+'</strong>'+_sufColl(),"À l'instant");
   sauvegarder();
   closeModal('modal-annulation');
   renderCamion(tk);
@@ -7054,7 +7071,7 @@ function retirerClient(){
     if(trks[old].hours)delete trks[old].hours[curAffectId];
   }
   asgn[curAffectId]=null;
-  addActivity('🔄',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a retiré <strong>'+curAffectName+'</strong> de <strong>'+truckName+'</strong>',"À l'instant");
+  addActivity('🔄',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a retiré <strong>'+curAffectName+'</strong> de <strong>'+truckName+'</strong>'+_sufColl(),"À l'instant");
   var ar=document.getElementById('affect-retirer');if(ar)ar.style.display='none';
   var at=document.getElementById('affect-title');if(at)at.textContent='Affecter '+curAffectName+' à…';
   buildAffectOptions();sauvegarder();renderDispatchTab();
@@ -7069,7 +7086,7 @@ function affecter(tk){
   if(!trks[tk].hours)trks[tk].hours={};
   trks[tk].hours[curAffectId]='';
   asgn[curAffectId]=tk;
-  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a affecté <strong>'+curAffectName+'</strong> → <strong>'+trks[tk].name+'</strong>',"À l'instant");
+  addActivity('🚛',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a affecté <strong>'+curAffectName+'</strong> → <strong>'+trks[tk].name+'</strong>'+_sufColl(),"À l'instant");
   sauvegarder();closeModal('modal-affect');renderDispatchTab();
 }
 
@@ -7158,6 +7175,13 @@ function renderCamion(k){
       telLink.style.cssText='color:#1a237e;font-weight:700;text-decoration:none;';
       telLink.textContent='📞 '+(c.tel||'');
       telEl.appendChild(telLink);
+      if((c.tel2||'').trim()){
+        var telLink2=document.createElement('a');
+        telLink2.href='tel:'+String(c.tel2).replace(/ /g,'');
+        telLink2.style.cssText='color:#1a237e;font-weight:700;text-decoration:none;margin-left:10px;';
+        telLink2.textContent='📞 '+c.tel2;
+        telEl.appendChild(telLink2);
+      }
     } else {
       telEl.textContent='📞 —';
     }
@@ -7275,7 +7299,7 @@ function validerHeure(){
   if(doublon){showToastNew('⚠️ '+(getClients()[doublon]||{}).name+' est déjà prévu à '+f);return;}
   if(!tk.hours)tk.hours={};
   tk.hours[curHeureId]=f;
-  addActivity('🗺️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a planifié <strong>'+(getClients()[curHeureId]||{}).name+'</strong> à '+f,"À l'instant");
+  addActivity('🗺️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a planifié <strong>'+(getClients()[curHeureId]||{}).name+'</strong> à '+f+_sufColl(),"À l'instant");
   sauvegarder();closeModal('modal-heure');renderCamion(curHeureTk);
   // Mettre à jour le dispatch aussi
   if(currentSubtab==='dispatch')renderDispatchTab();
@@ -7299,7 +7323,7 @@ function confirmerAnnuler(){
   // Supprimer le finTs aussi
   if(tk.finTs) delete tk.finTs[curAnnulerId];
   var typeLabel=type==='valider'?'la collecte':type==='refus'?'le refus':type==='annulation'?'l\'annulation':'le report';
-  addActivity('↩️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a annulé '+typeLabel+' de <strong>'+(getClients()[curAnnulerId]||{}).name+'</strong>',"À l'instant");
+  addActivity('↩️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a annulé '+typeLabel+' de <strong>'+(getClients()[curAnnulerId]||{}).name+'</strong>'+_sufColl(),"À l'instant");
   // Écriture directe Firebase
   window._lastWriteTime=Date.now();
   if(firebaseReady && db && currentCollecteId){
@@ -7336,7 +7360,7 @@ function confirmValider(){
     updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_val;
     db.ref().update(updates);
   }
-  addActivity('✅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a validé la ramasse de <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
+  addActivity('✅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a validé la ramasse de <strong>'+(getClients()[id]||{}).name+'</strong>'+_sufColl(),"À l'instant");
   sauvegarder();
   closeModal('modal-valider');
   renderCamion(tk);
@@ -7362,7 +7386,7 @@ function confirmRefus(){
     updates['dct/dispatch/'+currentCollecteId+'/trucks/'+tk+'/finTs/'+id]=finTs_ref;
     db.ref().update(updates);
   }
-  addActivity('❌',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — ramasse non effectuée : <strong>'+(getClients()[id]||{}).name+'</strong>',"À l'instant");
+  addActivity('❌',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> — ramasse non effectuée : <strong>'+(getClients()[id]||{}).name+'</strong>'+_sufColl(),"À l'instant");
   sauvegarder();
   closeModal('modal-refus');
   renderCamion(tk);
@@ -7574,7 +7598,7 @@ function _appliquerReport(colIdDest){
     }
     db.ref().update(updates);
   }
-  addActivity('📅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a reporté <strong>'+(_plusClientNom||'')+'</strong>',"À l'instant");
+  addActivity('📅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a reporté <strong>'+(_plusClientNom||'')+'</strong>'+_sufColl(),"À l'instant");
   sauvegarder();
   closeModal('modal-report');
   renderCamion(_plusTruckKey);
@@ -7779,6 +7803,7 @@ function openContactEdit(contactKey){
   document.getElementById('ce-prenom').value = c.prenom||'';
   document.getElementById('ce-nom').value = c.nom||'';
   document.getElementById('ce-tel').value = c.tel||'';
+  var _t2=document.getElementById('ce-tel2'); if(_t2) _t2.value = c.tel2||'';
   document.getElementById('ce-adresse').value = c.adresse||'';
   document.getElementById('ce-infos').value = c.infos||'';
   document.getElementById('ce-cp').value = c.cp||'';
@@ -7882,6 +7907,7 @@ function saveContactEdit(){
   var prenom = document.getElementById('ce-prenom').value.trim();
   var nom = document.getElementById('ce-nom').value.trim();
   var tel = document.getElementById('ce-tel').value.trim();
+  var tel2 = ((document.getElementById('ce-tel2')||{}).value||'').trim();
   var adresse = document.getElementById('ce-adresse').value.trim();
   var infos = document.getElementById('ce-infos').value.trim();
 
@@ -7908,7 +7934,7 @@ function saveContactEdit(){
   var newKey = tel ? tel.replace(/ /g,'') : (prenom+'_'+nom).toLowerCase();
   var updatedContact = {
     civilite:_civDct.ce, prenom:prenom, nom:nom, name:_composeNom(_civDct.ce,prenom,nom),
-    tel:tel, adresse:adresse, infos:infos, cp:cp, ville:ville,
+    tel:tel, tel2:tel2, adresse:adresse, infos:infos, cp:cp, ville:ville,
     dept:cp.substring(0,2), by:oldContact.by
   };
   
@@ -7930,6 +7956,7 @@ function saveContactEdit(){
         cls[clientId].nom = nom;
         cls[clientId].name = _composeNom(_civDct.ce,prenom,nom);
         cls[clientId].tel = tel;
+        cls[clientId].tel2 = tel2;
         cls[clientId].adresse = adresse;
         cls[clientId].infos = infos;
 
@@ -8021,7 +8048,7 @@ function validerDispatch(){
 function confirmerValiderDispatch(){
   var idx=collectes.findIndex(function(c){return c.id===currentCollecteId;});
   if(idx>=0) collectes[idx].dispatchValide=true;
-  addActivity('✅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a validé le dispatch',"À l'instant");
+  addActivity('✅',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a validé le dispatch'+_sufColl(),"À l'instant");
   sauvegarder();
   closeModal('modal-dispatch-confirm');
   renderDispatchTab();
@@ -8031,7 +8058,7 @@ function confirmerValiderDispatch(){
 function annulerValidationDispatch(){
   var idx=collectes.findIndex(function(c){return c.id===currentCollecteId;});
   if(idx>=0) collectes[idx].dispatchValide=false;
-  addActivity('↩️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a annulé la validation du dispatch',"À l'instant");
+  addActivity('↩️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a annulé la validation du dispatch'+_sufColl(),"À l'instant");
   sauvegarder();
   renderDispatchTab();
   renderCollectesList();
@@ -9443,6 +9470,19 @@ function _construireCarteFrance(){
 
 // ═══════════ ACTIVITÉ DU RAMASSAGE — v3.14.0 ═══════════
 // On se branche sur le fil existant, avec la bonne signature :
+// Sur quelle collecte porte l'action ? Trois collectes à venir en même
+// temps, et le fil ne disait pas laquelle. Il le dit maintenant.
+function _sufColl(colId){
+  var id = colId || currentCollecteId;
+  if(!id) return '';
+  var c = (collectes||[]).find(function(x){ return x.id===id; });
+  if(!c || !c.date) return '';
+  // « jeudi 22 septembre 2026 » → « 22 septembre »
+  var m = String(c.date).match(/(\d{1,2}\s+[^\s]+)/);
+  var court = m ? m[1] : c.date;
+  return ' <span style="color:#888;font-weight:600;">· collecte du '+court+'</span>';
+}
+
 // addActivity(emoji, couleurDeFond, texteHtml, heure)
 function _activiteFrance(emoji, texte){
   try{
