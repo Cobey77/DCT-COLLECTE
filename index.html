@@ -1422,8 +1422,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.25.1';
-var APP_UPDATE = '13/08/2026 à 12:05';
+var APP_VERSION = 'v3.26.0';
+var APP_UPDATE = '13/08/2026 à 13:10';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2120,6 +2120,11 @@ function ouvrirSelecteurCollecte(){
     h+='<div style="font-size:11.5px;color:#888;margin-top:2px;">'+nb+' client'+(nb>1?'s':'')+'</div></div>';
     h+='<span style="font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:'+tg.b+';color:'+tg.f+';">'+tg.t+'</span>';
     if(sel) h+='<span style="color:#009A44;font-weight:800;">\u2713</span>';
+    if(c.statut!=='en_cours'){
+      h+='<span onclick="event.stopPropagation();supprimerSuiviCollecte(\''+c.id+'\')" '
+       + 'style="background:#fde0e0;color:#992020;border:1px solid #c0392b;border-radius:9px;'
+       + 'padding:6px 9px;font-size:13px;cursor:pointer;flex-shrink:0;" title="Supprimer">🗑️</span>';
+    }
     h+='</div>';
   });
   if(!h) h='<div style="color:#888;font-size:13px;text-align:center;padding:16px;line-height:1.6;">'
@@ -4984,15 +4989,15 @@ function supprimerCollecte(id){
   if(el)el.textContent='Supprimer "'+( c?c.date:'')+'" ? Irréversible.';
   openModal('modal-del-collecte');
 }
-function confirmerSupprimerCollecte(){
-  if(!collecteASupprimer)return;
-  var idToDelete = collecteASupprimer;
+// L'effacement lui-même, appelé depuis la liste des collectes
+// comme depuis le suivi.
+function _effacerCollecte(idToDelete){
+  if(!idToDelete) return;
   collectes=collectes.filter(function(c){return c.id!==idToDelete;});
   delete clientsParCollecte[idToDelete];
   delete dispatchParCollecte[idToDelete];
   if(currentCollecteId===idToDelete)currentCollecteId=collectes.length?collectes[0].id:null;
-  collecteASupprimer=null;
-  closeModal('modal-del-collecte');
+  if(suiviCollecteId===idToDelete) suiviCollecteId=null;
 
   // Supprimer directement dans Firebase (contourne le guard collectes vide)
   if(firebaseReady && db){
@@ -5003,7 +5008,42 @@ function confirmerSupprimerCollecte(){
     db.ref().update(updates);
   }
   sauvegarder();
+}
+
+function confirmerSupprimerCollecte(){
+  if(!collecteASupprimer)return;
+  var idToDelete = collecteASupprimer;
+  collecteASupprimer=null;
+  closeModal('modal-del-collecte');
+  _effacerCollecte(idToDelete);
   renderCollectesList();
+}
+
+// Depuis le suivi : on efface une collecte terminée dont on ne veut plus.
+// La confirmation dit exactement ce qui disparaît, chiffres à l'appui.
+function supprimerSuiviCollecte(id){
+  var c=(collectes||[]).find(function(x){ return x.id===id; });
+  if(!c) return;
+  if(c.statut==='en_cours'){ showToastNew('⚠️ Collecte en cours — impossible de la supprimer.'); return; }
+  var cls=clientsParCollecte[id]||{};
+  var nb=Object.keys(cls).length;
+  var total=0; Object.keys(cls).forEach(function(k){ total+=(cls[k].prix||0); });
+  var d=(dispatchParCollecte[id]||{}).trucks||{};
+  var nbCam=Object.keys(d).length;
+  if(!confirm('Supprimer la collecte du '+c.date+' ?\n\n'
+    + nb+' client'+(nb>1?'s':'')+' · '+nbCam+' camion'+(nbCam>1?'s':'')+' · '+total+' €\n\n'
+    + 'Tout disparaît définitivement : les clients de cette collecte, les camions et les montants. '
+    + 'Le carnet de contacts n\'est pas touché.')) return;
+  var lib=c.date;
+  _effacerCollecte(id);
+  showToastNew('🗑️ Collecte du '+lib+' supprimée');
+  try{
+    addActivity('🗑️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name
+      +'</strong> a supprimé la collecte du <strong>'+lib+'</strong>',"À l'instant");
+  }catch(e){}
+  try{ renderCollectesList(); }catch(e){}
+  renderSuivi();
+  ouvrirSelecteurCollecte();
 }
 function ouvrirCollecte(id){
   try{
