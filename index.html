@@ -1422,8 +1422,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.26.2';
-var APP_UPDATE = '13/08/2026 à 15:00';
+var APP_VERSION = 'v3.27.0';
+var APP_UPDATE = '13/08/2026 à 16:15';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4514,10 +4514,25 @@ function majPastilleSuivi(){
   var d = document.querySelectorAll('.suivi-dot');
   for(var i=0;i<d.length;i++) d[i].style.display = actif ? 'block' : 'none';
 }
-// Total des notifications reçues, tenu à jour par Firebase.
-// Avant, la pastille lisait une clé locale toujours à zéro : elle
-// s'allumait une seconde puis s'éteignait à la première navigation.
+// ═══════════ PASTILLE D'ACTIVITÉ — v3.27.0 ═══════════
+// Elle compte directement les lignes du fil plus récentes que la
+// dernière visite. Plus de compteur séparé à tenir à jour : la
+// source est celle que tout le monde écrit déjà.
 var _notifTotal = 0, _notifRef = null;
+
+function _vuTs(){
+  var id=(currentUser||{}).id||'';
+  var v=parseInt(localStorage.getItem('dct_activite_vu_'+id)||'0');
+  if(!v){ v=Date.now(); localStorage.setItem('dct_activite_vu_'+id, String(v)); }
+  return v;
+}
+
+// Une ligne signée de mon propre nom ne m'alerte pas.
+function _estDeMoi(texte){
+  var moi=(currentUser||{}).name||'';
+  if(!moi) return false;
+  return String(texte||'').indexOf('>'+moi+'<')>=0;
+}
 
 function _ecouterNotifs(id){
   if(!id) return;
@@ -4525,9 +4540,17 @@ function _ecouterNotifs(id){
   // sans cette relance, l'écouteur n'était jamais posé.
   if(!firebaseReady || !db){ setTimeout(function(){ _ecouterNotifs(id); }, 1500); return; }
   try{ if(_notifRef) _notifRef.off(); }catch(e){}
-  _notifRef = db.ref('dct_notifs/'+id);
+  _vuTs();
+  _notifRef = db.ref('activite_items').limitToLast(200);
   _notifRef.on('value', function(snap){
-    _notifTotal = snap.val() || 0;
+    var v=snap.val()||{}, vu=_vuTs(), n=0;
+    Object.keys(v).forEach(function(k){
+      var it=v[k];
+      if(!it || !it.ts || it.ts<=vu) return;
+      if(_estDeMoi(it.text)) return;
+      n++;
+    });
+    _notifTotal = n;
     updateNotifBadge();
   });
 }
@@ -4535,14 +4558,13 @@ function _ecouterNotifs(id){
 function _notifsVues(){
   var id=(currentUser||{}).id;
   if(!id) return;
-  localStorage.setItem('dct_notif_seen_'+id, String(_notifTotal));
+  localStorage.setItem('dct_activite_vu_'+id, String(Date.now()));
+  _notifTotal = 0;
   updateNotifBadge();
 }
 
 function updateNotifBadge(){
-  var id=(currentUser||{}).id||'';
-  var vu = parseInt(localStorage.getItem('dct_notif_seen_'+id)||'0');
-  var count = Math.max(0, _notifTotal - vu);
+  var count = _notifTotal;
   var txt = count > 99 ? '99+' : String(count);
   var badges = document.querySelectorAll('#notif-badge, .notif-badge-tab');
   for(var i=0;i<badges.length;i++){
@@ -7825,20 +7847,6 @@ function addActivity(emoji,bg,text,time){
     _reordonnerActivite(list);
   }
 
-  // Notifier les autres collaborateurs
-  if(firebaseReady && db){
-    var notifRef = db.ref('dct_notifs');
-    notifRef.transaction(function(current){
-      var data = current || {};
-      // Les administrateurs sont notifiés comme les autres. Ce sont leurs
-      // actions qui restent invisibles, pas leur boîte de réception.
-      // On exclut par nom : Issyaka a deux profils, il ne s'alerte pas lui-même.
-      COLLABS.forEach(function(co){
-        if(co.name !== currentUser.name) data[co.id] = (data[co.id]||0) + 1;
-      });
-      return data;
-    });
-  }
 }
 function effacerActivite(){
   var now = Date.now();
