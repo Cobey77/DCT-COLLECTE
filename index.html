@@ -1437,8 +1437,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.29.0';
-var APP_UPDATE = '13/08/2026 à 19:30';
+var APP_VERSION = 'v3.30.0';
+var APP_UPDATE = '13/08/2026 à 20:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2455,24 +2455,68 @@ function _htmlVivierDanny(){
   }
   if(dannyDept) liste=liste.filter(function(c){ return c.dept===dannyDept; });
 
+  h+=_bandeauAnciennete(liste);
   h+='<div class="slabel">'+liste.length+' client'+(liste.length>1?'s':'')+' à ramasser</div>';
   liste.forEach(function(c){
     var on=dannySel.indexOf(c._id)>=0;
     var j=_joursDepuis(c.creeTs);
     var vieux=j>=14;
-    h+='<div onclick="toggleSelDanny(\''+c._id+'\')" style="background:'+(on?'#f5f6fc':'#fff')+';border:1.5px solid '+(on?'#1a237e':'var(--border)')+';border-radius:var(--radius);padding:11px 12px;margin-bottom:9px;display:flex;gap:11px;align-items:flex-start;cursor:pointer;box-shadow:var(--shadow);">'
+    var _anc=_anciennete(c);
+    h+='<div onclick="toggleSelDanny(\''+c._id+'\')" style="background:'+(on?'#f5f6fc':(_anc?_anc.bg:'#fff'))+';'
+      +'border:1.5px solid '+(on?'#1a237e':(_anc?_anc.bord:'var(--border)'))+';'
+      +(_anc?('border-left:4px solid '+_anc.bord+';'):'')
+      +'border-radius:var(--radius);padding:11px 12px;margin-bottom:9px;display:flex;gap:11px;align-items:flex-start;cursor:pointer;box-shadow:var(--shadow);">'
       +'<div style="width:22px;height:22px;border-radius:6px;border:2px solid '+(on?'#1a237e':'#ccc')+';background:'+(on?'#1a237e':'#fff')+';color:#fff;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;">'+(on?'✓':'')+'</div>'
       +'<div style="flex:1;min-width:0;">'
       +  '<div style="font-size:14.5px;font-weight:700;color:var(--text);">'+_nomAffiche(c)+'</div>'
       +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       +  '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
-      +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></div>'
+      +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(_anc?('color:'+_anc.bord+';font-weight:800;'):'')+'">'+j+' j</span></div>'
       +  _lienAppel(c)
       +  _boutonNotes(c._id)
       +'</div></div>';
   });
   return h;
 }
+// ═══════════ ANCIENNETÉ — v3.30.0 ═══════════
+// Un client qui attend depuis deux semaines ne doit pas ressembler
+// à celui inscrit hier. La carte entière change de couleur : on le
+// voit sans lire le compteur.
+var ANCIENNETE = [
+  {j:30, bg:'#fef2f2', bord:'#c0392b', lib:'Plus de 30 jours'},
+  {j:14, bg:'#fffaf0', bord:'#e08e0b', lib:'Plus de 14 jours'}
+];
+
+function _anciennete(c){
+  if(!c || c.statut!=='attente') return null;
+  var j=_joursDepuis(c.creeTs);
+  for(var i=0;i<ANCIENNETE.length;i++){
+    if(j>=ANCIENNETE[i].j) return ANCIENNETE[i];
+  }
+  return null;
+}
+
+// Bandeau d'alerte, seulement si quelqu'un attend vraiment trop.
+function _bandeauAnciennete(liste){
+  var vieux=0, tresVieux=0, plusVieux=0;
+  (liste||[]).forEach(function(c){
+    if(c.statut!=='attente') return;
+    var j=_joursDepuis(c.creeTs);
+    if(j>plusVieux) plusVieux=j;
+    if(j>=30) tresVieux++; else if(j>=14) vieux++;
+  });
+  if(!tresVieux && !vieux) return '';
+  var rouge=(tresVieux>0);
+  var txt = tresVieux
+    ? (tresVieux+' client'+(tresVieux>1?'s attendent':' attend')+' depuis plus de 30 jours')
+    : (vieux+' client'+(vieux>1?'s attendent':' attend')+' depuis plus de 14 jours');
+  return '<div style="background:'+(rouge?'#fef2f2':'#fffaf0')+';border:1.5px solid '+(rouge?'#c0392b':'#e08e0b')+';'
+    + 'border-radius:var(--radius);padding:10px 12px;margin-bottom:11px;font-size:12.5px;'
+    + 'color:'+(rouge?'#992020':'#92400e')+';line-height:1.5;">'
+    + (rouge?'🔴':'🟠')+' <b>'+txt+'</b><br>'
+    + '<span style="opacity:.85;">Le plus ancien attend depuis '+plusVieux+' jours.</span></div>';
+}
+
 // ═══════════ NOTES DE SUIVI — v3.29.0 ═══════════
 // Chacun consigne ce qu'il constate, daté et signé. Le jour d'un
 // litige, la chronologie raconte ce qui s'est réellement passé.
@@ -2996,6 +3040,7 @@ function renderFrance(){
   var _lib = franceFiltre==='historique' ? 'Partis pour Dakar'
            : FR_STATUTS[franceFiltre==='planifie'?'planifie':(franceFiltre==='chartres'||franceFiltre==='mitry'?'ramasse':'attente')].lib;
   var _tot=_totalPrix(liste.map(function(x){ return x._id; }));
+  if(franceFiltre==='attente') html+=_bandeauAnciennete(liste);
   html+='<div class="slabel"><span>'+_lib+' · '+liste.length+' client'+(liste.length>1?'s':'')+'</span>'
       + (_montantsVisibles()&&_tot?('<span style="color:#006b2d;">'+_tot+' €</span>'):'')+'</div>';
   var _finHtml = (franceFiltre==='historique' && _peutGererFrance() && liste.length)
@@ -3471,7 +3516,11 @@ function _frCarte(c){
   var coche=(dannySel.indexOf(c._id)>=0);
   // La case coche, le reste de la carte ouvre la fiche.
   var act = 'ouvrirFicheFrance(\''+c._id+'\')';
-  var cadre = sel&&coche ? 'border:1.5px solid #009A44;background:#f2fbf5;' : 'border:1.5px solid var(--border);background:#fff;';
+  var anc=_anciennete(c);
+  var cadre = sel&&coche
+    ? 'border:1.5px solid #009A44;background:#f2fbf5;'
+    : ('border:1.5px solid '+(anc?anc.bord:'var(--border)')+';background:'+(anc?anc.bg:'#fff')+';');
+  if(anc) cadre += 'border-left:4px solid '+anc.bord+';';
   var boite = sel
     ? '<div onclick="event.stopPropagation();toggleSelAdmin(\''+c._id+'\')" style="width:26px;height:26px;border-radius:7px;border:2px solid '+(coche?'#009A44':'#ccc')+';background:'+(coche?'#009A44':'#fff')+';color:#fff;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;margin-right:10px;cursor:pointer;">'+(coche?'✓':'')+'</div>'
     : '';
@@ -3485,7 +3534,7 @@ function _frCarte(c){
     +   (_montantsVisibles()?(' · <b style="color:#006b2d;">'+(c.prix||0)+' €</b>'):'')+'</div>'
     + '<div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-top:5px;">'
     +   '<span style="font-size:11.5px;color:var(--text3);">🗓 '+_dateFr(c.creeTs)
-    +     ' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></span>'
+    +     ' · <span style="'+(anc?('color:'+anc.bord+';font-weight:800;'):'')+'">'+j+' j</span></span>'
     +   _pastilleAuteur(c.creePar)
     + '</div>'
     + (c.statut==='parti'
