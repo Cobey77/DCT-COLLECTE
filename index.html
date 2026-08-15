@@ -542,6 +542,21 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 </div>
 
+<!-- NOTES DE SUIVI D'UN CLIENT -->
+<div id="modal-note" class="modal-overlay">
+<div class="modal-sheet" style="max-width:360px;margin:auto;">
+<div style="padding:20px 18px;">
+  <div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:2px;">&#128221; Notes de suivi</div>
+  <div id="nt-client" style="font-size:12px;color:#888;margin-bottom:12px;"></div>
+  <input type="hidden" id="nt-id">
+  <div id="nt-liste" style="max-height:38vh;overflow-y:auto;margin-bottom:12px;"></div>
+  <textarea class="fi" id="nt-texte" rows="3" placeholder="Ce qui s'est pass&#233;, avec les d&#233;tails utiles&#8230;" style="resize:none;margin-bottom:8px;"></textarea>
+  <button onclick="ajouterNote()" style="width:100%;padding:13px;background:#009A44;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">Enregistrer la note</button>
+  <button onclick="closeModal('modal-note')" style="width:100%;padding:11px;margin-top:8px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Fermer</button>
+</div>
+</div>
+</div>
+
 <!-- CRÉATION DE TOURNÉE (Danny) -->
 <div class="screen" id="s-tournee-edit">
   <div class="header">
@@ -1422,8 +1437,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.28.0';
-var APP_UPDATE = '13/08/2026 à 18:00';
+var APP_VERSION = 'v3.29.0';
+var APP_UPDATE = '13/08/2026 à 19:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2453,10 +2468,138 @@ function _htmlVivierDanny(){
       +  '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
       +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></div>'
       +  _lienAppel(c)
+      +  _boutonNotes(c._id)
       +'</div></div>';
   });
   return h;
 }
+// ═══════════ NOTES DE SUIVI — v3.29.0 ═══════════
+// Chacun consigne ce qu'il constate, daté et signé. Le jour d'un
+// litige, la chronologie raconte ce qui s'est réellement passé.
+// Une note ne s'efface plus après cinq minutes : c'est ce qui lui
+// donne sa valeur.
+var _noteClientId = '';
+var NOTE_DELAI = 5*60*1000;
+
+function _notesDe(id){
+  var c=(franceData.clients||{})[id]||{};
+  var n=c.notes;
+  if(!n) return [];
+  if(Array.isArray(n)) return n.slice();
+  // Firebase renvoie parfois un objet : on remet en liste
+  return Object.keys(n).map(function(k){ return n[k]; }).filter(Boolean);
+}
+
+function _dateHeureFr(ts){
+  if(!ts) return '';
+  var d=new Date(ts);
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear()
+       + ' à ' + ('0'+d.getHours()).slice(-2)+'h'+('0'+d.getMinutes()).slice(-2);
+}
+
+// Sur les écrans du partenaire, aucun prénom de Dakar City ne sort :
+// l'auteur devient la maison, pas la personne.
+function _auteurNote(n){
+  var nom=n&&n.q||'';
+  if(_peutGererFrance()) return nom||'—';
+  return _auteurPourPartenaire(nom) || 'Dakar City Transport';
+}
+
+function _peutEffacerNote(n){
+  if(!n || !n.ts) return false;
+  if((Date.now()-n.ts) > NOTE_DELAI) return false;
+  return !!(currentUser && n.uid===currentUser.id);
+}
+
+function ouvrirNotes(id){
+  _noteClientId=id;
+  var c=(franceData.clients||{})[id]||{};
+  var e=document.getElementById('nt-client'); if(e) e.textContent=_nomAffiche(c)+' · '+(c.ville||'');
+  var i=document.getElementById('nt-id'); if(i) i.value=id;
+  var t=document.getElementById('nt-texte'); if(t) t.value='';
+  _renderNotes();
+  openModal('modal-note');
+  setTimeout(function(){ if(t) t.focus(); },300);
+}
+
+function _renderNotes(){
+  var box=document.getElementById('nt-liste'); if(!box) return;
+  var l=_notesDe(_noteClientId).sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  if(!l.length){
+    box.innerHTML='<div style="text-align:center;color:#aaa;font-size:12.5px;padding:18px 10px;line-height:1.6;">'
+      +'Aucune note pour ce client.<br>La première ouvrira la chronologie.</div>';
+    return;
+  }
+  var h='';
+  l.forEach(function(n,idx){
+    h+='<div style="border-left:2px solid var(--border);padding:0 0 12px 13px;margin-left:5px;position:relative;">'
+     + '<div style="position:absolute;left:-6px;top:3px;width:9px;height:9px;border-radius:50%;background:#1a237e;"></div>'
+     + '<div style="font-size:11px;color:#888;font-weight:700;">'+_dateHeureFr(n.ts)+' · '+_auteurNote(n)+'</div>'
+     + '<div style="font-size:12.5px;color:#222;margin-top:3px;line-height:1.5;white-space:pre-wrap;">'+_esc(n.t||'')+'</div>';
+    if(_peutEffacerNote(n)){
+      h+='<div onclick="supprimerNote('+(n.ts||0)+')" style="display:inline-block;margin-top:5px;font-size:11px;'
+       + 'font-weight:700;color:#992020;cursor:pointer;">Supprimer</div>';
+    }
+    h+='</div>';
+  });
+  box.innerHTML=h;
+}
+
+function ajouterNote(){
+  var id=_noteClientId;
+  var t=document.getElementById('nt-texte');
+  var txt=((t||{}).value||'').trim();
+  if(!id) return;
+  if(txt.length<2){ showToastNew('⚠️ Écrivez la note avant d\'enregistrer.'); return; }
+  if(_bloqueSiVueAdmin()) return;
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  var u=currentUser||{};
+  var nom=u.name||'';
+  if(u.role==='poste'){ try{ nom=_chauffeurCourant()||nom; }catch(e){} }
+  var liste=_notesDe(id);
+  liste.push({ q:nom, uid:u.id||'', t:txt, ts:Date.now() });
+  var c=(franceData.clients||{})[id]||{};
+  var maj={}; maj['clients/'+id+'/notes']=liste;
+  db.ref('france').update(maj).then(function(){
+    c.notes=liste;
+    if(t) t.value='';
+    _renderNotes();
+    showToastNew('📝 Note enregistrée');
+    _activiteFrance('📝', 'a noté un événement sur <strong>'+_nomAffiche(c)+'</strong>');
+    try{ renderFrance(); }catch(e){}
+    try{ renderDanny(); }catch(e){}
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
+  });
+}
+
+function supprimerNote(ts){
+  var id=_noteClientId;
+  var liste=_notesDe(id);
+  var n=liste.filter(function(x){ return x.ts===ts; })[0];
+  if(!n || !_peutEffacerNote(n)){ showToastNew('⚠️ Cette note ne peut plus être supprimée.'); return; }
+  if(!confirm('Supprimer cette note ?')) return;
+  var reste=liste.filter(function(x){ return x.ts!==ts; });
+  var maj2={}; maj2['clients/'+id+'/notes']=reste.length?reste:null;
+  db.ref('france').update(maj2).then(function(){
+    var c=(franceData.clients||{})[id]||{};
+    c.notes=reste;
+    _renderNotes();
+    showToastNew('🗑️ Note supprimée');
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
+  });
+}
+
+// Le bouton, avec le nombre de notes déjà consignées
+function _boutonNotes(id, style){
+  var n=_notesDe(id).length;
+  return '<div onclick="event.stopPropagation();ouvrirNotes(\''+id+'\')" style="'
+    + (style||'display:inline-block;background:#eef0fa;color:#1a237e;border:1px solid #c5cae9;'
+      +'border-radius:9px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;')
+    + '">📝 Notes'+(n?(' · '+n):'')+'</div>';
+}
+
 // Joindre un client depuis le vivier, sans cocher la carte au passage.
 // Danny sonde qui est disponible avant de figer sa tournée ; la
 // confirmation, elle, reste à l'écran suivant.
@@ -3688,6 +3831,7 @@ function _renderFicheFrance(){
   // Actions
   if(_peutGererFrance()){
     html+='<button class="btn btn-green" onclick="modifierClientFrance()">✏️ Modifier la fiche</button>';
+    html+='<button class="btn btn-gray" onclick="ouvrirNotes(\''+franceClientId+'\')" style="background:#eef0fa;color:#1a237e;border:1.5px solid #c5cae9;">📝 Notes de suivi'+(_notesDe(franceClientId).length?(' · '+_notesDe(franceClientId).length):'')+'</button>';
     html+='<button class="btn btn-gray" onclick="supprimerClientFrance()" style="background:#fde0e0;color:#992020;border:1.5px solid #c0392b;">🗑️ Supprimer cette fiche</button>';
   }
   box.innerHTML=html;
@@ -4052,6 +4196,7 @@ function _carteArret(id, num, to, fait){
     +'<div style="display:flex;gap:7px;margin-top:9px;">'
     +  '<a href="tel:'+(c.tel||'')+'" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
     +  _boutonTel2(c,'flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;')
+    +  _boutonNotes(id,'flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#eef0fa;color:#1a237e;cursor:pointer;')
     +  '<a href="https://waze.com/ul?q='+encodeURIComponent((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||''))+'&navigate=yes" target="_blank" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">🧭 Itinéraire</a>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:8px;">'
