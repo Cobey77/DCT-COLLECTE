@@ -1422,8 +1422,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.27.1';
-var APP_UPDATE = '13/08/2026 à 17:00';
+var APP_VERSION = 'v3.28.0';
+var APP_UPDATE = '13/08/2026 à 18:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2452,10 +2452,26 @@ function _htmlVivierDanny(){
       +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       +  '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
       +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(vieux?'color:#92400e;font-weight:700;':'')+'">'+j+' j</span></div>'
+      +  _lienAppel(c)
       +'</div></div>';
   });
   return h;
 }
+// Joindre un client depuis le vivier, sans cocher la carte au passage.
+// Danny sonde qui est disponible avant de figer sa tournée ; la
+// confirmation, elle, reste à l'écran suivant.
+function _lienAppel(c){
+  var t=(c&&c.tel||'').trim(), t2=(c&&c.tel2||'').trim();
+  if(!t && !t2) return '';
+  var st='display:inline-block;text-decoration:none;background:#e8f5e9;color:#006b2d;'
+       + 'border:1px solid #009A44;border-radius:9px;padding:6px 11px;font-size:12px;'
+       + 'font-weight:700;margin-top:8px;margin-right:6px;';
+  var h='';
+  if(t)  h+='<a href="tel:'+t+'" onclick="event.stopPropagation();" style="'+st+'">📞 '+t+'</a>';
+  if(t2) h+='<a href="tel:'+t2+'" onclick="event.stopPropagation();" style="'+st+'">📞 '+t2+'</a>';
+  return h;
+}
+
 function _chipD(lib,on,action,col){
   col=col||'#1a237e';
   return '<span onclick="event.stopPropagation();'+action+'" style="font-size:11.5px;font-weight:'+(on?700:600)+';padding:5px 10px;border-radius:18px;white-space:nowrap;cursor:pointer;'
