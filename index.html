@@ -1512,8 +1512,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.47.1';
-var APP_UPDATE = '17/08/2026 à 22:20';
+var APP_VERSION = 'v3.48.1';
+var APP_UPDATE = '18/08/2026 à 09:15';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5215,7 +5215,7 @@ function _htmlLotChartres(){
    +   '<div style="font-size:15px;font-weight:800;color:#111;">🏭 Entrepôt de Chartres</div>'
    +   '<div style="font-size:12.5px;color:#92400e;margin-top:4px;line-height:1.5;">'
    +     refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis y attendent<br>'
-   +     '<span style="opacity:.8;">12 rue de l\'Industrie · 28000 Chartres</span></div>';
+   +     '<span style="opacity:.8;">'+_adresseChartres()+'</span></div>';
 
   if(l){
     h+='<div style="background:#d4f0e0;border-radius:10px;padding:11px 12px;margin-top:11px;">'
@@ -5339,14 +5339,18 @@ function _htmlArretChartres(k){
    +   '<div style="font-size:15px;font-weight:800;">🏭 Entrepôt de Chartres</div>'
    +   '<span class="badge badge-orange">Lot France</span></div>'
    + '<div style="font-size:12.5px;color:#92400e;margin-top:4px;line-height:1.5;">'
-   +   '12 rue de l\'Industrie · 28000 Chartres</div>'
+   +   _adresseChartres()+'</div>'
    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">'
    +   '<div style="font-size:13px;font-weight:800;color:#111;">'
    +     refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</div>'
    +   '<div style="font-size:12.5px;font-weight:700;color:#92400e;">Ouvrir le lot →</div>'
    + '</div>'
+   + '<div onclick="event.stopPropagation();ouvrirModalHeure(CHARTRES_ID,\''+k+'\')" style="display:inline-block;'
+   +   'margin-top:10px;background:'+(_heureChartres()?'#fef3c7':'#fff')+';border:1.5px solid #e08e0b;color:#92400e;'
+   +   'border-radius:10px;padding:7px 12px;font-size:12.5px;font-weight:700;cursor:pointer;">'
+   +   (_heureChartres()?('🕐 '+_heureChartres()+' · modifier'):'🕐 Fixer l\'heure')+'</div>'
    + '<div style="display:flex;gap:7px;margin-top:11px;">'
-   +   '<a href="https://waze.com/ul?q='+encodeURIComponent('12 rue de l\'Industrie 28000 Chartres')+'&navigate=yes" target="_blank" onclick="event.stopPropagation();" style="flex:1;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:11px 6px;font-size:12.5px;font-weight:700;">🧭 Itinéraire</a>'
+   +   '<a href="https://waze.com/ul?q='+encodeURIComponent(_adresseChartres().replace(' · ',' '))+'&navigate=yes" target="_blank" onclick="event.stopPropagation();" style="flex:1;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:11px 6px;font-size:12.5px;font-weight:700;">🧭 Itinéraire</a>'
    +   '<div onclick="event.stopPropagation();validerLotChartres()" style="flex:1;text-align:center;background:#009A44;color:#fff;border-radius:10px;padding:11px 6px;font-size:12.5px;font-weight:800;cursor:pointer;">✓ Valider le lot</div>'
    + '</div>'
    + '</div>';
@@ -5490,7 +5494,7 @@ function _renderLotChartres(){
 
   var h='<div style="background:#fffaf0;border:1.5px solid #e08e0b;border-radius:var(--radius);'
    + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.55;">'
-   + '12 rue de l\'Industrie · 28000 Chartres<br>'
+   + _adresseChartres()+'<br>'
    + '<b style="color:#111;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</b> encore sur place</div>'
    + '<div class="slabel">Un par un — vérifier puis décider</div>';
 
@@ -8413,7 +8417,19 @@ function renderCamion(k){
   try{ _chargesHtml=_htmlChargesChartres(k); }catch(e){}
   if(!tk.clients.length && !_chartresHtml && !_chargesHtml){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
   route.innerHTML='';
-  if(_chartresHtml){ var _cb=document.createElement('div'); _cb.innerHTML=_chartresHtml; route.appendChild(_cb); }
+  // L'arrêt de Chartres se glisse à sa place : avant les clients s'il
+  // n'a pas d'heure, sinon au rang que son heure lui donne.
+  var _hCh=_heureChartres();
+  var _posCh = (_chartresHtml && _hCh)
+    ? sorted.filter(function(id){ var hh=hours[id]; return hh && hh.localeCompare(_hCh)<0; }).length
+    : 0;
+  var _chPose=false;
+  function _poserChartres(){
+    if(_chPose || !_chartresHtml) return;
+    _chPose=true;
+    var _cb=document.createElement('div'); _cb.innerHTML=_chartresHtml; route.appendChild(_cb);
+  }
+  if(_posCh===0) _poserChartres();
   if(_chargesHtml){ var _cg=document.createElement('div'); _cg.innerHTML=_chargesHtml; route.appendChild(_cg); }
   try{
     var _lf=_ligneFranceCamion(k);
@@ -8421,6 +8437,7 @@ function renderCamion(k){
     if(_cc && _lf && !tk.clients.length) _cc.textContent='0 client d\'Île-de-France';
   }catch(e){}
   sorted.forEach(function(id,idx){
+    if(idx===_posCh) _poserChartres();
     var c=cls[id];if(!c)return;
     var cancelled=tk.cancelled||[];var reported=tk.reported||[];var isVal=validated.includes(id),isRef=refused.includes(id),isAnn=cancelled.includes(id),isRep=reported.includes(id),heure=hours[id]||'';
     var card=document.createElement('div');card.className='route-card'+(isVal?' done':isRef?' refused':isAnn?' cancelled':isRep?' reported':'');
@@ -8533,6 +8550,7 @@ function renderCamion(k){
     }
     card.appendChild(top);card.appendChild(det);card.appendChild(act);route.appendChild(card);
   });
+  _poserChartres();   // heure la plus tardive : l'arrêt ferme la marche
   if(pct===100&&tk.clients.length>0){
     var b=document.createElement('div');b.className='complete-banner';
     b.innerHTML='<div style="font-size:32px;margin-bottom:6px;">🎉</div><div style="font-size:16px;font-weight:800;color:#006b2d;">Tournée 100% complète !</div><div style="font-size:13px;color:#006b2d;margin-top:4px;">'+collected+' € collectés sur '+total+' € prévus</div>';
@@ -8574,8 +8592,36 @@ function ouvrirModalWaze(url, adresse, clientId){
   openModal('modal-waze');
 }
 
+// Chartres est un arrêt comme un autre : il prend son heure et se
+// range dans l'ordre de passage avec les clients.
+var CHARTRES_ID='__chartres__';
+
+// Adresse de l'entrepôt du partenaire. Tant que Danny ne l'a pas
+// donnée, on n'affiche que la ville : mieux vaut pas d'adresse
+// qu'une adresse inventée dans un GPS.
+var CHARTRES_RUE = '';
+var CHARTRES_VILLE = '28000 Chartres';
+function _adresseChartres(){
+  return (CHARTRES_RUE ? (CHARTRES_RUE+' · ') : '') + CHARTRES_VILLE;
+}
+
+function _heureChartres(){
+  var l=_lotCollecte();
+  return (l && l.heure) || '';
+}
+
 function ouvrirModalHeure(id,k){
   curHeureId=id;curHeureTk=k;
+  if(id===CHARTRES_ID){
+    var el0=document.getElementById('modal-heure-title');
+    if(el0) el0.textContent='Heure — Entrepôt de Chartres';
+    var inp0=document.getElementById('modal-heure-input');
+    var h0=_heureChartres();
+    if(inp0) inp0.value=h0?h0.replace('h',':'):'';
+    openModal('modal-heure');
+    setTimeout(function(){var i2=document.getElementById('modal-heure-input');if(i2)i2.focus();},300);
+    return;
+  }
   var tk=getTrucks()[k]||{},c=getClients()[id]||{};
   var heure=(tk.hours&&tk.hours[id])||'';
   var el=document.getElementById('modal-heure-title');if(el)el.textContent='Heure — '+(c.name||'');
@@ -8589,6 +8635,19 @@ function validerHeure(){
   var val=inp.value;
   if(!val){closeModal('modal-heure');return;}
   var f=val.replace(':','h');
+  if(curHeureId===CHARTRES_ID){
+    if(!db || !firebaseReady || !currentCollecteId){ showToastNew('❌ Connexion indisponible.'); return; }
+    var majH={}; majH['lots/'+currentCollecteId+'/heure']=f;
+    db.ref('france').update(majH).then(function(){
+      if(!franceData.lots[currentCollecteId]) franceData.lots[currentCollecteId]={};
+      franceData.lots[currentCollecteId].heure=f;
+      addActivity('🗺️',currentUser.bg,'<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a planifié l\'<strong>entrepôt de Chartres</strong> à '+f+_sufColl(),"À l'instant");
+      closeModal('modal-heure');
+      if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+      if(currentSubtab==='dispatch') renderDispatchTab();
+    }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+    return;
+  }
   var tk=getTrucks()[curHeureTk];if(!tk)return;
   var doublon=tk.clients.find(function(c){return c!==curHeureId&&tk.hours&&tk.hours[c]===f;});
   if(doublon){showToastNew('⚠️ '+(getClients()[doublon]||{}).name+' est déjà prévu à '+f);return;}
