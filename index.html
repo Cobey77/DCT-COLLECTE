@@ -1516,8 +1516,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.53.3';
-var APP_UPDATE = '18/08/2026 à 22:10';
+var APP_VERSION = 'v3.54.0';
+var APP_UPDATE = '19/08/2026 à 09:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5574,19 +5574,12 @@ function validerLotChartres(){
 }
 
 // ── L'écran dédié au lot ──
-var _lotMode='aCharger';
-
 function ouvrirLotChartres(){
-  _lotMode='aCharger';
   _renderLotChartres();
   goTo('s-lot-chartres');
 }
-
-function ouvrirRapportesChartres(){
-  _lotMode='rapportes';
-  _renderLotChartres();
-  goTo('s-lot-chartres');
-}
+// Même écran : la carte validée ouvre exactement la même liste.
+function ouvrirRapportesChartres(){ ouvrirLotChartres(); }
 
 function fermerLotChartres(){
   if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
@@ -5596,41 +5589,15 @@ function fermerLotChartres(){
 function _renderLotChartres(){
   var box=document.getElementById('lot-chartres-content');
   if(!box) return;
+  var k=(typeof currentCamion!=='undefined')?currentCamion:'';
+  var refs=_clientsDuLot(k);
+  var lot=_lotCollecte()||{};
+  var valide=!!lot.fait;
 
-  // Relecture de ce que le camion a déjà rapporté : aucune décision
-  // à prendre, on regarde.
   var _lt=document.getElementById('lot-titre'), _ls=document.getElementById('lot-sous');
-  if(_lt) _lt.textContent = (_lotMode==='rapportes') ? '✅ Rapportés de Chartres' : '🏭 Entrepôt de Chartres';
-  if(_ls) _ls.textContent = (_lotMode==='rapportes') ? 'Déposés à Mitry-Mory' : 'Lot France';
+  if(_lt) _lt.textContent='🏭 Entrepôt de Chartres';
+  if(_ls) _ls.textContent= valide ? 'Passage validé' : 'Lot France';
 
-  if(_lotMode==='rapportes'){
-    var lc=_chargesDuCamion((typeof currentCamion!=='undefined')?currentCamion:'');
-    var bb=document.getElementById('lot-chartres-barre'); if(bb) bb.style.display='none';
-    if(!lc.length){
-      box.innerHTML='<div style="text-align:center;color:#aaa;padding:40px 20px;">Aucun colis rapporté.</div>';
-      return;
-    }
-    var cs=0; lc.forEach(function(c){ cs+=(c.nb||1); });
-    var hh='<div style="background:#f2fbf5;border:1.5px solid #009A44;border-radius:var(--radius);'
-     + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#006b2d;line-height:1.55;">'
-     + '<b style="color:#111;">'+lc.length+' client'+(lc.length>1?'s':'')+' · '+cs+' colis</b><br>'
-     + 'rapportés de Chartres et déposés à Mitry-Mory'
-     + '<div style="font-size:11.5px;opacity:.85;margin-top:5px;">Pour en modifier un, reviens sur l\'arrêt et touche « ↩ Retour ».</div></div>';
-    lc.forEach(function(c){
-      hh+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);'
-       +'padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
-       +'<div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
-       +'<div style="font-size:12px;color:var(--text3);margin-top:2px;line-height:1.45;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
-       +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
-       +'<div style="font-size:11px;color:#006b2d;margin-top:2px;">chargé par '+(c.mitryPar||'—')+' · '+_dateFr(c.mitryTs)+'</div>'
-       + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
-       +'</div>';
-    });
-    box.innerHTML=hh;
-    return;
-  }
-
-  var refs=_clientsDuLot((typeof currentCamion!=='undefined')?currentCamion:'');
   if(!refs.length){
     box.innerHTML='<div style="text-align:center;color:#aaa;padding:40px 20px;line-height:1.6;">'
       +'<div style="font-size:32px;margin-bottom:10px;">📭</div>Aucun colis sur cet arrêt.</div>';
@@ -5640,43 +5607,50 @@ function _renderLotChartres(){
   var b1=document.getElementById('lot-chartres-barre'); if(b1) b1.style.display='block';
   var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
 
-  var h='<div style="background:#fffaf0;border:1.5px solid #e08e0b;border-radius:var(--radius);'
-   + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.55;">'
-   + _adresseChartres()+'<br>'
-   + '<b style="color:#111;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</b> sur cet arrêt</div>'
-   + '<div class="slabel">Qu\'est-ce qui monte dans le camion ?</div>';
+  var h = valide
+    ? ('<div style="background:#f2fbf5;border:1.5px solid #009A44;border-radius:var(--radius);'
+       + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#006b2d;line-height:1.55;">'
+       + '<b style="color:#111;">✓ Passage validé</b> · '+_adresseChartres()+'<br>'
+       + '<span style="opacity:.85;">Pour modifier, reviens sur l\'arrêt et touche « ↩ Retour ».</span></div>')
+    : ('<div style="background:#fffaf0;border:1.5px solid #e08e0b;border-radius:var(--radius);'
+       + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.55;">'
+       + _adresseChartres()+'<br>'
+       + '<b style="color:#111;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</b> sur cet arrêt</div>');
+  h += '<div class="slabel">'+(valide?'Ce qui est monté dans le camion':'Qu\'est-ce qui monte dans le camion ?')+'</div>';
 
   refs.forEach(function(c){
-    var aMitry=(c.lieu==='mitry');
+    var charge=(c.lieu==='mitry');
     var jours=_joursDepuis(c.depotTs);
     var nc=c.nonCharge;
-    h+='<div style="background:#fff;border:1.5px solid '+(aMitry?'#009A44':'var(--border)')+';'
+    h+='<div style="background:'+(charge?'#f2fbf5':'#fff')+';border:1.5px solid '+(charge?'#009A44':'#e08e0b')+';'
      +'border-radius:var(--radius);padding:12px;margin-bottom:10px;box-shadow:var(--shadow);">'
      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">'
      +  '<div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
-     +  (aMitry?'<span class="badge badge-green">✓ Chargé</span>':'<span class="badge badge-orange">À charger</span>')
+     +  (charge?'<span class="badge badge-green">✓ Chargé</span>':'<span class="badge badge-orange">Resté sur place</span>')
      +'</div>'
      +'<div style="font-size:12px;color:var(--text3);margin-top:2px;line-height:1.45;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
-     +(aMitry
+     +(charge
         ? ('<div style="font-size:11px;color:#006b2d;margin-top:2px;">chargé par '+(c.mitryPar||'—')+' · '+_dateFr(c.mitryTs)+'</div>')
         : ('<div style="font-size:11px;color:#92400e;margin-top:2px;">sur place depuis '+jours+' j</div>'));
-    if(!aMitry && nc && nc.motif){
+    if(!charge && nc && nc.motif){
       h+='<div style="background:#fde0e0;border-radius:9px;padding:8px 10px;margin-top:8px;'
        + 'font-size:11.5px;color:#992020;line-height:1.5;">✕ '+_esc(nc.motif)+'</div>';
     }
-    h+= _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
-     + '<div style="display:flex;gap:8px;margin-top:10px;">'
-     +   '<div onclick="chargerUnClient(\''+c._id+'\')" style="flex:1;text-align:center;padding:12px 5px;'
-     +     'border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;'
-     +     (aMitry?'background:#009A44;color:#fff;':'background:#fff;border:1.5px solid #009A44;color:#006b2d;')
-     +     '">✓ Chargé</div>'
-     +   '<div onclick="ouvrirNonCharge(\''+c._id+'\')" '
-     +     'style="flex:1;text-align:center;padding:12px 5px;border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;'
-     +     (!aMitry?'background:#e08e0b;color:#fff;':'background:#fff;border:1.5px solid #e08e0b;color:#92400e;')
-     +     '">✕ Pas chargé</div>'
-     + '</div>'
-     +'</div>';
+    h+= _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET));
+    if(!valide){
+      h+='<div style="display:flex;gap:8px;margin-top:10px;">'
+       +   '<div onclick="chargerUnClient(\''+c._id+'\')" style="flex:1;text-align:center;padding:12px 5px;'
+       +     'border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;'
+       +     (charge?'background:#009A44;color:#fff;':'background:#fff;border:1.5px solid #009A44;color:#006b2d;')
+       +     '">✓ Chargé</div>'
+       +   '<div onclick="ouvrirNonCharge(\''+c._id+'\')" style="flex:1;text-align:center;padding:12px 5px;'
+       +     'border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;'
+       +     (!charge?'background:#e08e0b;color:#fff;':'background:#fff;border:1.5px solid #e08e0b;color:#92400e;')
+       +     '">✕ Pas chargé</div>'
+       + '</div>';
+    }
+    h+='</div>';
   });
   box.innerHTML=h;
   _majBarreLotChartres();
