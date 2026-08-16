@@ -1099,6 +1099,11 @@ function ecouterFrance(){
     try{ if(typeof renderFrance==='function') renderFrance(); }catch(e){}
     try{ var sc=document.querySelector('.screen.active');
          if(sc && sc.id==='s-partenaire' && typeof renderDanny==='function') renderDanny(); }catch(e){}
+    // Danny dépose à Chartres pendant qu'un collaborateur a sa collecte
+    // ouverte : le bloc « colis en province » doit apparaître tout de
+    // suite, sans qu'il ait à quitter l'écran et y revenir.
+    try{ var sc2=document.querySelector('.screen.active');
+         if(sc2 && sc2.id==='s-collecte' && typeof renderCollecteContent==='function') renderCollecteContent(); }catch(e){}
     try{ majBoutonFrance(); }catch(e){}
   });
 }
@@ -1464,8 +1469,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.35.3';
-var APP_UPDATE = '16/08/2026 à 20:10';
+var APP_VERSION = 'v3.36.2';
+var APP_UPDATE = '16/08/2026 à 23:15';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4977,6 +4982,53 @@ function _lotDuCamion(k){
 }
 
 // Bloc affiché dans l'onglet Dispatch
+// Ce qui attend à Mitry-Mory : déjà chez nous, plus rien à aller
+// chercher — mais il faut le charger dans le conteneur, et rien ne
+// le disait côté collecte.
+function _refsMitry(){
+  var out=[];
+  Object.keys(franceData.clients||{}).forEach(function(k){
+    var c=franceData.clients[k];
+    if(c && c.lieu==='mitry' && c.statut!=='parti'){ c._id=k; out.push(c); }
+  });
+  out.sort(function(a,b){ return (a.depotTs||0)-(b.depotTs||0); });
+  return out;
+}
+
+function _htmlStockMitry(){
+  var refs=_refsMitry();
+  if(!refs.length) return '';
+  var colis=0, plusVieux=0;
+  refs.forEach(function(c){
+    colis+=(c.nb||1);
+    var j=_joursDepuis(c.depotTs||c.creeTs);
+    if(j>plusVieux) plusVieux=j;
+  });
+  return '<div class="slabel">Colis France — déjà à l\'entrepôt</div>'
+   + '<div onclick="_versSuiviMitry()" style="background:#d4f0e0;border:2px solid #009A44;'
+   +   'border-radius:var(--radius);padding:13px 14px;margin-bottom:14px;cursor:pointer;">'
+   +   '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+   +     '<div style="font-size:14px;font-weight:800;color:#111;">📍 Mitry-Mory</div>'
+   +     '<span class="badge badge-green">'+refs.length+' client'+(refs.length>1?'s':'')+'</span>'
+   +   '</div>'
+   +   '<div style="font-size:12px;color:#006b2d;margin-top:5px;line-height:1.5;">'
+   +     colis+' colis ramassés en province, prêts pour le conteneur.'
+   +     (plusVieux?('<br>Le plus ancien est arrivé il y a '+plusVieux+' jour'+(plusVieux>1?'s':'')+'.'):'')
+   +   '</div>'
+   +   '<div style="font-size:12px;font-weight:700;color:#006b2d;margin-top:8px;">Voir la liste →</div>'
+   + '</div>';
+}
+
+// Ouvre France & Europe directement sur la puce Mitry.
+function _versSuiviMitry(){
+  try{
+    franceTab='suivi'; franceFiltre='mitry'; franceRegion=''; franceDept=''; dannySel=[];
+    var q=document.getElementById('fr-q'); if(q) q.value='';
+    goTo('s-france');
+    renderFrance();
+  }catch(e){}
+}
+
 function _htmlLotChartres(){
   var refs=_refsChartres();
   if(!refs.length) return '';
@@ -5789,10 +5841,23 @@ function renderDispatchTab(){
   var nb=Object.keys(cls).length;
   var container=document.getElementById('collecte-content');
   container.innerHTML='';
+  // Les colis de province d'abord : une collecte peut n'avoir aucun
+  // client d'Île-de-France et devoir quand même passer par Chartres.
+  var _frBloc='';
+  try{ _frBloc=_htmlLotChartres()+_htmlStockMitry(); }catch(e){}
+  if(_frBloc){ var _fb=document.createElement('div'); _fb.innerHTML=_frBloc; container.appendChild(_fb); }
   if(!nb){
-    var e=document.createElement('div');e.style.cssText='text-align:center;color:#aaa;padding:40px 20px;';
-    e.innerHTML='<div style="font-size:32px;margin-bottom:10px;">🚛</div>Aucun client. Ajoutez des clients d\'abord.';
-    container.appendChild(e);return;
+    var e=document.createElement('div');e.style.cssText='text-align:center;color:#aaa;padding:34px 20px;line-height:1.6;';
+    e.innerHTML= _frBloc
+      ? '<div style="font-size:32px;margin-bottom:10px;">🚛</div>Aucun client d\'Île-de-France sur cette collecte.<br>Ajoutez un camion pour aller chercher le lot ci-dessus.'
+      : '<div style="font-size:32px;margin-bottom:10px;">🚛</div>Aucun client. Ajoutez des clients d\'abord.';
+    container.appendChild(e);
+    if(_frBloc){
+      var bAdd=document.createElement('div');
+      bAdd.innerHTML='<button class="btn btn-green" onclick="addTruck()">+ Ajouter un camion</button>';
+      container.appendChild(bAdd);
+    }
+    return;
   }
   var totalG=Object.values(cls).reduce(function(s,c){return s+(c.prix||0);},0);
   var collG=Object.keys(trks).reduce(function(s,k){return s+getTruckCollected(k,trks,cls);},0);
@@ -5813,10 +5878,7 @@ function renderDispatchTab(){
     +'<div style="flex:1;background:#d4f0e0;border:1.5px solid #009A44;border-radius:10px;padding:10px;text-align:center;"><div style="font-size:11px;color:#006b2d;font-weight:600;">Affectés</div><div style="font-size:20px;font-weight:800;color:#006b2d;">'+aff+'</div></div>'
     +'<div style="flex:1;background:#fde0e0;border:1.5px solid #c0392b;border-radius:10px;padding:10px;text-align:center;"><div style="font-size:11px;color:#992020;font-weight:600;">Restants</div><div style="font-size:20px;font-weight:800;color:#992020;">'+rem+'</div></div>';
   container.appendChild(stats);
-  try{
-    var lotHtml=_htmlLotChartres();
-    if(lotHtml){ var lb=document.createElement('div'); lb.innerHTML=lotHtml; container.appendChild(lb); }
-  }catch(e){}
+  if(_frBloc){ var lb=document.createElement('div'); lb.innerHTML=_frBloc; container.appendChild(lb); }
   var sl=document.createElement('div');sl.className='slabel';sl.textContent='Camions — tap pour ouvrir la tournée';container.appendChild(sl);
   Object.keys(trks).forEach(function(k){
     var tc=getTc(k),tk=trks[k];
@@ -6489,6 +6551,12 @@ function renderClientsTab(){
   var sd=document.getElementById('sbar-depts');if(sd)sd.textContent=depts||0;
   var container=document.getElementById('collecte-content');
   container.innerHTML='';
+  // Ce qui vient de province est visible dès l'ouverture de la collecte,
+  // pas seulement dans l'onglet Dispatch.
+  try{
+    var _fr=_htmlLotChartres()+_htmlStockMitry();
+    if(_fr){ var _fb=document.createElement('div'); _fb.innerHTML=_fr; container.appendChild(_fb); }
+  }catch(e){}
   var grid=document.createElement('div');grid.className='collab-grid';
   COLLABS.forEach(function(co){
     if(co.admin) return; // Admin non affiché
