@@ -1512,8 +1512,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.47.0';
-var APP_UPDATE = '17/08/2026 à 21:30';
+var APP_VERSION = 'v3.47.1';
+var APP_UPDATE = '17/08/2026 à 22:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5353,6 +5353,28 @@ function _htmlArretChartres(k){
   return h;
 }
 
+// Les colis de province ne se mélangent pas aux compteurs de la
+// collecte : ils ont leur propre suivi et leurs propres montants.
+// Mais un camion qui en transporte ne doit pas afficher « 0 client »
+// sans un mot d'explication.
+function _ligneFranceCamion(k){
+  var pris=0, aPrendre=0;
+  try{ pris=_chargesDuCamion(k).length; }catch(e){}
+  try{
+    var l=_lotDuCamion(k);
+    if(l) aPrendre=_refsChartres().length;
+  }catch(e){}
+  if(!pris && !aPrendre) return '';
+  var bouts=[];
+  if(aPrendre) bouts.push('🏭 '+aPrendre+' à prendre à Chartres');
+  if(pris)     bouts.push('✅ '+pris+' rapporté'+(pris>1?'s':''));
+  return '<div onclick="event.stopPropagation()" style="background:#f2fbf5;border:1px solid #b7e2c8;'
+    + 'border-radius:9px;padding:7px 10px;margin:8px 0 0;font-size:11.5px;color:#006b2d;font-weight:700;">'
+    + '🇪🇺 France & Europe · '+bouts.join(' · ')
+    + '<div style="font-size:10.5px;font-weight:500;opacity:.8;margin-top:2px;">Compté à part, hors ramasse et montants de la collecte.</div>'
+    + '</div>';
+}
+
 // Ce que ce camion a rapporté de Chartres. Le lot disparaît une fois
 // le passage validé : sans cette trace, le colis s'évaporait de la
 // collecte alors qu'il était bien dans le camion.
@@ -6386,6 +6408,7 @@ function renderDispatchTab(){
       +'<div class="progress-bg"><div class="progress-bar" style="width:'+pctF+'%;background:'+tc.bar+';"></div></div>'
       +'<div class="truck-fin-detail"><span style="color:'+tc.color+';">'+collected+' € collecté</span><span style="color:#666;">'+pctF+'%</span></div>'
       +'</div>'
+      + _ligneFranceCamion(k)
       +'<div class="truck-ramasse" onclick="event.stopPropagation()">'
       +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;">'
       +'<span style="font-size:11px;color:#555;font-weight:500;">Ramasse</span>'
@@ -8392,6 +8415,11 @@ function renderCamion(k){
   route.innerHTML='';
   if(_chartresHtml){ var _cb=document.createElement('div'); _cb.innerHTML=_chartresHtml; route.appendChild(_cb); }
   if(_chargesHtml){ var _cg=document.createElement('div'); _cg.innerHTML=_chargesHtml; route.appendChild(_cg); }
+  try{
+    var _lf=_ligneFranceCamion(k);
+    var _cc=document.getElementById('c-count');
+    if(_cc && _lf && !tk.clients.length) _cc.textContent='0 client d\'Île-de-France';
+  }catch(e){}
   sorted.forEach(function(id,idx){
     var c=cls[id];if(!c)return;
     var cancelled=tk.cancelled||[];var reported=tk.reported||[];var isVal=validated.includes(id),isRef=refused.includes(id),isAnn=cancelled.includes(id),isRep=reported.includes(id),heure=hours[id]||'';
