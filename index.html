@@ -1464,8 +1464,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.35.0';
-var APP_UPDATE = '16/08/2026 à 17:30';
+var APP_VERSION = 'v3.35.1';
+var APP_UPDATE = '16/08/2026 à 18:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2818,7 +2818,7 @@ function _boutonPhotos(id, style){
   var c=(franceData.clients||{})[id]||{};
   var n=c.nbPhotos||0;
   return '<div onclick="event.stopPropagation();ouvrirPhotos(\''+id+'\')" style="'
-    + (style||_ACT_VERT) + '">📷 Photos'+(n?(' · '+n):'')+'</div>';
+    + (style||_ACT_VIOLET) + '">📷 Photos'+(n?(' · '+n):'')+'</div>';
 }
 
 // ═══════════ ANCIENNETÉ — v3.30.0 ═══════════
@@ -2992,8 +2992,9 @@ function _boutonNotes(id, style){
 var _ACT_BASE = 'flex:1;min-width:0;text-align:center;padding:10px 6px;border-radius:10px;'
               + 'font-size:12.5px;font-weight:700;cursor:pointer;text-decoration:none;'
               + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;';
-var _ACT_VERT = _ACT_BASE + 'background:#e8f5e9;color:#006b2d;border:1px solid #009A44;';
-var _ACT_BLEU = _ACT_BASE + 'background:#eef0fa;color:#1a237e;border:1px solid #c5cae9;';
+var _ACT_VERT   = _ACT_BASE + 'background:#e8f5e9;color:#006b2d;border:1px solid #009A44;';
+var _ACT_BLEU   = _ACT_BASE + 'background:#eef0fa;color:#1a237e;border:1px solid #c5cae9;';
+var _ACT_VIOLET = _ACT_BASE + 'background:#f3efff;color:#6d28d9;border:1px solid #b9a5f0;';
 
 function _rangee(contenu, haut){
   if(!contenu) return '';
@@ -3014,7 +3015,7 @@ function _lienAppel(c){
 function _actionsClient(id){
   var c=(franceData.clients||{})[id]||{};
   return _lienAppel(c)
-       + _rangee(_boutonNotes(id, _ACT_BLEU) + _boutonPhotos(id, _ACT_VERT));
+       + _rangee(_boutonNotes(id, _ACT_BLEU) + _boutonPhotos(id, _ACT_VIOLET));
 }
 
 function _chipD(lib,on,action,col){
@@ -4245,7 +4246,7 @@ function _renderFicheFrance(){
   if(_peutGererFrance()){
     html+='<button class="btn btn-green" onclick="modifierClientFrance()">✏️ Modifier la fiche</button>';
     html+='<button class="btn btn-gray" onclick="ouvrirNotes(\''+franceClientId+'\')" style="background:#eef0fa;color:#1a237e;border:1.5px solid #c5cae9;">📝 Notes de suivi'+(_notesDe(franceClientId).length?(' · '+_notesDe(franceClientId).length):'')+'</button>';
-    html+='<button class="btn btn-gray" onclick="ouvrirPhotos(\''+franceClientId+'\')" style="background:#e8f5e9;color:#006b2d;border:1.5px solid #009A44;">📷 Photos des colis'+((c.nbPhotos||0)?(' · '+c.nbPhotos):'')+'</button>';
+    html+='<button class="btn btn-gray" onclick="ouvrirPhotos(\''+franceClientId+'\')" style="background:#f3efff;color:#6d28d9;border:1.5px solid #b9a5f0;">📷 Photos des colis'+((c.nbPhotos||0)?(' · '+c.nbPhotos):'')+'</button>';
     html+='<button class="btn btn-gray" onclick="supprimerClientFrance()" style="background:#fde0e0;color:#992020;border:1.5px solid #c0392b;">🗑️ Supprimer cette fiche</button>';
   }
   box.innerHTML=html;
@@ -4613,7 +4614,7 @@ function _carteArret(id, num, to, fait){
     + _rangee(
         '<a href="https://waze.com/ul?q='+encodeURIComponent((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||''))+'&navigate=yes" target="_blank" style="'+_ACT_BASE+'background:#f0f0f0;color:#333;border:1px solid #ddd;">🧭 Y aller</a>'
         + _boutonNotes(id, _ACT_BLEU)
-        + _boutonPhotos(id, _ACT_VERT))
+        + _boutonPhotos(id, _ACT_VIOLET))
     +'<div style="display:flex;gap:8px;margin-top:8px;">'
     +  '<div onclick="marquerRamasse(\''+id+'\')" style="flex:1;text-align:center;padding:12px 5px;border-radius:11px;font-size:13.5px;font-weight:800;background:#009A44;color:#fff;cursor:pointer;">✓ Ramassé</div>'
     +  '<div onclick="ouvrirMotif(\''+id+'\')" style="flex:1;text-align:center;padding:12px 5px;border-radius:11px;font-size:13.5px;font-weight:800;background:#fff;border:1.5px solid #f5a3a3;color:#992020;cursor:pointer;">✕ Non ramassé</div>'
