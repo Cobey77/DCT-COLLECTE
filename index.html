@@ -1512,8 +1512,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.50.0';
-var APP_UPDATE = '18/08/2026 à 12:00';
+var APP_VERSION = 'v3.52.0';
+var APP_UPDATE = '18/08/2026 à 14:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -3042,6 +3042,26 @@ function supprimerNote(ts){
   }).catch(function(e){
     showToastNew('❌ Échec : '+((e&&e.message)||'écriture refusée'));
   });
+}
+
+// Une place s'est libérée : on retire le refus, le colis redevient
+// chargeable. La note écrite reste dans son suivi.
+function annulerNonCharge(id){
+  var c=(franceData.clients||{})[id];
+  if(!c || !c.nonCharge) return;
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  if(!confirm('Annuler ce refus ?\n\nLe colis redevient chargeable. La note reste dans son suivi.')) return;
+  var qui=(currentUser||{}).name||'', now=Date.now();
+  var hist=(c.hist||[]).slice();
+  hist.push({q:qui, a:'a annulé le refus de chargement', ts:now});
+  var maj={};
+  maj['clients/'+id+'/nonCharge']=null;
+  maj['clients/'+id+'/hist']=hist;
+  db.ref('france').update(maj).then(function(){
+    showToastNew('↩ Refus annulé');
+    _renderLotChartres();
+    try{ renderFrance(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
 
 // Le bouton, avec le nombre de notes déjà consignées
@@ -5238,6 +5258,61 @@ function _htmlLotChartres(){
   return h;
 }
 
+// Le colis est monté par erreur, ou il faut lui refaire son emballage :
+// il redescend à Chartres, avec sa date de dépôt d'origine.
+function remettreAChartres(id){
+  var c=(franceData.clients||{})[id];
+  if(!c){ showToastNew('⚠️ Fiche introuvable.'); return; }
+  if(c.lieu!=='mitry'){ showToastNew('⚠️ Ce colis n\'est pas à Mitry-Mory.'); return; }
+  if(c.statut==='parti'){ showToastNew('⚠️ Ce dossier est déjà parti pour Dakar.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  if(!confirm('Remettre '+_nomAffiche(c)+' à Chartres ?\n\n'
+    +'Le colis quitte Mitry-Mory et repart en attente chez Global Logistique.')) return;
+  var qui=(currentUser||{}).name||'', now=Date.now();
+  var hist=(c.hist||[]).slice();
+  hist.push({q:qui, a:'a remis le colis à Chartres', ts:now});
+  var maj={};
+  maj['clients/'+id+'/lieu']='chartres';
+  maj['clients/'+id+'/statut']='ramasse';
+  maj['clients/'+id+'/mitryTs']=null;
+  maj['clients/'+id+'/mitryPar']=null;
+  maj['clients/'+id+'/mitryCamion']=null;
+  maj['clients/'+id+'/hist']=hist;
+  db.ref('france').update(maj).then(function(){
+    showToastNew('↩ '+_nomAffiche(c)+' remis à Chartres');
+    _activiteFrance('↩️', 'a remis <strong>'+_nomAffiche(c)+'</strong> à Chartres');
+    _renderLotChartres();
+    if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+    try{ renderFrance(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+// On s'est trompé, ou une place s'est libérée cinq minutes plus tard :
+// le passage se rouvre et l'arrêt redevient modifiable.
+function reprendreLotChartres(){
+  if(!currentCollecteId){ showToastNew('⚠️ Aucune collecte ouverte.'); return; }
+  var l=(franceData.lots||{})[currentCollecteId];
+  if(!l || !l.fait){ showToastNew('⚠️ Ce passage n\'est pas validé.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  var reste=_refsChartres().length;
+  if(!confirm('Reprendre le chargement ?\n\n'
+    + (reste?(reste+' colis attendent encore à Chartres.\n'):'Plus aucun colis à Chartres.\n')
+    + 'Les colis déjà rapportés à Mitry-Mory ne bougent pas.')) return;
+  var maj={};
+  maj['lots/'+currentCollecteId+'/fait']=null;
+  maj['lots/'+currentCollecteId+'/faitTs']=null;
+  maj['lots/'+currentCollecteId+'/faitPar']=null;
+  maj['lots/'+currentCollecteId+'/pris']=null;
+  maj['lots/'+currentCollecteId+'/prisColis']=null;
+  maj['lots/'+currentCollecteId+'/laisses']=null;
+  db.ref('france').update(maj).then(function(){
+    showToastNew('↩ Chargement rouvert');
+    _activiteFrance('↩️', 'a rouvert le chargement du lot de Chartres');
+    if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+    try{ renderCollecteContent(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
 // Même geste que pour un client : on ouvre la liste des camions.
 // S'il n'y en a aucun, on en crée un et on revient ici tout seul.
 var _lotEnAttenteAffect = false;
@@ -5331,7 +5406,11 @@ function _htmlArretChartres(k){
 
   // Passage déjà validé : la carte reste, à sa place, en vert.
   if(l.fait){
-    var pris=l.pris||0, cs=l.prisColis||0, laisses=l.laisses||0;
+    // Comptés en direct : un colis remis à Chartres change le total
+    // tout de suite, sans laisser un chiffre figé qui devient faux.
+    var _lc=_chargesDuCamion(k), cs=0;
+    _lc.forEach(function(c){ cs+=(c.nb||1); });
+    var pris=_lc.length, laisses=_refsChartres().length;
     return '<div onclick="ouvrirRapportesChartres()" style="background:#f2fbf5;border:2px solid #009A44;'
      + 'border-radius:var(--radius);padding:13px 14px;margin-bottom:12px;cursor:pointer;">'
      + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
@@ -5346,6 +5425,9 @@ function _htmlArretChartres(k){
      + '</div>'
      + (laisses?('<div style="font-size:11.5px;color:#992020;margin-top:5px;">✕ '+laisses+' colis laissé'+(laisses>1?'s':'')+' à Chartres</div>'):'')
      + '<div style="font-size:11px;color:var(--text3);margin-top:5px;">validé par '+(l.faitPar||'—')+' · '+_dateFr(l.faitTs)+'</div>'
+     + '<div onclick="event.stopPropagation();reprendreLotChartres()" style="text-align:center;'
+     +   'background:#fff;border:1.5px solid #009A44;color:#006b2d;border-radius:10px;padding:10px;'
+     +   'font-size:12.5px;font-weight:700;cursor:pointer;margin-top:10px;">↩ Reprendre le chargement</div>'
      + '</div>';
   }
 
@@ -5544,6 +5626,9 @@ function _renderLotChartres(){
        +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
        +'<div style="font-size:11px;color:#006b2d;margin-top:2px;">chargé par '+(c.mitryPar||'—')+' · '+_dateFr(c.mitryTs)+'</div>'
        + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
+       + '<div onclick="remettreAChartres(\''+c._id+'\')" style="text-align:center;background:#fff;'
+       +   'border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:10px;font-size:12.5px;'
+       +   'font-weight:700;cursor:pointer;margin-top:8px;">↩ Remettre à Chartres</div>'
        +'</div>';
     });
     box.innerHTML=hh;
@@ -5578,7 +5663,10 @@ function _renderLotChartres(){
     if(nc && nc.motif){
       h+='<div style="background:#fde0e0;border-radius:9px;padding:8px 10px;margin-top:8px;'
        + 'font-size:11.5px;color:#992020;line-height:1.5;">✕ Non chargé le '+_dateFr(nc.ts)+' · '
-       + _auteurNote({q:nc.par})+'<br><span style="opacity:.9;">'+_esc(nc.motif)+'</span></div>';
+       + _auteurNote({q:nc.par})+'<br><span style="opacity:.9;">'+_esc(nc.motif)+'</span>'
+       + '<div onclick="annulerNonCharge(\''+c._id+'\')" style="display:inline-block;margin-top:6px;'
+       + 'background:#fff;border:1px solid #c0392b;border-radius:8px;padding:5px 10px;font-size:11px;'
+       + 'font-weight:700;cursor:pointer;">↩ Annuler ce refus</div></div>';
     }
     h+= _lienAppel(c)
      + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
@@ -5617,7 +5705,16 @@ function chargerUnClient(id){
     showToastNew('✅ '+_nomAffiche(c)+' chargé');
     _activiteFrance('🏭', 'a chargé les colis de <strong>'+_nomAffiche(c)+'</strong> — Chartres → Mitry-Mory');
     var reste=_refsChartres().length;
-    if(!reste && currentCollecteId){ try{ db.ref('france/lots/'+currentCollecteId).remove(); }catch(e){} }
+    // Plus rien sur place : le passage est fait de lui-même. On le
+    // marque au lieu d'effacer le lot, pour que l'arrêt reste sur la
+    // feuille de route au lieu de s'évaporer.
+    if(!reste && currentCollecteId){
+      var majF={};
+      majF['lots/'+currentCollecteId+'/fait']=true;
+      majF['lots/'+currentCollecteId+'/faitTs']=Date.now();
+      majF['lots/'+currentCollecteId+'/faitPar']=qui;
+      try{ db.ref('france').update(majF); }catch(e){}
+    }
     var sc=document.querySelector('.screen.active');
     if(sc && sc.id==='s-lot-chartres' && reste){ _renderLotChartres(); }
     else {
