@@ -1512,8 +1512,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.46.0';
-var APP_UPDATE = '17/08/2026 à 20:00';
+var APP_VERSION = 'v3.47.0';
+var APP_UPDATE = '17/08/2026 à 21:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5353,6 +5353,45 @@ function _htmlArretChartres(k){
   return h;
 }
 
+// Ce que ce camion a rapporté de Chartres. Le lot disparaît une fois
+// le passage validé : sans cette trace, le colis s'évaporait de la
+// collecte alors qu'il était bien dans le camion.
+function _chargesDuCamion(k){
+  var out=[];
+  Object.keys(franceData.clients||{}).forEach(function(id){
+    var c=franceData.clients[id];
+    if(!c || c.lieu!=='mitry') return;
+    if(!currentCollecteId || c.collecteId!==currentCollecteId) return;
+    if(c.mitryCamion!==k) return;
+    c._id=id; out.push(c);
+  });
+  out.sort(function(a,b){ return (a.mitryTs||0)-(b.mitryTs||0); });
+  return out;
+}
+
+function _htmlChargesChartres(k){
+  var l=_chargesDuCamion(k);
+  if(!l.length) return '';
+  var colis=0; l.forEach(function(c){ colis+=(c.nb||1); });
+  var h='<div style="background:#f2fbf5;border:1.5px solid #009A44;border-radius:var(--radius);'
+   + 'padding:13px 14px;margin-bottom:12px;">'
+   + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+   +   '<div style="font-size:14px;font-weight:800;color:#006b2d;">✅ Rapportés de Chartres</div>'
+   +   '<span class="badge badge-green">'+l.length+' client'+(l.length>1?'s':'')+'</span></div>'
+   + '<div style="font-size:12.5px;color:#006b2d;margin-top:4px;">'+colis+' colis · déposés à Mitry-Mory</div>';
+  l.forEach(function(c){
+    h+='<div style="background:#fff;border:1px solid #b7e2c8;border-radius:11px;padding:10px 11px;margin-top:9px;">'
+     + '<div style="font-size:13.5px;font-weight:700;">'+_nomAffiche(c)+'</div>'
+     + '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.ville||'')+' ('+(c.dept||'')+')</div>'
+     + '<div style="font-size:11.5px;color:#555;margin-top:3px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
+     + '<div style="font-size:11px;color:#006b2d;margin-top:2px;">chargé par '+(c.mitryPar||'—')+' · '+_dateFr(c.mitryTs)+'</div>'
+     + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
+     + '</div>';
+  });
+  h+='</div>';
+  return h;
+}
+
 // Valider le lot = le passage à Chartres est fait. Ce qui a été
 // explicitement refusé reste sur place, intact : c'est justement la
 // trace qui dit que le camion est passé sans pouvoir tout prendre.
@@ -5385,6 +5424,7 @@ function validerLotChartres(){
     maj['clients/'+c._id+'/mitryTs']=now;
     maj['clients/'+c._id+'/mitryPar']=qui;
     maj['clients/'+c._id+'/collecteId']=currentCollecteId||'';
+    maj['clients/'+c._id+'/mitryCamion']=(typeof currentCamion!=='undefined'&&currentCamion)?currentCamion:'';
     maj['clients/'+c._id+'/hist']=hist;
   });
   // Les refusés ne sont pas touchés : ni leur lieu, ni leur motif.
@@ -5476,6 +5516,7 @@ function chargerUnClient(id){
   maj['clients/'+id+'/mitryTs']=Date.now();
   maj['clients/'+id+'/mitryPar']=qui;
   maj['clients/'+id+'/collecteId']=currentCollecteId||'';
+  maj['clients/'+id+'/mitryCamion']=(typeof currentCamion!=='undefined'&&currentCamion)?currentCamion:'';
   maj['clients/'+id+'/nonCharge']=null;
   maj['clients/'+id+'/hist']=hist;
   db.ref('france').update(maj).then(function(){
@@ -8344,11 +8385,13 @@ function renderCamion(k){
     return tk.clients.indexOf(a)-tk.clients.indexOf(b);
   });
   var route=document.getElementById('camion-route');if(!route)return;
-  var _chartresHtml='';
+  var _chartresHtml='', _chargesHtml='';
   try{ _chartresHtml=_htmlArretChartres(k); }catch(e){}
-  if(!tk.clients.length && !_chartresHtml){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
+  try{ _chargesHtml=_htmlChargesChartres(k); }catch(e){}
+  if(!tk.clients.length && !_chartresHtml && !_chargesHtml){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
   route.innerHTML='';
   if(_chartresHtml){ var _cb=document.createElement('div'); _cb.innerHTML=_chartresHtml; route.appendChild(_cb); }
+  if(_chargesHtml){ var _cg=document.createElement('div'); _cg.innerHTML=_chargesHtml; route.appendChild(_cg); }
   sorted.forEach(function(id,idx){
     var c=cls[id];if(!c)return;
     var cancelled=tk.cancelled||[];var reported=tk.reported||[];var isVal=validated.includes(id),isRef=refused.includes(id),isAnn=cancelled.includes(id),isRep=reported.includes(id),heure=hours[id]||'';
