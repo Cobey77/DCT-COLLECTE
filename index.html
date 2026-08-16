@@ -1469,8 +1469,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.36.2';
-var APP_UPDATE = '16/08/2026 à 23:15';
+var APP_VERSION = 'v3.37.0';
+var APP_UPDATE = '16/08/2026 à 23:55';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5036,28 +5036,60 @@ function _htmlLotChartres(){
   var l=_lotCollecte();
   var trks=(typeof getTrucks==='function')?getTrucks():{};
   var nomCam = (l && trks[l.camion]) ? trks[l.camion].name : (l?l.camion:'');
-  var h='<div class="slabel">Lot France — à récupérer</div>'
-   + '<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:var(--radius);padding:13px 14px;margin-bottom:14px;">'
-   +   '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-   +     '<div style="font-size:14px;font-weight:800;color:#111;">🏭 Entrepôt Chartres</div>'
-   +     (l?'<span class="badge badge-orange">Affecté au '+nomCam+'</span>':'<span class="badge badge-gray">Non affecté</span>')
-   +   '</div>'
-   +   '<div style="font-size:12px;color:#92400e;margin-top:5px;line-height:1.5;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis<br>12 rue de l\'Industrie · 28000 Chartres</div>';
-  if(Object.keys(trks).length){
-    h+='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">';
-    Object.keys(trks).forEach(function(k){
-      var on=(l && l.camion===k);
-      h+='<span onclick="affecterLotChartres(\''+k+'\')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:18px;cursor:pointer;'
-        +(on?'background:#b45309;color:#fff;border:1.5px solid #b45309;':'background:#fff;border:1.5px solid #fcd34d;color:#92400e;')
-        +'">'+(trks[k].name||('Camion '+k))+'</span>';
-    });
-    if(l) h+='<span onclick="affecterLotChartres(\'\')" style="font-size:12px;font-weight:700;padding:7px 12px;border-radius:18px;cursor:pointer;background:#fff;border:1.5px solid #ccc;color:#777;">Retirer</span>';
-    h+='</div>';
+  var h='<div class="slabel">Colis à récupérer en province</div>'
+   + '<div style="background:#fffaf0;border:2px solid #e08e0b;border-radius:var(--radius);padding:14px;margin-bottom:14px;">'
+   +   '<div style="font-size:15px;font-weight:800;color:#111;">🏭 Entrepôt de Chartres</div>'
+   +   '<div style="font-size:12.5px;color:#92400e;margin-top:4px;line-height:1.5;">'
+   +     refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis y attendent<br>'
+   +     '<span style="opacity:.8;">12 rue de l\'Industrie · 28000 Chartres</span></div>';
+
+  if(!Object.keys(trks).length){
+    h+='<div style="background:#fff;border-radius:10px;padding:11px 12px;margin-top:11px;font-size:12.5px;color:#92400e;line-height:1.55;">'
+     + '<b>Étape suivante</b><br>Ajoute un camion à cette collecte, puis désigne-le pour passer prendre ces colis.</div>'
+     + '</div>';
+    return h;
+  }
+
+  if(l){
+    h+='<div style="background:#d4f0e0;border-radius:10px;padding:11px 12px;margin-top:11px;">'
+     + '<div style="font-size:12.5px;color:#006b2d;line-height:1.5;">'
+     +   '✅ <b>'+nomCam+'</b> passe les prendre.<br>'
+     +   '<span style="opacity:.85;">L\'arrêt Chartres apparaît dans sa tournée.</span></div>'
+     + '<div style="display:flex;gap:7px;margin-top:9px;">'
+     +   '<div onclick="_ouvrirChoixCamionChartres()" style="flex:1;text-align:center;padding:9px;border-radius:9px;'
+     +     'background:#fff;border:1px solid #009A44;color:#006b2d;font-size:12px;font-weight:700;cursor:pointer;">Changer de camion</div>'
+     +   '<div onclick="affecterLotChartres(\'\')" style="flex:1;text-align:center;padding:9px;border-radius:9px;'
+     +     'background:#fff;border:1px solid #ccc;color:#777;font-size:12px;font-weight:700;cursor:pointer;">Annuler</div>'
+     + '</div></div>';
   } else {
-    h+='<div style="font-size:11.5px;color:#92400e;margin-top:9px;">Créez un camion pour pouvoir affecter ce lot.</div>';
+    h+='<div style="background:#fff;border-radius:10px;padding:11px 12px;margin-top:11px;">'
+     + '<div style="font-size:12.5px;color:#92400e;font-weight:700;">Quel camion passe les prendre ?</div>'
+     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;">';
+    Object.keys(trks).forEach(function(k){
+      h+='<span onclick="affecterLotChartres(\''+k+'\')" style="font-size:12.5px;font-weight:700;padding:8px 13px;'
+        +'border-radius:18px;cursor:pointer;background:#fff;border:1.5px solid #e08e0b;color:#92400e;">🚛 '
+        +(trks[k].name||('Camion '+k))+'</span>';
+    });
+    h+='</div></div>';
   }
   h+='</div>';
   return h;
+}
+
+// Repasse en mode choix sans perdre l'affectation tant qu'on n'a pas choisi.
+function _ouvrirChoixCamionChartres(){
+  var trks=(typeof getTrucks==='function')?getTrucks():{};
+  var noms=Object.keys(trks).map(function(k){ return (trks[k].name||k); });
+  if(!noms.length){ showToastNew('⚠️ Aucun camion sur cette collecte.'); return; }
+  var q='Quel camion passe prendre le lot de Chartres ?\n\n';
+  Object.keys(trks).forEach(function(k,i){ q+=(i+1)+' · '+(trks[k].name||k)+'\n'; });
+  q+='\nTape le numéro :';
+  var r=prompt(q,'1');
+  if(r===null) return;
+  var idx=parseInt(r,10)-1;
+  var cle=Object.keys(trks)[idx];
+  if(!cle){ showToastNew('⚠️ Numéro inconnu.'); return; }
+  affecterLotChartres(cle);
 }
 
 function affecterLotChartres(k){
@@ -5845,7 +5877,7 @@ function renderDispatchTab(){
   // client d'Île-de-France et devoir quand même passer par Chartres.
   var _frBloc='';
   try{ _frBloc=_htmlLotChartres()+_htmlStockMitry(); }catch(e){}
-  if(_frBloc){ var _fb=document.createElement('div'); _fb.innerHTML=_frBloc; container.appendChild(_fb); }
+  if(_frBloc && !nb){ var _fb=document.createElement('div'); _fb.innerHTML=_frBloc; container.appendChild(_fb); }
   if(!nb){
     var e=document.createElement('div');e.style.cssText='text-align:center;color:#aaa;padding:34px 20px;line-height:1.6;';
     e.innerHTML= _frBloc
