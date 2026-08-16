@@ -1057,6 +1057,7 @@ function initFirebase(){
     ecouterAlertes();
     ecouterCodesEspaces();
     ecouterPassePartout();
+    ecouterStatsPhotos();
   } catch(e) {
     console.log("Firebase non disponible:", e);
     firebaseReady = false;
@@ -1461,8 +1462,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.31.0';
-var APP_UPDATE = '16/08/2026 à 10:00';
+var APP_VERSION = 'v3.33.0';
+var APP_UPDATE = '16/08/2026 à 14:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2503,6 +2504,161 @@ function _htmlVivierDanny(){
   });
   return h;
 }
+// ═══════════ MÉMOIRE OCCUPÉE — v3.33.0 ═══════════
+// Le texte est déjà en mémoire : on le mesure sur place, sans rien
+// retélécharger. Les photos ont leur compteur, tenu à jour à chaque
+// ajout et chaque suppression.
+var LIMITE_OCTETS = 1024*1024*1024;   // 1 Go, forfait gratuit
+var _statPhotos = {n:0, o:0};
+
+function ecouterStatsPhotos(){
+  if(!db) return;
+  db.ref('france_stats/photos').on('value', function(snap){
+    var v=snap.val()||{};
+    _statPhotos={ n:v.n||0, o:v.o||0 };
+    try{ var sec=document.getElementById('admin-section-securite');
+         if(sec && sec.style.display!=='none') renderAdminSecurite(); }catch(e){}
+  });
+}
+
+function _majStatPhotos(dOctets, dNb){
+  if(!db || !firebaseReady) return;
+  db.ref('france_stats/photos').transaction(function(cur){
+    var v=cur||{n:0,o:0};
+    v.o=Math.max(0,(v.o||0)+dOctets);
+    v.n=Math.max(0,(v.n||0)+dNb);
+    return v;
+  });
+}
+
+function _poids(obj){
+  try{ return JSON.stringify(obj||{}).length; }catch(e){ return 0; }
+}
+
+function _mo(o){
+  if(o>=1024*1024) return (o/1048576).toFixed(1)+' Mo';
+  if(o>=1024) return Math.round(o/1024)+' Ko';
+  return o+' o';
+}
+
+function _statsStockage(){
+  var col=_poids(collectes)+_poids(clientsParCollecte)+_poids(dispatchParCollecte);
+  var car=_poids(window.dctContacts);
+  var fr =_poids(franceData);
+  var ph =_statPhotos.o||0;
+  var tot=col+car+fr+ph;
+  return { collectes:col, carnet:car, france:fr, photos:ph, nbPhotos:_statPhotos.n||0,
+           total:tot, part:Math.min(100, tot/LIMITE_OCTETS*100) };
+}
+
+function _htmlStockage(){
+  var s=_statsStockage();
+  var pc=s.part;
+  var coul = pc>=85 ? '#c0392b' : (pc>=60 ? '#e08e0b' : '#009A44');
+  var largeur=Math.max(1.5, pc);
+  var lignes=[
+    {lib:'📷 Photos des colis', o:s.photos, det:s.nbPhotos+' photo'+(s.nbPhotos>1?'s':'')},
+    {lib:'🇪🇺 France & Europe', o:s.france, det:'clients, tournées, notes'},
+    {lib:'🚚 Collectes de Dakar', o:s.collectes, det:'clients, camions, dispatch'},
+    {lib:'📇 Carnet de contacts', o:s.carnet, det:Object.keys(window.dctContacts||{}).length+' contacts'}
+  ].sort(function(a,b){ return b.o-a.o; });
+
+  var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">💾 Mémoire occupée</div>'
+   + '<div style="font-size:12px;color:#888;margin-bottom:12px;">Sur le gigaoctet du forfait gratuit.</div>'
+   + '<div style="background:#fff;border:1.5px solid var(--border);border-left:4px solid '+coul+';'
+   +   'border-radius:14px;padding:14px;margin-bottom:9px;box-shadow:var(--shadow);">'
+   +   '<div style="display:flex;justify-content:space-between;align-items:baseline;">'
+   +     '<div style="font-size:22px;font-weight:800;color:'+coul+';">'+_mo(s.total)+'</div>'
+   +     '<div style="font-size:12.5px;color:#888;">sur 1 Go · '+(pc<0.1?'moins de 0,1':pc.toFixed(1))+' %</div>'
+   +   '</div>'
+   +   '<div style="height:10px;background:#eee;border-radius:6px;margin:11px 0 4px;overflow:hidden;">'
+   +     '<div style="height:100%;width:'+largeur+'%;background:'+coul+';border-radius:6px;"></div></div>';
+  if(pc>=85)      h+='<div style="font-size:12px;color:#992020;font-weight:700;margin-top:7px;">⚠️ Il est temps de faire le ménage.</div>';
+  else if(pc>=60) h+='<div style="font-size:12px;color:#92400e;font-weight:700;margin-top:7px;">Surveille : plus de la moitié est prise.</div>';
+  else            h+='<div style="font-size:12px;color:#006b2d;margin-top:7px;">Large. Aucune action nécessaire.</div>';
+  h+='</div>';
+
+  lignes.forEach(function(l){
+    var part=s.total? (l.o/s.total*100) : 0;
+    h+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:14px;padding:11px 13px;'
+     +   'margin-bottom:8px;box-shadow:var(--shadow);">'
+     + '<div style="display:flex;justify-content:space-between;align-items:center;">'
+     +   '<div style="font-size:13px;font-weight:700;">'+l.lib+'</div>'
+     +   '<div style="font-size:13px;font-weight:800;color:#1a1a2e;">'+_mo(l.o)+'</div></div>'
+     + '<div style="height:6px;background:#f0f0f0;border-radius:4px;margin:7px 0 5px;overflow:hidden;">'
+     +   '<div style="height:100%;width:'+Math.max(1,part)+'%;background:#1a1a2e;opacity:.55;border-radius:4px;"></div></div>'
+     + '<div style="font-size:11.5px;color:#888;">'+l.det+'</div>'
+     + '</div>';
+  });
+
+  h+='<button class="btn btn-gray" onclick="_recalculerPhotos()">🔄 Recompter les photos</button>'
+   + '<div style="font-size:11.5px;color:#888;margin:7px 2px 0;line-height:1.55;">'
+   +   'Pour libérer de la place : vide l\'historique des dossiers partis dans France & Europe, '
+   +   'ou supprime les vieilles collectes depuis le suivi. Les photos partent avec les fiches.</div>'
+   + '<div style="height:22px;"></div>';
+  return h;
+}
+
+// Remet le compteur d'aplomb : lecture complète de la réserve photos.
+// Lourd, donc à la demande — et réservé aux administrateurs.
+function _recalculerPhotos(){
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  if(!confirm('Recompter toutes les photos ?\n\nCette vérification télécharge les images une fois. '
+    +'À faire seulement si le chiffre semble faux.')) return;
+  showToastNew('⏳ Comptage en cours…');
+  db.ref('france_photos').once('value', function(snap){
+    var v=snap.val()||{}, n=0, o=0;
+    Object.keys(v).forEach(function(cid){
+      var lot=v[cid]||{};
+      Object.keys(lot).forEach(function(k){
+        var p=lot[k]||{};
+        if(p.d){ n++; o+=String(p.d).length; }
+      });
+    });
+    db.ref('france_stats/photos').set({n:n, o:o}).then(function(){
+      _statPhotos={n:n,o:o};
+      showToastNew('✅ '+n+' photo'+(n>1?'s':'')+' · '+_mo(o));
+      try{ renderAdminSecurite(); }catch(e){}
+    });
+  });
+}
+
+// ═══════════ CARNET COMMUN — v3.32.0 ═══════════
+// Supprimer un dossier clos libère la place, mais ne doit pas
+// effacer la personne. Les clients France rejoignent le carnet de
+// contacts de Dakar : un seul carnet, qui survit à tout.
+function _cleCarnet(tel, prenom, nom){
+  var t=String(tel||'').replace(/ /g,'');
+  if(t) return t;
+  return String((prenom||'')+'_'+(nom||'')).toLowerCase();
+}
+
+function _versCarnet(c){
+  if(!c) return;
+  var d=_repartirNom(c.nom||'');
+  if(c.civilite==='Societe'){ d={prenom:'', nom:c.nom||''}; }
+  var cle=_cleCarnet(c.tel, d.prenom, d.nom);
+  if(cle==='_' || !cle) return;
+  if(!window.dctContacts) window.dctContacts={};
+  var ancien=window.dctContacts[cle]||{};
+  window.dctContacts[cle]={
+    civilite : c.civilite||'',
+    prenom   : d.prenom,
+    nom      : d.nom,
+    name     : _composeNom(c.civilite, d.prenom, d.nom),
+    tel      : c.tel||'',
+    tel2     : c.tel2||'',
+    adresse  : c.adresse||'',
+    infos    : c.infos||'',
+    cp       : c.cp||'',
+    ville    : c.ville||'',
+    dept     : c.dept||String(c.cp||'').substring(0,2),
+    pays     : c.pays||'FR',
+    by       : ancien.by || c.creePar || ''
+  };
+  try{ sauvegarder(); }catch(e){}
+}
+
 // ═══════════ PHOTOS DES COLIS — v3.31.0 ═══════════
 // Personne chez Dakar City ne voit les colis avant Mitry-Mory :
 // c'est le chauffeur qui les charge. La photo fait le lien entre
@@ -2632,6 +2788,7 @@ function _enregistrerPhoto(data){
     _activiteFrance('📷', 'a photographié les colis de <strong>'+_nomAffiche(c)+'</strong>');
     var maj={}; maj['clients/'+id+'/nbPhotos']=_photosCourantes.length;
     db.ref('france').update(maj);
+    _majStatPhotos(String(data).length, 1);
     try{ renderFrance(); }catch(e){}
     try{ renderDanny(); }catch(e){}
   }).catch(function(e){
@@ -2645,6 +2802,7 @@ function supprimerPhoto(k){
   if(!confirm('Supprimer cette photo ?')) return;
   var id=_photoClientId;
   db.ref('france_photos/'+id+'/'+k).remove().then(function(){
+    _majStatPhotos(-String(p.d||'').length, -1);
     _photosCourantes=_photosCourantes.filter(function(x){ return x._k!==k; });
     _renderPhotos();
     showToastNew('🗑️ Photo supprimée');
@@ -3368,6 +3526,8 @@ function marquerPartis(){
 function _supprimerFiches(ids, libelle){
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var maj={};
+  // La personne rejoint le carnet avant que son dossier disparaisse.
+  ids.forEach(function(id){ try{ _versCarnet((franceData.clients||{})[id]); }catch(e){} });
   ids.forEach(function(id){ maj['clients/'+id]=null; });
   // Les photos vivent ailleurs : on les emporte avec la fiche.
   ids.forEach(function(id){ try{ db.ref('france_photos/'+id).remove(); }catch(e){} });
@@ -3964,6 +4124,7 @@ function saveClientFrance(){
   };
   var maj={}; maj[id]=obj;
   db.ref('france/clients').update(maj).then(function(){
+    try{ _versCarnet(obj); }catch(e){}
     showToastNew('✅ '+_nomAffiche(obj)+' — client inscrit');
     _activiteFrance('🇪🇺', 'a inscrit <strong>'+obj.nom+'</strong> — '+obj.ville+' · '+obj.region);
     goTo('s-france');
@@ -4002,6 +4163,7 @@ function _enregistrerModifFrance(z){
   if(change.indexOf('adresse')>=0){ maj['clients/'+id+'/lat']=null; maj['clients/'+id+'/lng']=null; }
 
   db.ref('france').update(maj).then(function(){
+    try{ _versCarnet(Object.assign({}, c, nouveau)); }catch(e){}
     showToastNew('✅ Fiche mise à jour');
     _activiteFrance('✏️', 'a modifié la fiche de <strong>'+(nouveau.nom||'')+'</strong>'+(change.length?(' — '+change.join(', ')):''));
     _faEditId='';
@@ -4081,6 +4243,7 @@ function supprimerClientFrance(){
   var c=(franceData.clients||{})[franceClientId]||{};
   if(c.statut!=='attente'){ showToastNew('⚠️ Impossible : le colis est déjà engagé.'); return; }
   if(!confirm('Supprimer la fiche de '+(c.nom||'ce client')+' ?')) return;
+  try{ _versCarnet(c); }catch(e){}
   try{ db.ref('france_photos/'+franceClientId).remove(); }catch(e){}
   db.ref('france/clients/'+franceClientId).remove().then(function(){
     showToastNew('🗑️ Fiche supprimée');
@@ -10635,7 +10798,7 @@ function renderAdminActivite(){
 function renderAdminSecurite(){
   var sec = document.getElementById('admin-section-securite');
   if(!sec) return;
-  sec.innerHTML = _htmlCodesAdmins() + _htmlPassePartout() + _htmlCorrectionCivilites() + _htmlCodesEspaces() + _htmlAlertes()
+  sec.innerHTML = _htmlCodesAdmins() + _htmlStockage() + _htmlPassePartout() + _htmlCorrectionCivilites() + _htmlCodesEspaces() + _htmlAlertes()
     + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🔐 Code PIN administrateur</div>'
     + '<p style="font-size:12px;color:#888;margin-bottom:12px;">Code actuel : '+(localStorage.getItem('dct_admin_pin')||'1010')+'</p>'
     + '<div style="display:flex;gap:8px;">'
