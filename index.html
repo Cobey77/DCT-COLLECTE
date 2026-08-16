@@ -1464,8 +1464,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.35.1';
-var APP_UPDATE = '16/08/2026 à 18:20';
+var APP_VERSION = 'v3.35.3';
+var APP_UPDATE = '16/08/2026 à 20:10';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2556,10 +2556,10 @@ function _htmlStockage(){
   var coul = pc>=85 ? '#c0392b' : (pc>=60 ? '#e08e0b' : '#009A44');
   var largeur=Math.max(1.5, pc);
   var lignes=[
-    {lib:'📷 Photos des colis', o:s.photos, det:s.nbPhotos+' photo'+(s.nbPhotos>1?'s':'')},
-    {lib:'🇪🇺 France & Europe', o:s.france, det:'clients, tournées, notes'},
-    {lib:'🚚 Collectes de Dakar', o:s.collectes, det:'clients, camions, dispatch'},
-    {lib:'📇 Carnet de contacts', o:s.carnet, det:Object.keys(window.dctContacts||{}).length+' contacts'}
+    {lib:'📷 Photos des colis',   o:s.photos},
+    {lib:'🇪🇺 France & Europe',   o:s.france},
+    {lib:'🚚 Collectes de Dakar', o:s.collectes},
+    {lib:'📇 Carnet de contacts', o:s.carnet}
   ].sort(function(a,b){ return b.o-a.o; });
 
   var h='<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">💾 Mémoire occupée</div>'
@@ -2584,9 +2584,8 @@ function _htmlStockage(){
      + '<div style="display:flex;justify-content:space-between;align-items:center;">'
      +   '<div style="font-size:13px;font-weight:700;">'+l.lib+'</div>'
      +   '<div style="font-size:13px;font-weight:800;color:#1a1a2e;">'+_mo(l.o)+'</div></div>'
-     + '<div style="height:6px;background:#f0f0f0;border-radius:4px;margin:7px 0 5px;overflow:hidden;">'
+     + '<div style="height:6px;background:#f0f0f0;border-radius:4px;margin:7px 0 2px;overflow:hidden;">'
      +   '<div style="height:100%;width:'+Math.max(1,part)+'%;background:#1a1a2e;opacity:.55;border-radius:4px;"></div></div>'
-     + '<div style="font-size:11.5px;color:#888;">'+l.det+'</div>'
      + '</div>';
   });
 
@@ -2633,14 +2632,14 @@ function _cleCarnet(tel, prenom, nom){
 }
 
 function _versCarnet(c){
-  if(!c) return;
+  if(!c) return false;
   var d=_repartirNom(c.nom||'');
   if(c.civilite==='Societe'){ d={prenom:'', nom:c.nom||''}; }
   var cle=_cleCarnet(c.tel, d.prenom, d.nom);
-  if(cle==='_' || !cle) return;
+  if(cle==='_' || !cle) return false;
   if(!window.dctContacts) window.dctContacts={};
   var ancien=window.dctContacts[cle]||{};
-  window.dctContacts[cle]={
+  var fiche={
     civilite : c.civilite||'',
     prenom   : d.prenom,
     nom      : d.nom,
@@ -2655,7 +2654,26 @@ function _versCarnet(c){
     pays     : c.pays||'FR',
     by       : ancien.by || c.creePar || ''
   };
-  try{ sauvegarder(); }catch(e){}
+  window.dctContacts[cle]=fiche;
+  // Une panne du carnet ne doit jamais interrompre l'inscription,
+  // mais elle ne doit pas non plus passer inaperçue.
+  try{
+    localStorage.setItem('dct_v3_contacts', JSON.stringify(window.dctContacts));
+    // Écriture ciblée : une inscription France ne dépend plus du
+    // garde-fou de la sauvegarde générale, qui annule tout quand la
+    // liste des collectes n'est pas encore chargée.
+    if(db && firebaseReady){
+      var pr=db.ref('dct/contacts/'+cle).set(fiche);
+      if(pr && pr.catch) pr.catch(function(e){
+        showToastNew('⚠️ Carnet non mis à jour : '+((e&&e.message)||'écriture refusée'));
+      });
+    }
+    if(typeof renderContacts==='function' && document.getElementById('contacts-list')) renderContacts();
+  }catch(e){
+    try{ showToastNew('⚠️ Carnet non mis à jour.'); }catch(e2){}
+    console.log('_versCarnet:', e);
+  }
+  return true;
 }
 
 // ═══════════ PHOTOS DES COLIS — v3.31.0 ═══════════
@@ -4137,7 +4155,7 @@ function saveClientFrance(){
   };
   var maj={}; maj[id]=obj;
   db.ref('france/clients').update(maj).then(function(){
-    try{ _versCarnet(obj); }catch(e){}
+    _versCarnet(obj);
     showToastNew('✅ '+_nomAffiche(obj)+' — client inscrit');
     _activiteFrance('🇪🇺', 'a inscrit <strong>'+obj.nom+'</strong> — '+obj.ville+' · '+obj.region);
     goTo('s-france');
@@ -4176,7 +4194,7 @@ function _enregistrerModifFrance(z){
   if(change.indexOf('adresse')>=0){ maj['clients/'+id+'/lat']=null; maj['clients/'+id+'/lng']=null; }
 
   db.ref('france').update(maj).then(function(){
-    try{ _versCarnet(Object.assign({}, c, nouveau)); }catch(e){}
+    _versCarnet(Object.assign({}, c, nouveau));
     showToastNew('✅ Fiche mise à jour');
     _activiteFrance('✏️', 'a modifié la fiche de <strong>'+(nouveau.nom||'')+'</strong>'+(change.length?(' — '+change.join(', ')):''));
     _faEditId='';
