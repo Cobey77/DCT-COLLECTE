@@ -1146,7 +1146,11 @@ function ecouterFrance(){
     // ouverte : le bloc « colis en province » doit apparaître tout de
     // suite, sans qu'il ait à quitter l'écran et y revenir.
     try{ var sc2=document.querySelector('.screen.active');
-         if(sc2 && sc2.id==='s-collecte' && typeof renderCollecteContent==='function') renderCollecteContent(); }catch(e){}
+         if(sc2 && sc2.id==='s-collecte' && typeof renderCollecteContent==='function') renderCollecteContent();
+         // La feuille de route contient l'arrêt de Chartres : elle doit
+         // suivre les changements comme les autres écrans.
+         if(sc2 && sc2.id==='s-camion' && typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+         if(sc2 && sc2.id==='s-lot-chartres' && typeof _renderLotChartres==='function') _renderLotChartres(); }catch(e){}
     try{ majBoutonFrance(); }catch(e){}
   });
 }
@@ -1512,8 +1516,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.52.0';
-var APP_UPDATE = '18/08/2026 à 14:40';
+var APP_VERSION = 'v3.52.1';
+var APP_UPDATE = '18/08/2026 à 16:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5305,6 +5309,9 @@ function reprendreLotChartres(){
   maj['lots/'+currentCollecteId+'/pris']=null;
   maj['lots/'+currentCollecteId+'/prisColis']=null;
   maj['lots/'+currentCollecteId+'/laisses']=null;
+  var _l=franceData.lots[currentCollecteId]||{};
+  delete _l.fait; delete _l.faitTs; delete _l.faitPar;
+  delete _l.pris; delete _l.prisColis; delete _l.laisses;
   db.ref('france').update(maj).then(function(){
     showToastNew('↩ Chargement rouvert');
     _activiteFrance('↩️', 'a rouvert le chargement du lot de Chartres');
@@ -5386,9 +5393,12 @@ function affecterLotChartres(k){
   if(!k){
     maj['lots/'+currentCollecteId]=null;
   } else {
-    maj['lots/'+currentCollecteId]={
+    // On garde ce qui a déjà été posé sur le lot — son heure, son
+    // état — au lieu de repartir d'une fiche vierge à chaque changement.
+    var _anc=(franceData.lots||{})[currentCollecteId]||{};
+    maj['lots/'+currentCollecteId]=Object.assign({}, _anc, {
       camion:k, par:(currentUser||{}).name||'', ts:Date.now()
-    };
+    });
   }
   db.ref('france').update(maj).then(function(){
     showToastNew(k?'🏭 Lot Chartres affecté':'Lot retiré');
