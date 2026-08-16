@@ -1469,8 +1469,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.38.0';
-var APP_UPDATE = '17/08/2026 à 00:45';
+var APP_VERSION = 'v3.39.0';
+var APP_UPDATE = '17/08/2026 à 02:15';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5029,9 +5029,39 @@ function _versSuiviMitry(){
   }catch(e){}
 }
 
+// Les colis de Chartres sont un stock unique. Une seule collecte peut
+// le revendiquer : sans ça, trois camions de trois collectes partaient
+// chercher les mêmes cartons.
+function _collecteDuLot(){
+  var lots=franceData.lots||{};
+  var trouve=null;
+  Object.keys(lots).forEach(function(colId){
+    if(lots[colId] && lots[colId].camion && !trouve) trouve=colId;
+  });
+  return trouve;
+}
+
+function _libCollecte(colId){
+  var c=(collectes||[]).find(function(x){ return x.id===colId; });
+  if(!c || !c.date) return 'une autre collecte';
+  var m=String(c.date).match(/(\d{1,2}\s+[^\s]+)/);
+  return 'la collecte du '+(m?m[1]:c.date);
+}
+
 function _htmlLotChartres(){
   var refs=_refsChartres();
   if(!refs.length) return '';
+  // Déjà pris en charge ailleurs : on le signale, on ne le repropose pas.
+  var proprio=_collecteDuLot();
+  if(proprio && proprio!==currentCollecteId){
+    var nb2=refs.length, cs=0;
+    refs.forEach(function(c){ cs+=(c.nb||1); });
+    return '<div style="background:#f6f7f9;border:1.5px solid var(--border);border-radius:var(--radius);'
+     + 'padding:11px 13px;margin-bottom:12px;font-size:12.5px;color:#777;line-height:1.55;">'
+     + '🏭 <b>Chartres</b> · '+nb2+' client'+(nb2>1?'s':'')+' · '+cs+' colis<br>'
+     + 'Déjà pris en charge par '+_libCollecte(proprio)+'.'
+     + '</div>';
+  }
   var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
   var l=_lotCollecte();
   var trks=(typeof getTrucks==='function')?getTrucks():{};
@@ -5127,6 +5157,11 @@ function ouvrirAffectLotChartres(){
 function affecterLotChartres(k){
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   if(!currentCollecteId){ showToastNew('⚠️ Aucune collecte ouverte.'); return; }
+  var _pro=_collecteDuLot();
+  if(k && _pro && _pro!==currentCollecteId){
+    showToastNew('⚠️ Le lot est déjà pris par '+_libCollecte(_pro)+'.');
+    return;
+  }
   var maj={};
   if(!k){
     maj['lots/'+currentCollecteId]=null;
@@ -5910,19 +5945,19 @@ function renderDispatchTab(){
   var _frBloc='';
   try{ _frBloc=_htmlLotChartres()+_htmlStockMitry(); }catch(e){}
   if(_frBloc && !nb){ var _fb=document.createElement('div'); _fb.innerHTML=_frBloc; container.appendChild(_fb); }
+  // Une collecte sans client d'Île-de-France reste une vraie collecte :
+  // elle peut n'avoir qu'un camion à envoyer chercher le lot de Chartres.
+  // Avant, l'écran s'arrêtait ici et les camions créés restaient invisibles.
   if(!nb){
-    var e=document.createElement('div');e.style.cssText='text-align:center;color:#aaa;padding:34px 20px;line-height:1.6;';
+    var e=document.createElement('div');
+    e.style.cssText='background:#fff;border:1.5px dashed var(--border);border-radius:var(--radius);'
+      +'text-align:center;color:#888;padding:18px 16px;margin-bottom:12px;line-height:1.6;font-size:13px;';
     e.innerHTML= _frBloc
-      ? '<div style="font-size:32px;margin-bottom:10px;">🚛</div>Aucun client d\'Île-de-France sur cette collecte.<br>Ajoutez un camion pour aller chercher le lot ci-dessus.'
-      : '<div style="font-size:32px;margin-bottom:10px;">🚛</div>Aucun client. Ajoutez des clients d\'abord.';
+      ? 'Aucun client d\'Île-de-France sur cette collecte.<br>Le camion ci-dessous ira chercher le lot de Chartres.'
+      : 'Aucun client sur cette collecte.<br>Ajoutez des clients, ou un camion pour un déplacement seul.';
     container.appendChild(e);
-    if(_frBloc){
-      var bAdd=document.createElement('div');
-      bAdd.innerHTML='<button class="btn btn-green" onclick="addTruck()">+ Ajouter un camion</button>';
-      container.appendChild(bAdd);
-    }
-    return;
   }
+  if(nb){
   var totalG=Object.values(cls).reduce(function(s,c){return s+(c.prix||0);},0);
   var collG=Object.keys(trks).reduce(function(s,k){return s+getTruckCollected(k,trks,cls);},0);
   var pctG=totalG>0?Math.round(collG/totalG*100):0;
@@ -5943,6 +5978,7 @@ function renderDispatchTab(){
     +'<div style="flex:1;background:#fde0e0;border:1.5px solid #c0392b;border-radius:10px;padding:10px;text-align:center;"><div style="font-size:11px;color:#992020;font-weight:600;">Restants</div><div style="font-size:20px;font-weight:800;color:#992020;">'+rem+'</div></div>';
   container.appendChild(stats);
   if(_frBloc){ var lb=document.createElement('div'); lb.innerHTML=_frBloc; container.appendChild(lb); }
+  }
   var sl=document.createElement('div');sl.className='slabel';sl.textContent='Camions — tap pour ouvrir la tournée';container.appendChild(sl);
   Object.keys(trks).forEach(function(k){
     var tc=getTc(k),tk=trks[k];
