@@ -919,7 +919,7 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 <div class="screen" id="s-lot-chartres">
   <div class="header">
     <button class="btn-back" onclick="fermerLotChartres()">&#8592; Camion</button>
-    <div style="text-align:center;"><div class="h-title" style="font-size:14px;">&#127981; Entrep&#244;t de Chartres</div><div class="h-sub">Lot France</div></div>
+    <div style="text-align:center;"><div class="h-title" style="font-size:14px;" id="lot-titre">&#127981; Entrep&#244;t de Chartres</div><div class="h-sub" id="lot-sous">Lot France</div></div>
     <div style="width:60px;"></div>
   </div>
   <div class="content" id="lot-chartres-content"></div>
@@ -1512,8 +1512,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.48.1';
-var APP_UPDATE = '18/08/2026 à 09:15';
+var APP_VERSION = 'v3.49.0';
+var APP_UPDATE = '18/08/2026 à 10:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5399,23 +5399,17 @@ function _htmlChargesChartres(k){
   var l=_chargesDuCamion(k);
   if(!l.length) return '';
   var colis=0; l.forEach(function(c){ colis+=(c.nb||1); });
-  var h='<div style="background:#f2fbf5;border:1.5px solid #009A44;border-radius:var(--radius);'
-   + 'padding:13px 14px;margin-bottom:12px;">'
+  // Une carte, pas une liste : c'est un arrêt, comme un client qui
+  // aurait beaucoup de colis. Le détail s'ouvre à côté.
+  return '<div onclick="ouvrirRapportesChartres()" style="background:#f2fbf5;border:1.5px solid #009A44;'
+   + 'border-radius:var(--radius);padding:13px 14px;margin-bottom:12px;cursor:pointer;">'
    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
    +   '<div style="font-size:14px;font-weight:800;color:#006b2d;">✅ Rapportés de Chartres</div>'
    +   '<span class="badge badge-green">'+l.length+' client'+(l.length>1?'s':'')+'</span></div>'
-   + '<div style="font-size:12.5px;color:#006b2d;margin-top:4px;">'+colis+' colis · déposés à Mitry-Mory</div>';
-  l.forEach(function(c){
-    h+='<div style="background:#fff;border:1px solid #b7e2c8;border-radius:11px;padding:10px 11px;margin-top:9px;">'
-     + '<div style="font-size:13.5px;font-weight:700;">'+_nomAffiche(c)+'</div>'
-     + '<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.ville||'')+' ('+(c.dept||'')+')</div>'
-     + '<div style="font-size:11.5px;color:#555;margin-top:3px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
-     + '<div style="font-size:11px;color:#006b2d;margin-top:2px;">chargé par '+(c.mitryPar||'—')+' · '+_dateFr(c.mitryTs)+'</div>'
-     + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
-     + '</div>';
-  });
-  h+='</div>';
-  return h;
+   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:5px;">'
+   +   '<div style="font-size:12.5px;color:#006b2d;">'+colis+' colis · déposés à Mitry-Mory</div>'
+   +   '<div style="font-size:12.5px;font-weight:700;color:#006b2d;">Voir le détail →</div>'
+   + '</div></div>';
 }
 
 // Valider le lot = le passage à Chartres est fait. Ce qui a été
@@ -5469,7 +5463,16 @@ function validerLotChartres(){
 }
 
 // ── L'écran dédié au lot ──
+var _lotMode='aCharger';
+
 function ouvrirLotChartres(){
+  _lotMode='aCharger';
+  _renderLotChartres();
+  goTo('s-lot-chartres');
+}
+
+function ouvrirRapportesChartres(){
+  _lotMode='rapportes';
   _renderLotChartres();
   goTo('s-lot-chartres');
 }
@@ -5482,6 +5485,39 @@ function fermerLotChartres(){
 function _renderLotChartres(){
   var box=document.getElementById('lot-chartres-content');
   if(!box) return;
+
+  // Relecture de ce que le camion a déjà rapporté : aucune décision
+  // à prendre, on regarde.
+  var _lt=document.getElementById('lot-titre'), _ls=document.getElementById('lot-sous');
+  if(_lt) _lt.textContent = (_lotMode==='rapportes') ? '✅ Rapportés de Chartres' : '🏭 Entrepôt de Chartres';
+  if(_ls) _ls.textContent = (_lotMode==='rapportes') ? 'Déposés à Mitry-Mory' : 'Lot France';
+
+  if(_lotMode==='rapportes'){
+    var lc=_chargesDuCamion((typeof currentCamion!=='undefined')?currentCamion:'');
+    var bb=document.getElementById('lot-chartres-barre'); if(bb) bb.style.display='none';
+    if(!lc.length){
+      box.innerHTML='<div style="text-align:center;color:#aaa;padding:40px 20px;">Aucun colis rapporté.</div>';
+      return;
+    }
+    var cs=0; lc.forEach(function(c){ cs+=(c.nb||1); });
+    var hh='<div style="background:#f2fbf5;border:1.5px solid #009A44;border-radius:var(--radius);'
+     + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#006b2d;line-height:1.55;">'
+     + '<b style="color:#111;">'+lc.length+' client'+(lc.length>1?'s':'')+' · '+cs+' colis</b><br>'
+     + 'rapportés de Chartres et déposés à Mitry-Mory</div>';
+    lc.forEach(function(c){
+      hh+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);'
+       +'padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
+       +'<div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
+       +'<div style="font-size:12px;color:var(--text3);margin-top:2px;line-height:1.45;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
+       +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
+       +'<div style="font-size:11px;color:#006b2d;margin-top:2px;">chargé par '+(c.mitryPar||'—')+' · '+_dateFr(c.mitryTs)+'</div>'
+       + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
+       +'</div>';
+    });
+    box.innerHTML=hh;
+    return;
+  }
+
   var refs=_refsChartres();
   if(!refs.length){
     box.innerHTML='<div style="text-align:center;color:#aaa;padding:40px 20px;line-height:1.6;">'
