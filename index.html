@@ -1516,8 +1516,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.52.1';
-var APP_UPDATE = '18/08/2026 à 16:00';
+var APP_VERSION = 'v3.52.2';
+var APP_UPDATE = '18/08/2026 à 17:10';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5299,8 +5299,12 @@ function reprendreLotChartres(){
   if(!l || !l.fait){ showToastNew('⚠️ Ce passage n\'est pas validé.'); return; }
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var reste=_refsChartres().length;
+  if(!reste){
+    showToastNew('⚠️ Plus aucun colis à Chartres. Pour en faire redescendre un, ouvre le détail et utilise « Remettre à Chartres ».');
+    return;
+  }
   if(!confirm('Reprendre le chargement ?\n\n'
-    + (reste?(reste+' colis attendent encore à Chartres.\n'):'Plus aucun colis à Chartres.\n')
+    + reste+' colis attendent encore à Chartres.\n'
     + 'Les colis déjà rapportés à Mitry-Mory ne bougent pas.')) return;
   var maj={};
   maj['lots/'+currentCollecteId+'/fait']=null;
@@ -5442,7 +5446,20 @@ function _htmlArretChartres(k){
   }
 
   var refs=_refsChartres();
-  if(!refs.length) return '';
+  // Plus rien sur place, mais ce camion en a rapporté : l'arrêt reste
+  // sur la feuille de route, marqué fait. Il ne doit jamais s'évaporer.
+  if(!refs.length){
+    if(_chargesDuCamion(k).length){
+      var majA={};
+      majA['lots/'+(currentCollecteId||'')+'/fait']=true;
+      if(!l.faitTs) majA['lots/'+(currentCollecteId||'')+'/faitTs']=Date.now();
+      if(!l.faitPar) majA['lots/'+(currentCollecteId||'')+'/faitPar']=(currentUser||{}).name||'';
+      l.fait=true; l.faitTs=l.faitTs||Date.now(); l.faitPar=l.faitPar||((currentUser||{}).name||'');
+      try{ if(db && firebaseReady) db.ref('france').update(majA); }catch(e){}
+      return _htmlArretChartres(k);
+    }
+    return '';
+  }
   var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
   // Chartres est un arrêt parmi d'autres sur la feuille de route :
   // il reste compact. Le détail des colis s'ouvre à côté, pour ne pas
