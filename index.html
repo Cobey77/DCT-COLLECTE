@@ -885,6 +885,23 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 
 <!-- VUE CAMION -->
+<!-- LOT DE CHARTRES — écran dédié -->
+<div class="screen" id="s-lot-chartres">
+  <div class="header">
+    <button class="btn-back" onclick="fermerLotChartres()">&#8592; Camion</button>
+    <div style="text-align:center;"><div class="h-title" style="font-size:14px;">&#127981; Entrep&#244;t de Chartres</div><div class="h-sub">Lot France</div></div>
+    <div style="width:60px;"></div>
+  </div>
+  <div class="content" id="lot-chartres-content"></div>
+  <div id="lot-chartres-barre" style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
+    <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#888;margin-bottom:8px;">
+      <span id="lot-chartres-info"></span>
+      <span onclick="_toutCharger()" id="lot-chartres-tout" style="color:#006b2d;font-weight:700;cursor:pointer;">Tout cocher</span>
+    </div>
+    <button class="btn btn-green" style="margin:0;" id="lot-chartres-btn" onclick="validerChargementChartres()">&#10003; Valider le chargement</button>
+  </div>
+</div>
+
 <div class="screen" id="s-camion">
   <div class="header">
     <button class="btn-back" onclick="goTo('s-collecte')">← Dispatch</button>
@@ -1469,8 +1486,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.40.0';
-var APP_UPDATE = '17/08/2026 à 09:30';
+var APP_VERSION = 'v3.41.0';
+var APP_UPDATE = '17/08/2026 à 11:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5186,56 +5203,105 @@ function _htmlArretChartres(k){
   var refs=_refsChartres();
   if(!refs.length) return '';
   var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
-  // Un seul arrêt, un seul encadré : l'entrepôt et ce qu'on y charge
-  // ne sont pas deux sujets. Et chaque colis s'ouvre avant d'être coché.
-  var nb=_chargeSel.length, cs=0;
-  _chargeSel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) cs+=(c.nb||1); });
-
-  var h='<div style="background:#fffaf0;border:2px solid #e08e0b;border-radius:var(--radius);padding:14px;margin-bottom:14px;">'
+  // Chartres est un arrêt parmi d'autres sur la feuille de route :
+  // il reste compact. Le détail des colis s'ouvre à côté, pour ne pas
+  // noyer les clients d'Île-de-France sous une liste de province.
+  var h='<div onclick="ouvrirLotChartres()" style="background:#fffaf0;border:2px solid #e08e0b;'
+   + 'border-radius:var(--radius);padding:13px 14px;margin-bottom:12px;cursor:pointer;">'
    + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
    +   '<div style="font-size:15px;font-weight:800;">🏭 Entrepôt de Chartres</div>'
    +   '<span class="badge badge-orange">Lot France</span></div>'
    + '<div style="font-size:12.5px;color:#92400e;margin-top:4px;line-height:1.5;">'
-   +   '12 rue de l\'Industrie · 28000 Chartres<br>'
-   +   refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis à charger</div>'
-   + '<a href="https://waze.com/ul?q='+encodeURIComponent('12 rue de l\'Industrie 28000 Chartres')+'&navigate=yes" target="_blank" style="display:block;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-top:11px;">🧭 Itinéraire</a>'
-   + '<div style="height:1px;background:#f0d9a8;margin:14px 0 12px;"></div>'
-   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">'
-   +   '<div style="font-size:12px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.4px;">Vérifier puis cocher</div>'
-   +   '<span onclick="_toutCharger()" style="font-size:12px;color:#006b2d;font-weight:700;cursor:pointer;">'
-   +     (nb>=refs.length?'Tout décocher':'Tout cocher')+'</span></div>';
+   +   '12 rue de l\'Industrie · 28000 Chartres</div>'
+   + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">'
+   +   '<div style="font-size:13px;font-weight:800;color:#111;">'
+   +     refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</div>'
+   +   '<div style="font-size:12.5px;font-weight:700;color:#92400e;">Ouvrir le lot →</div>'
+   + '</div>'
+   + '<a href="https://waze.com/ul?q='+encodeURIComponent('12 rue de l\'Industrie 28000 Chartres')+'&navigate=yes" target="_blank" onclick="event.stopPropagation();" style="display:block;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-top:11px;">🧭 Itinéraire</a>'
+   + '</div>';
+  return h;
+}
+
+// ── L'écran dédié au lot ──
+function ouvrirLotChartres(){
+  _renderLotChartres();
+  goTo('s-lot-chartres');
+}
+
+function fermerLotChartres(){
+  if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+  goTo('s-camion');
+}
+
+function _renderLotChartres(){
+  var box=document.getElementById('lot-chartres-content');
+  if(!box) return;
+  var refs=_refsChartres();
+  if(!refs.length){
+    box.innerHTML='<div style="text-align:center;color:#aaa;padding:40px 20px;line-height:1.6;">'
+      +'<div style="font-size:32px;margin-bottom:10px;">📭</div>Plus aucun colis à Chartres.</div>';
+    var b0=document.getElementById('lot-chartres-barre'); if(b0) b0.style.display='none';
+    return;
+  }
+  var b1=document.getElementById('lot-chartres-barre'); if(b1) b1.style.display='block';
+  var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
+
+  var h='<div style="background:#fffaf0;border:1.5px solid #e08e0b;border-radius:var(--radius);'
+   + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.55;">'
+   + '12 rue de l\'Industrie · 28000 Chartres<br>'
+   + '<b style="color:#111;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</b> à charger</div>'
+   + '<div class="slabel">Vérifier puis cocher</div>';
 
   refs.forEach(function(c){
     var on=_chargeSel.indexOf(c._id)>=0;
     var jours=_joursDepuis(c.depotTs);
     h+='<div style="background:'+(on?'#f2fbf5':'#fff')+';border:1.5px solid '+(on?'#009A44':'var(--border)')+';'
-     +'border-radius:var(--radius);padding:11px 12px;margin-bottom:8px;">'
+     +'border-radius:var(--radius);padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
      +'<div onclick="_toggleCharge(\''+c._id+'\')" style="display:flex;gap:11px;align-items:flex-start;cursor:pointer;">'
      +'<div style="width:24px;height:24px;border-radius:7px;border:2px solid '+(on?'#009A44':'#ccc')+';background:'+(on?'#009A44':'#fff')+';color:#fff;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;">'+(on?'✓':'')+'</div>'
-     +'<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:700;">'+_nomAffiche(c)+'</div>'
-     +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.ville||'')+' ('+(c.dept||'')+')</div>'
-     +'<div style="font-size:11.5px;color:#555;margin-top:3px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
+     +'<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
+     +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
+     +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
      +'<div style="font-size:11px;color:#92400e;margin-top:2px;">à Chartres depuis '+jours+' j</div>'
      +'</div></div>'
-     + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET), 9)
+     + _lienAppel(c)
+     + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
      +'</div>';
   });
+  box.innerHTML=h;
+  _majBarreLotChartres();
+}
 
-  h+='<div style="font-size:12.5px;color:#92400e;margin:2px 2px 10px;">'
-   +   '<b style="color:#111;">'+nb+'</b> sur '+refs.length+' coché'+(nb>1?'s':'')+' · '+cs+' colis</div>'
-   + '<button class="btn '+(nb?'btn-green':'btn-gray')+'" style="margin:0;'+(nb?'':'opacity:.6;')+'" onclick="validerChargementChartres()">✓ Valider le chargement</button>'
-   + '</div>';
-  return h;
+function _majBarreLotChartres(){
+  var refs=_refsChartres();
+  var nb=_chargeSel.length, cs=0;
+  _chargeSel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) cs+=(c.nb||1); });
+  var i=document.getElementById('lot-chartres-info');
+  if(i) i.innerHTML='<b style="color:#111;">'+nb+'</b> sur '+refs.length+' coché'+(nb>1?'s':'')+' · '+cs+' colis';
+  var tc=document.getElementById('lot-chartres-tout');
+  if(tc) tc.textContent = (nb>=refs.length && refs.length) ? 'Tout décocher' : 'Tout cocher';
+  var b=document.getElementById('lot-chartres-btn');
+  if(b){
+    b.className = nb ? 'btn btn-green' : 'btn btn-gray';
+    b.style.opacity = nb ? '1' : '.6';
+  }
+}
+
+function _rafraichirLot(){
+  var sc=document.querySelector('.screen.active');
+  if(sc && sc.id==='s-lot-chartres'){ _renderLotChartres(); return; }
+  if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
 }
 function _toggleCharge(id){
   var i=_chargeSel.indexOf(id);
   if(i>=0) _chargeSel.splice(i,1); else _chargeSel.push(id);
-  if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+  _rafraichirLot();
 }
 function _toutCharger(){
   var refs=_refsChartres();
   _chargeSel = (_chargeSel.length===refs.length) ? [] : refs.map(function(c){ return c._id; });
-  if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+  _rafraichirLot();
 }
 function validerChargementChartres(){
   if(!_chargeSel.length){ showToastNew('⚠️ Cochez au moins un client.'); return; }
@@ -5262,10 +5328,15 @@ function validerChargementChartres(){
     showToastNew('✅ '+_chargeSel.length+' client(s) à Mitry-Mory');
     _activiteFrance('🏭', 'a chargé <strong>'+_chargeSel.length+' colis</strong> à Chartres → Mitry-Mory');
     _chargeSel=[];
-    if(!_refsChartres().length && currentCollecteId){
+    var reste=_refsChartres().length;
+    if(!reste && currentCollecteId){
       db.ref('france/lots/'+currentCollecteId).remove();
     }
-    if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+    // Tout est chargé : on revient au camion. Sinon on reste sur le lot.
+    var sc=document.querySelector('.screen.active');
+    if(sc && sc.id==='s-lot-chartres' && reste){ _renderLotChartres(); }
+    else { if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+           if(sc && sc.id==='s-lot-chartres') goTo('s-camion'); }
   }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
 
