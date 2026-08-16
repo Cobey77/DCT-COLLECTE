@@ -1516,8 +1516,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.53.1';
-var APP_UPDATE = '18/08/2026 à 20:15';
+var APP_VERSION = 'v3.53.2';
+var APP_UPDATE = '18/08/2026 à 21:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5702,7 +5702,7 @@ function _renderLotChartres(){
      +     'border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;'
      +     (aMitry?'background:#009A44;color:#fff;':'background:#fff;border:1.5px solid #009A44;color:#006b2d;')
      +     '">✓ Chargé</div>'
-     +   '<div onclick="'+(aMitry?('remettreAChartres(\''+c._id+'\')'):('ouvrirNonCharge(\''+c._id+'\')'))+'" '
+     +   '<div onclick="ouvrirNonCharge(\''+c._id+'\')" '
      +     'style="flex:1;text-align:center;padding:12px 5px;border-radius:11px;font-size:13px;font-weight:800;cursor:pointer;'
      +     (!aMitry?'background:#e08e0b;color:#fff;':'background:#fff;border:1.5px solid #e08e0b;color:#92400e;')
      +     '">✕ Pas chargé</div>'
@@ -5771,11 +5771,19 @@ function validerNonCharge(){
   var notes=_notesDe(id);
   notes.push({ q:qui, uid:(currentUser||{}).id||'', ts:now, t:'✕ Non chargé à Chartres — '+motif });
   var hist=(c.hist||[]).slice();
-  hist.push({q:qui, a:'n\'a pas chargé le colis — '+motif, ts:now});
+  hist.push({q:qui, a:(c.lieu==='mitry'?'a retiré le colis du camion — ':'n\'a pas chargé le colis — ')+motif, ts:now});
   var maj={};
   maj['clients/'+id+'/notes']=notes;
   maj['clients/'+id+'/hist']=hist;
   maj['clients/'+id+'/nonCharge']={ts:now, par:qui, motif:motif};
+  // Le colis était déjà monté : il redescend, la raison est la même.
+  if(c.lieu==='mitry'){
+    maj['clients/'+id+'/lieu']='chartres';
+    maj['clients/'+id+'/statut']='ramasse';
+    maj['clients/'+id+'/mitryTs']=null;
+    maj['clients/'+id+'/mitryPar']=null;
+    maj['clients/'+id+'/mitryCamion']=null;
+  }
   db.ref('france').update(maj).then(function(){
     closeModal('modal-noncharge');
     showToastNew('✕ Raison enregistrée');
