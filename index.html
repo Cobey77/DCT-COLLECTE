@@ -928,16 +928,18 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <button class="btn-pdf" onclick="exportCamionPDF()" style="background:#009A44;color:white;border:none;padding:8px 12px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">📄 PDF</button>
   </div>
   <div style="display:flex;border-bottom:2px solid #e0e0e0;background:#fff;flex-shrink:0;">
-    <button id="admin-tab-equipe" onclick="showAdminTab('equipe')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid #009A44;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#009A44;font-family:var(--font);">👥 Équipe</button>
-    <button id="admin-tab-partenaires" onclick="showAdminTab('partenaires')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid transparent;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">🚚 Partenaires</button>
-    <button id="admin-tab-securite" onclick="showAdminTab('securite')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid transparent;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">🔐 Sécurité</button>
-    <button id="admin-tab-message" onclick="showAdminTab('message')" style="flex:1;padding:10px 4px;border:none;border-bottom:3px solid transparent;background:none;font-size:11px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">📢 Message</button>
+    <button id="admin-tab-equipe" onclick="showAdminTab('equipe')" style="flex:1;padding:10px 3px;border:none;border-bottom:3px solid #009A44;background:none;font-size:10.5px;font-weight:700;cursor:pointer;color:#009A44;font-family:var(--font);">👥 Équipe</button>
+    <button id="admin-tab-partenaires" onclick="showAdminTab('partenaires')" style="flex:1;padding:10px 3px;border:none;border-bottom:3px solid transparent;background:none;font-size:10.5px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">🚚 Partenaire</button>
+    <button id="admin-tab-acces" onclick="showAdminTab('acces')" style="flex:1;padding:10px 3px;border:none;border-bottom:3px solid transparent;background:none;font-size:10.5px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">🔐 Accès</button>
+    <button id="admin-tab-donnees" onclick="showAdminTab('donnees')" style="flex:1;padding:10px 3px;border:none;border-bottom:3px solid transparent;background:none;font-size:10.5px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">💾 Données</button>
+    <button id="admin-tab-message" onclick="showAdminTab('message')" style="flex:1;padding:10px 3px;border:none;border-bottom:3px solid transparent;background:none;font-size:10.5px;font-weight:700;cursor:pointer;color:#888;font-family:var(--font);">📢 Message</button>
   </div>
   <div class="content" style="padding:0;">
     <div id="admin-section-equipe" style="padding:16px;"></div>
     <div id="admin-section-partenaires" style="display:none;padding:16px;"></div>
     <div id="admin-section-message" style="display:none;padding:16px;"></div>
-    <div id="admin-section-securite" style="display:none;padding:16px;"></div>
+    <div id="admin-section-acces" style="display:none;padding:16px;"></div>
+    <div id="admin-section-donnees" style="display:none;padding:16px;"></div>
   </div>
 </div>
 
@@ -1462,8 +1464,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.33.0';
-var APP_UPDATE = '16/08/2026 à 14:20';
+var APP_VERSION = 'v3.35.0';
+var APP_UPDATE = '16/08/2026 à 17:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2497,9 +2499,7 @@ function _htmlVivierDanny(){
       +  '<div style="font-size:12px;color:var(--text3);margin-top:3px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
       +  '<div style="font-size:11.5px;color:#555;margin-top:5px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
       +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(_anc?('color:'+_anc.bord+';font-weight:800;'):'')+'">'+j+' j</span></div>'
-      +  _lienAppel(c)
-      +  _boutonNotes(c._id)
-      +  _boutonPhotos(c._id)
+      +  _actionsClient(c._id)
       +'</div></div>';
   });
   return h;
@@ -2516,8 +2516,7 @@ function ecouterStatsPhotos(){
   db.ref('france_stats/photos').on('value', function(snap){
     var v=snap.val()||{};
     _statPhotos={ n:v.n||0, o:v.o||0 };
-    try{ var sec=document.getElementById('admin-section-securite');
-         if(sec && sec.style.display!=='none') renderAdminSecurite(); }catch(e){}
+    try{ _rafraichirAdmin(); }catch(e){}
   });
 }
 
@@ -2819,9 +2818,7 @@ function _boutonPhotos(id, style){
   var c=(franceData.clients||{})[id]||{};
   var n=c.nbPhotos||0;
   return '<div onclick="event.stopPropagation();ouvrirPhotos(\''+id+'\')" style="'
-    + (style||'display:inline-block;background:#e8f5e9;color:#006b2d;border:1px solid #009A44;'
-      +'border-radius:9px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;margin-left:6px;')
-    + '">📷 Photos'+(n?(' · '+n):'')+'</div>';
+    + (style||_ACT_VERT) + '">📷 Photos'+(n?(' · '+n):'')+'</div>';
 }
 
 // ═══════════ ANCIENNETÉ — v3.30.0 ═══════════
@@ -2985,24 +2982,39 @@ function supprimerNote(ts){
 function _boutonNotes(id, style){
   var n=_notesDe(id).length;
   return '<div onclick="event.stopPropagation();ouvrirNotes(\''+id+'\')" style="'
-    + (style||'display:inline-block;background:#eef0fa;color:#1a237e;border:1px solid #c5cae9;'
-      +'border-radius:9px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;')
-    + '">📝 Notes'+(n?(' · '+n):'')+'</div>';
+    + (style||_ACT_BLEU) + '">📝 Notes'+(n?(' · '+n):'')+'</div>';
 }
 
-// Joindre un client depuis le vivier, sans cocher la carte au passage.
-// Danny sonde qui est disponible avant de figer sa tournée ; la
-// confirmation, elle, reste à l'écran suivant.
+// ═══════════ ZONE D'ACTIONS — v3.35.0 ═══════════
+// Deux rangées régulières : les numéros au-dessus, Notes et Photos
+// en dessous. Chaque bouton occupe la même largeur que son voisin,
+// quelle que soit la longueur du numéro.
+var _ACT_BASE = 'flex:1;min-width:0;text-align:center;padding:10px 6px;border-radius:10px;'
+              + 'font-size:12.5px;font-weight:700;cursor:pointer;text-decoration:none;'
+              + 'white-space:nowrap;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;';
+var _ACT_VERT = _ACT_BASE + 'background:#e8f5e9;color:#006b2d;border:1px solid #009A44;';
+var _ACT_BLEU = _ACT_BASE + 'background:#eef0fa;color:#1a237e;border:1px solid #c5cae9;';
+
+function _rangee(contenu, haut){
+  if(!contenu) return '';
+  return '<div style="display:flex;gap:7px;margin-top:'+(haut||8)+'px;">'+contenu+'</div>';
+}
+
+// Les numéros, cliquables, sans jamais cocher la carte.
 function _lienAppel(c){
   var t=(c&&c.tel||'').trim(), t2=(c&&c.tel2||'').trim();
   if(!t && !t2) return '';
-  var st='display:inline-block;text-decoration:none;background:#e8f5e9;color:#006b2d;'
-       + 'border:1px solid #009A44;border-radius:9px;padding:6px 11px;font-size:12px;'
-       + 'font-weight:700;margin-top:8px;margin-right:6px;';
   var h='';
-  if(t)  h+='<a href="tel:'+t+'" onclick="event.stopPropagation();" style="'+st+'">📞 '+t+'</a>';
-  if(t2) h+='<a href="tel:'+t2+'" onclick="event.stopPropagation();" style="'+st+'">📞 '+t2+'</a>';
-  return h;
+  if(t)  h+='<a href="tel:'+t+'" onclick="event.stopPropagation();" style="'+_ACT_VERT+'">📞 '+t+'</a>';
+  if(t2) h+='<a href="tel:'+t2+'" onclick="event.stopPropagation();" style="'+_ACT_VERT+'">📞 '+t2+'</a>';
+  return _rangee(h);
+}
+
+// Le bloc complet : numéros, puis Notes et Photos côte à côte.
+function _actionsClient(id){
+  var c=(franceData.clients||{})[id]||{};
+  return _lienAppel(c)
+       + _rangee(_boutonNotes(id, _ACT_BLEU) + _boutonPhotos(id, _ACT_VERT));
 }
 
 function _chipD(lib,on,action,col){
@@ -4597,13 +4609,11 @@ function _carteArret(id, num, to, fait){
     +'<div style="font-size:11.5px;color:var(--text3);margin-top:5px;">📦 '+(c.nb||1)+' colis</div>'
     +(c.colis?('<div style="background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:7px 10px;'
       +'margin-top:6px;font-size:12px;font-weight:600;color:#5c4a00;line-height:1.45;">📋 '+c.colis+'</div>'):'')
-    +'<div style="display:flex;gap:7px;margin-top:9px;">'
-    +  '<a href="tel:'+(c.tel||'')+'" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
-    +  _boutonTel2(c,'flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;')
-    +  _boutonNotes(id,'flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#eef0fa;color:#1a237e;cursor:pointer;')
-    +  _boutonPhotos(id,'flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#e8f5e9;color:#006b2d;cursor:pointer;')
-    +  '<a href="https://waze.com/ul?q='+encodeURIComponent((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||''))+'&navigate=yes" target="_blank" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">🧭 Itinéraire</a>'
-    +'</div>'
+    + _lienAppel(c)
+    + _rangee(
+        '<a href="https://waze.com/ul?q='+encodeURIComponent((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||''))+'&navigate=yes" target="_blank" style="'+_ACT_BASE+'background:#f0f0f0;color:#333;border:1px solid #ddd;">🧭 Y aller</a>'
+        + _boutonNotes(id, _ACT_BLEU)
+        + _boutonPhotos(id, _ACT_VERT))
     +'<div style="display:flex;gap:8px;margin-top:8px;">'
     +  '<div onclick="marquerRamasse(\''+id+'\')" style="flex:1;text-align:center;padding:12px 5px;border-radius:11px;font-size:13.5px;font-weight:800;background:#009A44;color:#fff;cursor:pointer;">✓ Ramassé</div>'
     +  '<div onclick="ouvrirMotif(\''+id+'\')" style="flex:1;text-align:center;padding:12px 5px;border-radius:11px;font-size:13.5px;font-weight:800;background:#fff;border:1.5px solid #f5a3a3;color:#992020;cursor:pointer;">✕ Non ramassé</div>'
@@ -9381,7 +9391,7 @@ function _sauvegarderModifCollab(modal, PALETTE){
 var _selectedColorIdx = 0;
 
 function showAdminTab(tab){
-  ['equipe','partenaires','securite','message'].forEach(function(t){
+  ['equipe','partenaires','acces','donnees','message'].forEach(function(t){
     var sec = document.getElementById('admin-section-'+t);
     var btn = document.getElementById('admin-tab-'+t);
     if(sec) sec.style.display = t === tab ? 'block' : 'none';
@@ -9392,7 +9402,8 @@ function showAdminTab(tab){
   });
   if(tab === 'equipe') renderAdminEquipe();
   else if(tab === 'partenaires') renderAdminPartenaires();
-  else if(tab === 'securite'){ renderAdminSecurite(); marquerAlertesVues(); }
+  else if(tab === 'acces'){ renderAdminAcces(); marquerAlertesVues(); }
+  else if(tab === 'donnees') renderAdminDonnees();
   else if(tab === 'message') renderAdminMessage();
 }
 
@@ -9528,8 +9539,7 @@ function ecouterAlertes(){
                  .sort(function(a,b){ return (b.ts||0)-(a.ts||0); });
     majPastilleAlertes();
     try{
-      var sec=document.getElementById('admin-section-securite');
-      if(sec && sec.style.display!=='none') renderAdminSecurite();
+      _rafraichirAdmin();
     }catch(e){}
   });
 }
@@ -9607,8 +9617,7 @@ function ecouterPassePartout(){
   if(!db) return;
   db.ref('dct_config/passe_partout').on('value', function(snap){
     _passePartout = String(snap.val()||'');
-    try{ var sec=document.getElementById('admin-section-securite');
-         if(sec && sec.style.display!=='none') renderAdminSecurite(); }catch(e){}
+    try{ _rafraichirAdmin(); }catch(e){}
   });
 }
 
@@ -9685,8 +9694,7 @@ function ecouterCodesEspaces(){
   db.ref('dct_config/codes_espaces').on('value', function(snap){
     _codesEspaces = snap.val() || {};
     _rafraichirLogin();
-    try{ var sec=document.getElementById('admin-section-securite');
-         if(sec && sec.style.display!=='none') renderAdminSecurite(); }catch(e){}
+    try{ _rafraichirAdmin(); }catch(e){}
   });
 }
 
@@ -10794,24 +10802,40 @@ function renderAdminActivite(){
   }
 }
 
-// ─── ONGLET SÉCURITÉ ───
-function renderAdminSecurite(){
-  var sec = document.getElementById('admin-section-securite');
+// ─── ONGLET ACCÈS ───
+// Tout ce qui ouvre une porte, et le journal de ceux qui ont essayé.
+function renderAdminAcces(){
+  var sec = document.getElementById('admin-section-acces');
   if(!sec) return;
-  sec.innerHTML = _htmlCodesAdmins() + _htmlStockage() + _htmlPassePartout() + _htmlCorrectionCivilites() + _htmlCodesEspaces() + _htmlAlertes()
-    + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:14px;">🔐 Code PIN administrateur</div>'
-    + '<p style="font-size:12px;color:#888;margin-bottom:12px;">Code actuel : '+(localStorage.getItem('dct_admin_pin')||'1010')+'</p>'
-    + '<div style="display:flex;gap:8px;">'
-    + '<input id="new-pin-input" type="password" inputmode="numeric" maxlength="6" placeholder="Nouveau code (min 4 chiffres)" style="flex:1;padding:12px;border:1.5px solid #1a237e;border-radius:8px;font-size:16px;font-family:var(--font);letter-spacing:4px;">'
-    + '</div>'
-    + '<button onclick="changerPin()" style="width:100%;margin-top:10px;padding:13px;background:#1a237e;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">🔐 Changer le code PIN</button>'
-    + '<div style="height:1px;background:#eee;margin:22px 0 16px;"></div>'
-    + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:8px;">🔍 Diagnostic des donn\u00e9es</div>'
-    + '<p style="font-size:12px;color:#888;margin-bottom:12px;">V\u00e9rifie si des clients supprim\u00e9s sont encore r\u00e9f\u00e9renc\u00e9s dans un camion. <strong>Ne supprime rien.</strong></p>'
-    + '<button onclick="afficherReferencesOrphelines()" style="width:100%;padding:13px;background:#fff;color:#1a237e;border:2px solid #1a237e;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">🔍 Analyser (sans rien modifier)</button>'
-    + '<button onclick="nettoyerOrphelinsCollecteEnCours()" style="width:100%;margin-top:8px;padding:13px;background:#fff3e0;color:#e65100;border:2px solid #e65100;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">🧹 Nettoyer la collecte en cours</button>'
-    + '<p style="font-size:11.5px;color:#999;margin-top:8px;line-height:1.5;">Retire uniquement les r\u00e9f\u00e9rences sans fiche client, sur la collecte en cours. Les clients existants ne sont jamais touch\u00e9s.</p>';
+  sec.innerHTML = _htmlCodesAdmins() + _htmlCodesEspaces() + _htmlPassePartout() + _htmlAlertes();
 }
+
+// ─── ONGLET DONNÉES ───
+// Ce que l'application occupe, et les outils pour la remettre d'aplomb.
+function renderAdminDonnees(){
+  var sec = document.getElementById('admin-section-donnees');
+  if(!sec) return;
+  sec.innerHTML = _htmlStockage() + _htmlCorrectionCivilites()
+    + '<div style="font-size:15px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">🔍 Diagnostic</div>'
+    + '<div style="font-size:12px;color:#888;margin-bottom:12px;">Cherche les clients supprimés encore référencés dans un camion. L\'analyse ne modifie rien.</div>'
+    + '<button class="btn btn-gray" style="color:#1a237e;border:1.5px solid #1a237e;" onclick="afficherReferencesOrphelines()">🔍 Analyser</button>'
+    + '<button class="btn btn-gray" style="background:#fff3e0;color:#e65100;border:1.5px solid #e65100;margin-top:8px;" onclick="nettoyerOrphelinsCollecteEnCours()">🧹 Nettoyer la collecte en cours</button>'
+    + '<div style="font-size:11.5px;color:#999;margin-top:8px;line-height:1.55;">Retire uniquement les références sans fiche client, sur la collecte en cours. Les clients existants ne sont jamais touchés.</div>'
+    + '<div style="height:22px;"></div>';
+}
+
+// Rafraîchit l'onglet visible, quel qu'il soit.
+function _rafraichirAdmin(){
+  try{
+    var a=document.getElementById('admin-section-acces');
+    if(a && a.style.display!=='none') renderAdminAcces();
+    var d=document.getElementById('admin-section-donnees');
+    if(d && d.style.display!=='none') renderAdminDonnees();
+  }catch(e){}
+}
+
+// Ancien nom, conservé le temps que tous les appels basculent.
+function renderAdminSecurite(){ _rafraichirAdmin(); }
 
 function changerPin(){
   var inp = document.getElementById('new-pin-input');
