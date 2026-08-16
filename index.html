@@ -885,6 +885,23 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 
 <!-- VUE CAMION -->
+<!-- COLIS NON CHARGÉ À CHARTRES -->
+<div id="modal-noncharge" class="modal-overlay">
+<div class="modal-sheet" style="max-width:350px;margin:auto;">
+<div style="padding:20px 18px;">
+  <div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:2px;">Colis non chargé</div>
+  <div id="nc-client" style="font-size:12px;color:#888;margin-bottom:12px;"></div>
+  <input type="hidden" id="nc-id">
+  <div style="font-size:12.5px;color:#92400e;background:#fffaf0;border:1px solid #e08e0b;border-radius:10px;padding:10px 11px;margin-bottom:11px;line-height:1.5;">
+    Le colis reste &#224; Chartres. La raison sera conserv&#233;e dans le suivi du client.
+  </div>
+  <textarea class="fi" id="nc-motif" rows="3" placeholder="Camion plein, colis introuvable, emballage &#224; refaire&#8230;" style="resize:none;margin-bottom:8px;"></textarea>
+  <button onclick="validerNonCharge()" style="width:100%;padding:13px;background:#c0392b;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">Enregistrer</button>
+  <button onclick="closeModal('modal-noncharge')" style="width:100%;padding:11px;margin-top:8px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Annuler</button>
+</div>
+</div>
+</div>
+
 <!-- LOT DE CHARTRES — écran dédié -->
 <div class="screen" id="s-lot-chartres">
   <div class="header">
@@ -893,12 +910,8 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
     <div style="width:60px;"></div>
   </div>
   <div class="content" id="lot-chartres-content"></div>
-  <div id="lot-chartres-barre" style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">
-    <div style="display:flex;justify-content:space-between;font-size:12.5px;color:#888;margin-bottom:8px;">
-      <span id="lot-chartres-info"></span>
-      <span onclick="_toutCharger()" id="lot-chartres-tout" style="color:#006b2d;font-weight:700;cursor:pointer;">Tout cocher</span>
-    </div>
-    <button class="btn btn-green" style="margin:0;" id="lot-chartres-btn" onclick="validerChargementChartres()">&#10003; Valider le chargement</button>
+  <div id="lot-chartres-barre" style="background:#fff;border-top:1px solid var(--border);padding:12px 14px 14px;flex-shrink:0;">
+    <div id="lot-chartres-info" style="font-size:12.5px;color:#888;text-align:center;"></div>
   </div>
 </div>
 
@@ -1486,8 +1499,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.41.0';
-var APP_UPDATE = '17/08/2026 à 11:00';
+var APP_VERSION = 'v3.42.0';
+var APP_UPDATE = '17/08/2026 à 14:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5053,9 +5066,27 @@ function _collecteDuLot(){
   var lots=franceData.lots||{};
   var trouve=null;
   Object.keys(lots).forEach(function(colId){
-    if(lots[colId] && lots[colId].camion && !trouve) trouve=colId;
+    if(trouve || !lots[colId] || !lots[colId].camion) return;
+    // Une collecte terminée ne retient plus rien : ce qui n'a pas été
+    // chargé — camion plein, oubli — repart dans le circuit et sera
+    // proposé à la collecte suivante.
+    var c=(collectes||[]).find(function(x){ return x.id===colId; });
+    if(!c || c.statut==='terminee') return;
+    trouve=colId;
   });
   return trouve;
+}
+
+// Ménage : on efface les lots des collectes closes ou disparues.
+function _libererLotsTermines(){
+  var lots=franceData.lots||{};
+  Object.keys(lots).forEach(function(colId){
+    var c=(collectes||[]).find(function(x){ return x.id===colId; });
+    if(!c || c.statut==='terminee'){
+      delete franceData.lots[colId];
+      if(db && firebaseReady){ try{ db.ref('france/lots/'+colId).remove(); }catch(e){} }
+    }
+  });
 }
 
 function _libCollecte(colId){
@@ -5250,42 +5281,112 @@ function _renderLotChartres(){
   var h='<div style="background:#fffaf0;border:1.5px solid #e08e0b;border-radius:var(--radius);'
    + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#92400e;line-height:1.55;">'
    + '12 rue de l\'Industrie · 28000 Chartres<br>'
-   + '<b style="color:#111;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</b> à charger</div>'
-   + '<div class="slabel">Vérifier puis cocher</div>';
+   + '<b style="color:#111;">'+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</b> encore sur place</div>'
+   + '<div class="slabel">Un par un — vérifier puis décider</div>';
 
   refs.forEach(function(c){
-    var on=_chargeSel.indexOf(c._id)>=0;
     var jours=_joursDepuis(c.depotTs);
-    h+='<div style="background:'+(on?'#f2fbf5':'#fff')+';border:1.5px solid '+(on?'#009A44':'var(--border)')+';'
-     +'border-radius:var(--radius);padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
-     +'<div onclick="_toggleCharge(\''+c._id+'\')" style="display:flex;gap:11px;align-items:flex-start;cursor:pointer;">'
-     +'<div style="width:24px;height:24px;border-radius:7px;border:2px solid '+(on?'#009A44':'#ccc')+';background:'+(on?'#009A44':'#fff')+';color:#fff;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;">'+(on?'✓':'')+'</div>'
-     +'<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
-     +'<div style="font-size:12px;color:var(--text3);margin-top:2px;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
+    var nc=c.nonCharge;
+    h+='<div style="background:#fff;border:1.5px solid '+(nc?'#f5a3a3':'var(--border)')+';'
+     +'border-radius:var(--radius);padding:12px;margin-bottom:10px;box-shadow:var(--shadow);">'
+     +'<div style="font-size:14px;font-weight:700;">'+_nomAffiche(c)+'</div>'
+     +'<div style="font-size:12px;color:var(--text3);margin-top:2px;line-height:1.45;">'+(c.adresse||'')+'<br>'+(c.cp||'')+' '+(c.ville||'')+'</div>'
      +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
-     +'<div style="font-size:11px;color:#92400e;margin-top:2px;">à Chartres depuis '+jours+' j</div>'
-     +'</div></div>'
-     + _lienAppel(c)
+     +'<div style="font-size:11px;color:#92400e;margin-top:2px;">à Chartres depuis '+jours+' j</div>';
+    if(nc && nc.motif){
+      h+='<div style="background:#fde0e0;border-radius:9px;padding:8px 10px;margin-top:8px;'
+       + 'font-size:11.5px;color:#992020;line-height:1.5;">✕ Non chargé le '+_dateFr(nc.ts)+' · '
+       + _auteurNote({q:nc.par})+'<br><span style="opacity:.9;">'+_esc(nc.motif)+'</span></div>';
+    }
+    h+= _lienAppel(c)
      + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
+     + '<div style="display:flex;gap:8px;margin-top:10px;">'
+     +   '<div onclick="chargerUnClient(\''+c._id+'\')" style="flex:1;text-align:center;padding:12px 5px;'
+     +     'border-radius:11px;font-size:13.5px;font-weight:800;background:#009A44;color:#fff;cursor:pointer;">✓ Chargé</div>'
+     +   '<div onclick="ouvrirNonCharge(\''+c._id+'\')" style="flex:1;text-align:center;padding:12px 5px;'
+     +     'border-radius:11px;font-size:13.5px;font-weight:800;background:#fff;border:1.5px solid #f5a3a3;'
+     +     'color:#992020;cursor:pointer;">✕ Non chargé</div>'
+     + '</div>'
      +'</div>';
   });
   box.innerHTML=h;
   _majBarreLotChartres();
 }
 
+// Un client chargé part tout de suite à Mitry-Mory : pas de validation
+// groupée, donc pas de doute sur ce qui est réellement dans le camion.
+function chargerUnClient(id){
+  var c=(franceData.clients||{})[id];
+  if(!c){ showToastNew('⚠️ Fiche introuvable.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  var qui=(currentUser||{}).name||'';
+  var hist=(c.hist||[]).slice();
+  hist.push({q:qui, a:'a chargé le colis à Chartres → Mitry-Mory', ts:Date.now()});
+  var maj={};
+  maj['clients/'+id+'/lieu']='mitry';
+  maj['clients/'+id+'/statut']='mitry';
+  maj['clients/'+id+'/mitryTs']=Date.now();
+  maj['clients/'+id+'/mitryPar']=qui;
+  maj['clients/'+id+'/collecteId']=currentCollecteId||'';
+  maj['clients/'+id+'/nonCharge']=null;
+  maj['clients/'+id+'/hist']=hist;
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ '+_nomAffiche(c)+' chargé');
+    _activiteFrance('🏭', 'a chargé les colis de <strong>'+_nomAffiche(c)+'</strong> — Chartres → Mitry-Mory');
+    var reste=_refsChartres().length;
+    if(!reste && currentCollecteId){ try{ db.ref('france/lots/'+currentCollecteId).remove(); }catch(e){} }
+    var sc=document.querySelector('.screen.active');
+    if(sc && sc.id==='s-lot-chartres' && reste){ _renderLotChartres(); }
+    else {
+      if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+      if(sc && sc.id==='s-lot-chartres') goTo('s-camion');
+    }
+    try{ renderFrance(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
+// Refus : le colis reste à Chartres et la raison entre dans son suivi.
+function ouvrirNonCharge(id){
+  var c=(franceData.clients||{})[id];
+  if(!c) return;
+  var e=document.getElementById('nc-client'); if(e) e.textContent=_nomAffiche(c)+' · '+(c.ville||'');
+  var i=document.getElementById('nc-id'); if(i) i.value=id;
+  var t=document.getElementById('nc-motif'); if(t) t.value='';
+  openModal('modal-noncharge');
+  setTimeout(function(){ if(t) t.focus(); },300);
+}
+
+function validerNonCharge(){
+  var id=((document.getElementById('nc-id')||{}).value||'');
+  var motif=(((document.getElementById('nc-motif')||{}).value)||'').trim();
+  var c=(franceData.clients||{})[id];
+  if(!c) return;
+  if(motif.length<2){ showToastNew('⚠️ Indiquez la raison.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  var qui=(currentUser||{}).name||'', now=Date.now();
+  var notes=_notesDe(id);
+  notes.push({ q:qui, uid:(currentUser||{}).id||'', ts:now, t:'✕ Non chargé à Chartres — '+motif });
+  var hist=(c.hist||[]).slice();
+  hist.push({q:qui, a:'n\'a pas chargé le colis — '+motif, ts:now});
+  var maj={};
+  maj['clients/'+id+'/notes']=notes;
+  maj['clients/'+id+'/hist']=hist;
+  maj['clients/'+id+'/nonCharge']={ts:now, par:qui, motif:motif};
+  db.ref('france').update(maj).then(function(){
+    closeModal('modal-noncharge');
+    showToastNew('✕ Raison enregistrée');
+    _activiteFrance('⚠️', 'n\'a pas chargé <strong>'+_nomAffiche(c)+'</strong> à Chartres — '+motif);
+    _renderLotChartres();
+    try{ renderFrance(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
+}
+
 function _majBarreLotChartres(){
   var refs=_refsChartres();
-  var nb=_chargeSel.length, cs=0;
-  _chargeSel.forEach(function(id){ var c=(franceData.clients||{})[id]; if(c) cs+=(c.nb||1); });
+  var refuses=refs.filter(function(c){ return c.nonCharge; }).length;
   var i=document.getElementById('lot-chartres-info');
-  if(i) i.innerHTML='<b style="color:#111;">'+nb+'</b> sur '+refs.length+' coché'+(nb>1?'s':'')+' · '+cs+' colis';
-  var tc=document.getElementById('lot-chartres-tout');
-  if(tc) tc.textContent = (nb>=refs.length && refs.length) ? 'Tout décocher' : 'Tout cocher';
-  var b=document.getElementById('lot-chartres-btn');
-  if(b){
-    b.className = nb ? 'btn btn-green' : 'btn btn-gray';
-    b.style.opacity = nb ? '1' : '.6';
-  }
+  if(i) i.innerHTML='<b style="color:#111;">'+refs.length+'</b> client'+(refs.length>1?'s':'')+' encore à Chartres'
+      + (refuses?(' · <span style="color:#992020;font-weight:700;">'+refuses+' non chargé'+(refuses>1?'s':'')+'</span>'):'');
 }
 
 function _rafraichirLot(){
@@ -8630,6 +8731,8 @@ function _mettreAJourStatuts(){
       changed = true;
     }
   });
+
+  try{ _libererLotsTermines(); }catch(e){}
 
   if(changed){
     sauvegarder();
