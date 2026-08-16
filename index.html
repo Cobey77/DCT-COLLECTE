@@ -1499,8 +1499,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.42.0';
-var APP_UPDATE = '17/08/2026 à 14:00';
+var APP_VERSION = 'v3.43.0';
+var APP_UPDATE = '17/08/2026 à 15:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4268,25 +4268,62 @@ function _renderFicheFrance(){
     + kv('Montant',(c.prix||0)+' €')
     + '</div>';
 
-  // Suivi
+  // Suivi — l'étape en cours est marquée, pas seulement les étapes faites.
+  var aChartres=(c.lieu==='chartres');
+  var jChartres=aChartres?_joursDepuis(c.depotTs):0;
+  var etChartres = aChartres
+    ? { t:'📍 En attente à Chartres', encours:true,
+        meta:(c.depotPar?(c.depotPar+' · '):'')+_dateFr(c.depotTs)+' · depuis '+jChartres+' j',
+        alerte:(c.nonCharge&&c.nonCharge.motif)
+          ? ('✕ Non chargé le '+_dateFr(c.nonCharge.ts)+' — '+_esc(c.nonCharge.motif))
+          : '' }
+    : null;
+
   var et=[
     {t:'Inscrit', ok:true, meta:(c.creePar||'')+' · '+_dateFr(c.creeTs)},
     {t:'Planifié', ok:(c.statut==='planifie'||c.statut==='ramasse'||c.lieu), meta:c.dateLib?('Passage '+c.dateLib):'en attente de Danny'},
-    {t:'Ramassé',  ok:(c.statut==='ramasse'||c.lieu==='chartres'||c.lieu==='mitry'), meta:c.ramassePar?(c.ramassePar+' · '+_dateFr(c.ramasseTs)):''},
-    {t:'Arrivé à Mitry-Mory', ok:(c.lieu==='mitry'), meta:c.lieu==='chartres'?'en attente à Chartres':''},
-    {t:'Parti pour Dakar', ok:(c.statut==='parti'), meta:c.statut==='parti'?((c.partiPar||'')+' · '+_dateFr(c.partiTs)):''}
+    {t:'Ramassé',  ok:(c.statut==='ramasse'||c.lieu==='chartres'||c.lieu==='mitry'), meta:c.ramassePar?(c.ramassePar+' · '+_dateFr(c.ramasseTs)):''}
   ];
+  if(etChartres) et.push(etChartres);
+  et.push({t:'Arrivé à Mitry-Mory', ok:(c.lieu==='mitry'),
+           meta:(c.lieu==='mitry'&&c.mitryPar)?(c.mitryPar+' · '+_dateFr(c.mitryTs)):''});
+  et.push({t:'Parti pour Dakar', ok:(c.statut==='parti'),
+           meta:c.statut==='parti'?((c.partiPar||'')+' · '+_dateFr(c.partiTs)):''});
+
   var tl='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:4px 14px 10px;margin-bottom:10px;box-shadow:var(--shadow);"><div class="slabel">Suivi</div><div style="position:relative;padding-left:26px;">'
        + '<div style="position:absolute;left:8px;top:6px;bottom:16px;width:2px;background:var(--border);"></div>';
   et.forEach(function(x){
+    var bord = x.encours ? '#e08e0b' : (x.ok?'#009A44':'#ddd');
+    var fond = x.encours ? '#e08e0b' : (x.ok?'#009A44':'#fff');
+    var coul = x.encours ? '#92400e' : (x.ok?'var(--text)':'#bbb');
     tl+='<div style="position:relative;padding-bottom:15px;">'
-      + '<div style="position:absolute;left:-26px;top:1px;width:18px;height:18px;border-radius:50%;border:2px solid '+(x.ok?'#009A44':'#ddd')+';background:'+(x.ok?'#009A44':'#fff')+';color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;">'+(x.ok?'✓':'')+'</div>'
-      + '<div style="font-size:13.5px;font-weight:700;color:'+(x.ok?'var(--text)':'#bbb')+';">'+x.t+'</div>'
+      + '<div style="position:absolute;left:-26px;top:1px;width:18px;height:18px;border-radius:50%;border:2px solid '+bord+';background:'+fond+';color:#fff;font-size:9px;display:flex;align-items:center;justify-content:center;">'+(x.encours?'●':(x.ok?'✓':''))+'</div>'
+      + '<div style="font-size:13.5px;font-weight:'+(x.encours?800:700)+';color:'+coul+';">'+x.t+'</div>'
       + (x.meta?'<div style="font-size:11px;color:var(--text3);margin-top:3px;">'+x.meta+'</div>':'')
+      + (x.alerte?('<div style="background:#fde0e0;border-radius:8px;padding:7px 9px;margin-top:6px;font-size:11.5px;color:#992020;line-height:1.5;">'+x.alerte+'</div>'):'')
       + '</div>';
   });
   tl+='</div></div>';
   html+=tl;
+
+  // Les notes du terrain, lisibles sans ouvrir la fenêtre.
+  var _nt=_notesDe(franceClientId).sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  if(_nt.length){
+    var _der=_nt.slice(-2);
+    html+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:4px 14px 12px;margin-bottom:10px;box-shadow:var(--shadow);">'
+       + '<div class="slabel">Notes de suivi · '+_nt.length+'</div>';
+    _der.forEach(function(n){
+      html+='<div style="border-left:2px solid #c5cae9;padding:0 0 9px 11px;margin-left:3px;">'
+        + '<div style="font-size:11px;color:#888;font-weight:700;">'+_dateHeureFr(n.ts)+' · '+_auteurNote(n)+'</div>'
+        + '<div style="font-size:12.5px;color:#222;margin-top:2px;line-height:1.5;white-space:pre-wrap;">'+_esc(n.t||'')+'</div>'
+        + '</div>';
+    });
+    if(_nt.length>2){
+      html+='<div onclick="ouvrirNotes(\''+franceClientId+'\')" style="font-size:12px;font-weight:700;'
+         + 'color:#1a237e;cursor:pointer;margin-top:2px;">Voir les '+_nt.length+' notes →</div>';
+    }
+    html+='</div>';
+  }
 
   // Historique
   var h=(c.hist||[]).slice().reverse();
