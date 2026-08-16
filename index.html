@@ -542,6 +542,30 @@ html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--t
 </div>
 </div>
 
+<!-- PHOTOS DES COLIS -->
+<div id="modal-photos" class="modal-overlay">
+<div class="modal-sheet" style="max-width:360px;margin:auto;">
+<div style="padding:20px 18px;">
+  <div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:2px;">&#128247; Photos des colis</div>
+  <div id="ph-client" style="font-size:12px;color:#888;margin-bottom:12px;"></div>
+  <input type="hidden" id="ph-id">
+  <div id="ph-liste" style="max-height:42vh;overflow-y:auto;margin-bottom:12px;"></div>
+  <input type="file" id="ph-input" accept="image/*" capture="environment" style="display:none;" onchange="_photoChoisie(this)">
+  <button id="ph-btn" onclick="document.getElementById('ph-input').click()" style="width:100%;padding:13px;background:#009A44;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);">&#128247; Prendre une photo</button>
+  <button onclick="closeModal('modal-photos')" style="width:100%;padding:11px;margin-top:8px;background:#f0f0f0;color:#555;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--font);">Fermer</button>
+</div>
+</div>
+</div>
+
+<!-- PHOTO EN GRAND -->
+<div id="modal-photo-grand" class="modal-overlay" onclick="closeModal('modal-photo-grand')">
+<div style="max-width:94vw;margin:auto;text-align:center;">
+  <img id="pg-img" style="max-width:94vw;max-height:76vh;border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5);">
+  <div id="pg-legende" style="color:#fff;font-size:12.5px;font-weight:600;margin-top:10px;"></div>
+  <div style="color:rgba(255,255,255,0.6);font-size:11.5px;margin-top:4px;">Touchez pour fermer</div>
+</div>
+</div>
+
 <!-- NOTES DE SUIVI D'UN CLIENT -->
 <div id="modal-note" class="modal-overlay">
 <div class="modal-sheet" style="max-width:360px;margin:auto;">
@@ -1437,8 +1461,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.30.0';
-var APP_UPDATE = '13/08/2026 à 20:40';
+var APP_VERSION = 'v3.31.0';
+var APP_UPDATE = '16/08/2026 à 10:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -2474,10 +2498,174 @@ function _htmlVivierDanny(){
       +  '<div style="font-size:11.5px;margin-top:4px;color:var(--text3);">🗓 Inscrit le '+_dateFr(c.creeTs)+' · <span style="'+(_anc?('color:'+_anc.bord+';font-weight:800;'):'')+'">'+j+' j</span></div>'
       +  _lienAppel(c)
       +  _boutonNotes(c._id)
+      +  _boutonPhotos(c._id)
       +'</div></div>';
   });
   return h;
 }
+// ═══════════ PHOTOS DES COLIS — v3.31.0 ═══════════
+// Personne chez Dakar City ne voit les colis avant Mitry-Mory :
+// c'est le chauffeur qui les charge. La photo fait le lien entre
+// le carton et son propriétaire.
+// Réserve séparée, jamais chargée avec les fiches : sans ça, chaque
+// rafraîchissement de l'application retéléchargerait toutes les images.
+var PHOTO_MAX = 5;
+var PHOTO_COTE = 1000;      // côté le plus long, en pixels
+var PHOTO_QUALITE = 0.55;
+var _photoClientId = '', _photosCourantes = [];
+
+function ouvrirPhotos(id){
+  _photoClientId=id; _photosCourantes=[];
+  var c=(franceData.clients||{})[id]||{};
+  var e=document.getElementById('ph-client'); if(e) e.textContent=_nomAffiche(c)+' · '+(c.ville||'');
+  var i=document.getElementById('ph-id'); if(i) i.value=id;
+  var box=document.getElementById('ph-liste');
+  if(box) box.innerHTML='<div style="text-align:center;color:#aaa;font-size:12.5px;padding:18px;">Chargement…</div>';
+  openModal('modal-photos');
+  if(!db || !firebaseReady){
+    if(box) box.innerHTML='<div style="text-align:center;color:#992020;font-size:12.5px;padding:18px;">Connexion indisponible.</div>';
+    return;
+  }
+  db.ref('france_photos/'+id).once('value', function(snap){
+    var v=snap.val()||{};
+    _photosCourantes=Object.keys(v).map(function(k){ var o=v[k]||{}; o._k=k; return o; })
+      .sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+    _renderPhotos();
+  });
+}
+
+function _peutEffacerPhoto(p){
+  if(!p) return false;
+  if(currentUser && currentUser.admin) return true;
+  if(!p.ts) return false;
+  return !!(currentUser && p.uid===currentUser.id && (Date.now()-p.ts)<=NOTE_DELAI);
+}
+
+function _renderPhotos(){
+  var box=document.getElementById('ph-liste'); if(!box) return;
+  var b=document.getElementById('ph-btn');
+  if(b){
+    var plein=(_photosCourantes.length>=PHOTO_MAX);
+    b.textContent = plein ? ('Maximum atteint · '+PHOTO_MAX+' photos') : '📷 Prendre une photo';
+    b.style.background = plein ? '#ccc' : '#009A44';
+    b.disabled = plein;
+  }
+  if(!_photosCourantes.length){
+    box.innerHTML='<div style="text-align:center;color:#aaa;font-size:12.5px;padding:20px 10px;line-height:1.6;">'
+      +'Aucune photo pour ce client.<br>Photographiez les colis au moment de les charger.</div>';
+    return;
+  }
+  var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">';
+  _photosCourantes.forEach(function(p){
+    h+='<div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;">'
+     + '<img src="'+p.d+'" onclick="_voirPhoto(\''+p._k+'\')" style="width:100%;height:96px;object-fit:cover;display:block;cursor:pointer;">'
+     + '<div style="padding:5px 7px;font-size:10px;color:#888;line-height:1.35;">'+_dateHeureFr(p.ts)+'<br>'+_auteurNote({q:p.q})+'</div>';
+    if(_peutEffacerPhoto(p)){
+      h+='<div onclick="supprimerPhoto(\''+p._k+'\')" style="text-align:center;padding:5px;font-size:11px;'
+       + 'font-weight:700;color:#992020;cursor:pointer;border-top:1px solid var(--border);">Supprimer</div>';
+    }
+    h+='</div>';
+  });
+  h+='</div>';
+  box.innerHTML=h;
+}
+
+function _voirPhoto(k){
+  var p=_photosCourantes.filter(function(x){ return x._k===k; })[0];
+  if(!p) return;
+  var i=document.getElementById('pg-img'); if(i) i.src=p.d;
+  var l=document.getElementById('pg-legende');
+  if(l) l.textContent=_dateHeureFr(p.ts)+' · '+_auteurNote({q:p.q});
+  openModal('modal-photo-grand');
+}
+
+// Réduite dans le navigateur avant l'envoi : une photo de téléphone
+// pèse 4 Mo, on la ramène à 80 Ko sans perdre ce qu'on doit y lire.
+function _compresserPhoto(file, cb){
+  try{
+    var r=new FileReader();
+    r.onload=function(ev){
+      var img=new Image();
+      img.onload=function(){
+        var w=img.width, h=img.height;
+        var f=Math.min(1, PHOTO_COTE/Math.max(w,h));
+        var cv=document.createElement('canvas');
+        cv.width=Math.round(w*f); cv.height=Math.round(h*f);
+        cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+        cb(cv.toDataURL('image/jpeg', PHOTO_QUALITE));
+      };
+      img.onerror=function(){ cb(null); };
+      img.src=ev.target.result;
+    };
+    r.onerror=function(){ cb(null); };
+    r.readAsDataURL(file);
+  }catch(e){ cb(null); }
+}
+
+function _photoChoisie(input){
+  var f=input && input.files && input.files[0];
+  input.value='';
+  if(!f) return;
+  if(_bloqueSiVueAdmin()) return;
+  if(_photosCourantes.length>=PHOTO_MAX){ showToastNew('⚠️ '+PHOTO_MAX+' photos maximum.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  showToastNew('⏳ Préparation de la photo…');
+  _compresserPhoto(f, function(data){
+    if(!data){ showToastNew('❌ Photo illisible.'); return; }
+    _enregistrerPhoto(data);
+  });
+}
+
+function _enregistrerPhoto(data){
+  var id=_photoClientId;
+  var u=currentUser||{};
+  var nom=u.name||'';
+  if(u.role==='poste'){ try{ nom=_chauffeurCourant()||nom; }catch(e){} }
+  var obj={ q:nom, uid:u.id||'', ts:Date.now(), d:data };
+  var ref=db.ref('france_photos/'+id).push();
+  ref.set(obj).then(function(){
+    obj._k=ref.key;
+    _photosCourantes.push(obj);
+    _renderPhotos();
+    showToastNew('📷 Photo enregistrée');
+    var c=(franceData.clients||{})[id]||{};
+    _activiteFrance('📷', 'a photographié les colis de <strong>'+_nomAffiche(c)+'</strong>');
+    var maj={}; maj['clients/'+id+'/nbPhotos']=_photosCourantes.length;
+    db.ref('france').update(maj);
+    try{ renderFrance(); }catch(e){}
+    try{ renderDanny(); }catch(e){}
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'envoi refusé'));
+  });
+}
+
+function supprimerPhoto(k){
+  var p=_photosCourantes.filter(function(x){ return x._k===k; })[0];
+  if(!p || !_peutEffacerPhoto(p)){ showToastNew('⚠️ Cette photo ne peut plus être supprimée.'); return; }
+  if(!confirm('Supprimer cette photo ?')) return;
+  var id=_photoClientId;
+  db.ref('france_photos/'+id+'/'+k).remove().then(function(){
+    _photosCourantes=_photosCourantes.filter(function(x){ return x._k!==k; });
+    _renderPhotos();
+    showToastNew('🗑️ Photo supprimée');
+    var maj={}; maj['clients/'+id+'/nbPhotos']=_photosCourantes.length;
+    db.ref('france').update(maj);
+    try{ renderFrance(); }catch(e){}
+  }).catch(function(e){
+    showToastNew('❌ Échec : '+((e&&e.message)||'suppression refusée'));
+  });
+}
+
+// Le bouton, avec le nombre de photos déjà prises
+function _boutonPhotos(id, style){
+  var c=(franceData.clients||{})[id]||{};
+  var n=c.nbPhotos||0;
+  return '<div onclick="event.stopPropagation();ouvrirPhotos(\''+id+'\')" style="'
+    + (style||'display:inline-block;background:#e8f5e9;color:#006b2d;border:1px solid #009A44;'
+      +'border-radius:9px;padding:6px 11px;font-size:12px;font-weight:700;cursor:pointer;margin-top:8px;margin-left:6px;')
+    + '">📷 Photos'+(n?(' · '+n):'')+'</div>';
+}
+
 // ═══════════ ANCIENNETÉ — v3.30.0 ═══════════
 // Un client qui attend depuis deux semaines ne doit pas ressembler
 // à celui inscrit hier. La carte entière change de couleur : on le
@@ -3181,6 +3369,8 @@ function _supprimerFiches(ids, libelle){
   if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
   var maj={};
   ids.forEach(function(id){ maj['clients/'+id]=null; });
+  // Les photos vivent ailleurs : on les emporte avec la fiche.
+  ids.forEach(function(id){ try{ db.ref('france_photos/'+id).remove(); }catch(e){} });
   db.ref('france').update(maj).then(function(){
     dannySel=[];
     showToastNew('🗑️ '+ids.length+' fiche'+(ids.length>1?'s':'')+' supprimée'+(ids.length>1?'s':''));
@@ -3881,6 +4071,7 @@ function _renderFicheFrance(){
   if(_peutGererFrance()){
     html+='<button class="btn btn-green" onclick="modifierClientFrance()">✏️ Modifier la fiche</button>';
     html+='<button class="btn btn-gray" onclick="ouvrirNotes(\''+franceClientId+'\')" style="background:#eef0fa;color:#1a237e;border:1.5px solid #c5cae9;">📝 Notes de suivi'+(_notesDe(franceClientId).length?(' · '+_notesDe(franceClientId).length):'')+'</button>';
+    html+='<button class="btn btn-gray" onclick="ouvrirPhotos(\''+franceClientId+'\')" style="background:#e8f5e9;color:#006b2d;border:1.5px solid #009A44;">📷 Photos des colis'+((c.nbPhotos||0)?(' · '+c.nbPhotos):'')+'</button>';
     html+='<button class="btn btn-gray" onclick="supprimerClientFrance()" style="background:#fde0e0;color:#992020;border:1.5px solid #c0392b;">🗑️ Supprimer cette fiche</button>';
   }
   box.innerHTML=html;
@@ -3890,6 +4081,7 @@ function supprimerClientFrance(){
   var c=(franceData.clients||{})[franceClientId]||{};
   if(c.statut!=='attente'){ showToastNew('⚠️ Impossible : le colis est déjà engagé.'); return; }
   if(!confirm('Supprimer la fiche de '+(c.nom||'ce client')+' ?')) return;
+  try{ db.ref('france_photos/'+franceClientId).remove(); }catch(e){}
   db.ref('france/clients/'+franceClientId).remove().then(function(){
     showToastNew('🗑️ Fiche supprimée');
     _activiteFrance('🗑️', 'a supprimé la fiche de <strong>'+_nomAffiche(c)+'</strong>');
@@ -4246,6 +4438,7 @@ function _carteArret(id, num, to, fait){
     +  '<a href="tel:'+(c.tel||'')+'" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">📞 Appeler</a>'
     +  _boutonTel2(c,'flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;')
     +  _boutonNotes(id,'flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#eef0fa;color:#1a237e;cursor:pointer;')
+    +  _boutonPhotos(id,'flex:1;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#e8f5e9;color:#006b2d;cursor:pointer;')
     +  '<a href="https://waze.com/ul?q='+encodeURIComponent((c.adresse||'')+' '+(c.cp||'')+' '+(c.ville||''))+'&navigate=yes" target="_blank" style="flex:1;text-decoration:none;text-align:center;padding:10px;border-radius:9px;font-size:12.5px;font-weight:700;background:#f0f0f0;color:#333;">🧭 Itinéraire</a>'
     +'</div>'
     +'<div style="display:flex;gap:8px;margin-top:8px;">'
