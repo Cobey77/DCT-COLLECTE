@@ -1499,8 +1499,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.43.0';
-var APP_UPDATE = '17/08/2026 à 15:30';
+var APP_VERSION = 'v3.44.0';
+var APP_UPDATE = '17/08/2026 à 17:20';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5049,53 +5049,6 @@ function _lotDuCamion(k){
 }
 
 // Bloc affiché dans l'onglet Dispatch
-// Ce qui attend à Mitry-Mory : déjà chez nous, plus rien à aller
-// chercher — mais il faut le charger dans le conteneur, et rien ne
-// le disait côté collecte.
-function _refsMitry(){
-  var out=[];
-  Object.keys(franceData.clients||{}).forEach(function(k){
-    var c=franceData.clients[k];
-    if(c && c.lieu==='mitry' && c.statut!=='parti'){ c._id=k; out.push(c); }
-  });
-  out.sort(function(a,b){ return (a.depotTs||0)-(b.depotTs||0); });
-  return out;
-}
-
-function _htmlStockMitry(){
-  var refs=_refsMitry();
-  if(!refs.length) return '';
-  var colis=0, plusVieux=0;
-  refs.forEach(function(c){
-    colis+=(c.nb||1);
-    var j=_joursDepuis(c.depotTs||c.creeTs);
-    if(j>plusVieux) plusVieux=j;
-  });
-  return '<div class="slabel">Colis France — déjà à l\'entrepôt</div>'
-   + '<div onclick="_versSuiviMitry()" style="background:#d4f0e0;border:2px solid #009A44;'
-   +   'border-radius:var(--radius);padding:13px 14px;margin-bottom:14px;cursor:pointer;">'
-   +   '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-   +     '<div style="font-size:14px;font-weight:800;color:#111;">📍 Mitry-Mory</div>'
-   +     '<span class="badge badge-green">'+refs.length+' client'+(refs.length>1?'s':'')+'</span>'
-   +   '</div>'
-   +   '<div style="font-size:12px;color:#006b2d;margin-top:5px;line-height:1.5;">'
-   +     colis+' colis ramassés en province, prêts pour le conteneur.'
-   +     (plusVieux?('<br>Le plus ancien est arrivé il y a '+plusVieux+' jour'+(plusVieux>1?'s':'')+'.'):'')
-   +   '</div>'
-   +   '<div style="font-size:12px;font-weight:700;color:#006b2d;margin-top:8px;">Voir la liste →</div>'
-   + '</div>';
-}
-
-// Ouvre France & Europe directement sur la puce Mitry.
-function _versSuiviMitry(){
-  try{
-    franceTab='suivi'; franceFiltre='mitry'; franceRegion=''; franceDept=''; dannySel=[];
-    var q=document.getElementById('fr-q'); if(q) q.value='';
-    goTo('s-france');
-    renderFrance();
-  }catch(e){}
-}
-
 // Les colis de Chartres sont un stock unique. Une seule collecte peut
 // le revendiquer : sans ça, trois camions de trois collectes partaient
 // chercher les mêmes cartons.
@@ -5286,9 +5239,45 @@ function _htmlArretChartres(k){
    +     refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis</div>'
    +   '<div style="font-size:12.5px;font-weight:700;color:#92400e;">Ouvrir le lot →</div>'
    + '</div>'
-   + '<a href="https://waze.com/ul?q='+encodeURIComponent('12 rue de l\'Industrie 28000 Chartres')+'&navigate=yes" target="_blank" onclick="event.stopPropagation();" style="display:block;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:10px;font-size:12.5px;font-weight:700;margin-top:11px;">🧭 Itinéraire</a>'
+   + '<div style="display:flex;gap:7px;margin-top:11px;">'
+   +   '<a href="https://waze.com/ul?q='+encodeURIComponent('12 rue de l\'Industrie 28000 Chartres')+'&navigate=yes" target="_blank" onclick="event.stopPropagation();" style="flex:1;text-align:center;text-decoration:none;background:#fff;border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:11px 6px;font-size:12.5px;font-weight:700;">🧭 Itinéraire</a>'
+   +   '<div onclick="event.stopPropagation();chargerToutLeLot()" style="flex:1;text-align:center;background:#009A44;color:#fff;border-radius:10px;padding:11px 6px;font-size:12.5px;font-weight:800;cursor:pointer;">✓ Tout charger</div>'
+   + '</div>'
    + '</div>';
   return h;
+}
+
+// Tout est monté d'un coup : le cas courant quand le camion est vide
+// et le lot petit. Pour vérifier pièce par pièce, il y a l'écran du lot.
+function chargerToutLeLot(){
+  var refs=_refsChartres();
+  if(!refs.length){ showToastNew('⚠️ Plus rien à charger.'); return; }
+  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
+  var colis=0, noms=[];
+  refs.forEach(function(c){ colis+=(c.nb||1); noms.push('· '+_nomAffiche(c)); });
+  if(!confirm('Charger tout le lot de Chartres ?\n\n'+noms.join('\n')+'\n\n'
+    +refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis passeront en 📍 Mitry-Mory.')) return;
+  var qui=(currentUser||{}).name||'', now=Date.now(), maj={};
+  refs.forEach(function(c){
+    var hist=(c.hist||[]).slice();
+    hist.push({q:qui, a:'a chargé le colis à Chartres → Mitry-Mory', ts:now});
+    maj['clients/'+c._id+'/lieu']='mitry';
+    maj['clients/'+c._id+'/statut']='mitry';
+    maj['clients/'+c._id+'/mitryTs']=now;
+    maj['clients/'+c._id+'/mitryPar']=qui;
+    maj['clients/'+c._id+'/collecteId']=currentCollecteId||'';
+    maj['clients/'+c._id+'/nonCharge']=null;
+    maj['clients/'+c._id+'/hist']=hist;
+  });
+  db.ref('france').update(maj).then(function(){
+    showToastNew('✅ '+refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis chargés');
+    _activiteFrance('🏭', 'a chargé tout le lot de Chartres — <strong>'+colis+' colis</strong> → Mitry-Mory');
+    if(currentCollecteId){ try{ db.ref('france/lots/'+currentCollecteId).remove(); }catch(e){} }
+    if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
+    var sc=document.querySelector('.screen.active');
+    if(sc && sc.id==='s-lot-chartres') goTo('s-camion');
+    try{ renderFrance(); }catch(e){}
+  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
 }
 
 // ── L'écran dédié au lot ──
@@ -6167,7 +6156,7 @@ function renderDispatchTab(){
   // Les colis de province d'abord : une collecte peut n'avoir aucun
   // client d'Île-de-France et devoir quand même passer par Chartres.
   var _frBloc='';
-  try{ _frBloc=_htmlLotChartres()+_htmlStockMitry(); }catch(e){}
+  try{ _frBloc=_htmlLotChartres(); }catch(e){}
   if(_frBloc && !nb){ var _fb=document.createElement('div'); _fb.innerHTML=_frBloc; container.appendChild(_fb); }
   // Une collecte sans client d'Île-de-France reste une vraie collecte :
   // elle peut n'avoir qu'un camion à envoyer chercher le lot de Chartres.
@@ -6878,7 +6867,7 @@ function renderClientsTab(){
   // Ce qui vient de province est visible dès l'ouverture de la collecte,
   // pas seulement dans l'onglet Dispatch.
   try{
-    var _fr=_htmlLotChartres()+_htmlStockMitry();
+    var _fr=_htmlLotChartres();
     if(_fr){ var _fb=document.createElement('div'); _fb.innerHTML=_fr; container.appendChild(_fb); }
   }catch(e){}
   var grid=document.createElement('div');grid.className='collab-grid';
