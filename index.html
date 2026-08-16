@@ -1469,8 +1469,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.37.0';
-var APP_UPDATE = '16/08/2026 à 23:55';
+var APP_VERSION = 'v3.38.0';
+var APP_UPDATE = '17/08/2026 à 00:45';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5043,53 +5043,85 @@ function _htmlLotChartres(){
    +     refs.length+' client'+(refs.length>1?'s':'')+' · '+colis+' colis y attendent<br>'
    +     '<span style="opacity:.8;">12 rue de l\'Industrie · 28000 Chartres</span></div>';
 
-  if(!Object.keys(trks).length){
-    h+='<div style="background:#fff;border-radius:10px;padding:11px 12px;margin-top:11px;font-size:12.5px;color:#92400e;line-height:1.55;">'
-     + '<b>Étape suivante</b><br>Ajoute un camion à cette collecte, puis désigne-le pour passer prendre ces colis.</div>'
-     + '</div>';
-    return h;
-  }
-
   if(l){
     h+='<div style="background:#d4f0e0;border-radius:10px;padding:11px 12px;margin-top:11px;">'
      + '<div style="font-size:12.5px;color:#006b2d;line-height:1.5;">'
-     +   '✅ <b>'+nomCam+'</b> passe les prendre.<br>'
-     +   '<span style="opacity:.85;">L\'arrêt Chartres apparaît dans sa tournée.</span></div>'
+     +   '✅ Dans la tournée de <b>'+nomCam+'</b><br>'
+     +   '<span style="opacity:.85;">L\'arrêt Chartres apparaît sur sa feuille de route.</span></div>'
      + '<div style="display:flex;gap:7px;margin-top:9px;">'
-     +   '<div onclick="_ouvrirChoixCamionChartres()" style="flex:1;text-align:center;padding:9px;border-radius:9px;'
-     +     'background:#fff;border:1px solid #009A44;color:#006b2d;font-size:12px;font-weight:700;cursor:pointer;">Changer de camion</div>'
-     +   '<div onclick="affecterLotChartres(\'\')" style="flex:1;text-align:center;padding:9px;border-radius:9px;'
-     +     'background:#fff;border:1px solid #ccc;color:#777;font-size:12px;font-weight:700;cursor:pointer;">Annuler</div>'
+     +   '<div onclick="ouvrirAffectLotChartres()" style="flex:1;text-align:center;padding:10px;border-radius:9px;'
+     +     'background:#fff;border:1px solid #009A44;color:#006b2d;font-size:12.5px;font-weight:700;cursor:pointer;">Changer</div>'
+     +   '<div onclick="affecterLotChartres(\'\')" style="flex:1;text-align:center;padding:10px;border-radius:9px;'
+     +     'background:#fff;border:1px solid #ccc;color:#777;font-size:12.5px;font-weight:700;cursor:pointer;">Retirer</div>'
      + '</div></div>';
   } else {
-    h+='<div style="background:#fff;border-radius:10px;padding:11px 12px;margin-top:11px;">'
-     + '<div style="font-size:12.5px;color:#92400e;font-weight:700;">Quel camion passe les prendre ?</div>'
-     + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:9px;">';
-    Object.keys(trks).forEach(function(k){
-      h+='<span onclick="affecterLotChartres(\''+k+'\')" style="font-size:12.5px;font-weight:700;padding:8px 13px;'
-        +'border-radius:18px;cursor:pointer;background:#fff;border:1.5px solid #e08e0b;color:#92400e;">🚛 '
-        +(trks[k].name||('Camion '+k))+'</span>';
-    });
-    h+='</div></div>';
+    h+='<div onclick="ouvrirAffectLotChartres()" style="text-align:center;padding:12px;border-radius:10px;'
+     + 'margin-top:11px;background:#e08e0b;color:#fff;font-size:13px;font-weight:800;cursor:pointer;">'
+     + '🚛 Mettre dans une tournée</div>';
   }
   h+='</div>';
   return h;
 }
 
-// Repasse en mode choix sans perdre l'affectation tant qu'on n'a pas choisi.
-function _ouvrirChoixCamionChartres(){
+// Même geste que pour un client : on ouvre la liste des camions.
+// S'il n'y en a aucun, on en crée un et on revient ici tout seul.
+var _lotEnAttenteAffect = false;
+
+function ouvrirAffectLotChartres(){
   var trks=(typeof getTrucks==='function')?getTrucks():{};
-  var noms=Object.keys(trks).map(function(k){ return (trks[k].name||k); });
-  if(!noms.length){ showToastNew('⚠️ Aucun camion sur cette collecte.'); return; }
-  var q='Quel camion passe prendre le lot de Chartres ?\n\n';
-  Object.keys(trks).forEach(function(k,i){ q+=(i+1)+' · '+(trks[k].name||k)+'\n'; });
-  q+='\nTape le numéro :';
-  var r=prompt(q,'1');
-  if(r===null) return;
-  var idx=parseInt(r,10)-1;
-  var cle=Object.keys(trks)[idx];
-  if(!cle){ showToastNew('⚠️ Numéro inconnu.'); return; }
-  affecterLotChartres(cle);
+  if(!Object.keys(trks).length){
+    _lotEnAttenteAffect=true;
+    showToastNew('⚠️ Créez d\'abord un camion');
+    addTruck();
+    return;
+  }
+  var m=document.getElementById('modal-lot-camion');
+  if(!m){
+    m=document.createElement('div');
+    m.id='modal-lot-camion';
+    m.className='modal-overlay';
+    m.style.cssText='align-items:center;';
+    m.innerHTML='<div class="modal-sheet" style="border-radius:16px;margin:16px;">'
+      + '<div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:3px;">🏭 Lot de Chartres</div>'
+      + '<div id="lot-cam-sous" style="font-size:12.5px;color:#666;margin-bottom:14px;"></div>'
+      + '<div id="lot-cam-options"></div>'
+      + '<button class="btn-sm btn-gray-sm" style="width:100%;margin-top:12px;" onclick="closeModal(\'modal-lot-camion\')">Annuler</button>'
+      + '</div>';
+    document.body.appendChild(m);
+  }
+  var refs=_refsChartres(), colis=0;
+  refs.forEach(function(c){ colis+=(c.nb||1); });
+  var s=document.getElementById('lot-cam-sous');
+  if(s) s.textContent='Quel camion passe prendre ces '+colis+' colis ?';
+  var box=document.getElementById('lot-cam-options');
+  if(box){
+    var l=_lotCollecte();
+    box.innerHTML='';
+    Object.keys(trks).forEach(function(k){
+      var tc=(typeof getTc==='function')?getTc(k):{bg:'#eee',color:'#333'};
+      var tk=trks[k];
+      var d=document.createElement('div');
+      d.className='modal-option';
+      d.innerHTML='<div class="modal-icon" style="background:'+tc.bg+';border:1.5px solid '+tc.color+';">🚛</div>'
+        +'<div><div class="modal-option-name">'+(tk.name||('Camion '+k))+'</div>'
+        +'<div class="modal-option-sub">'+((tk.clients||[]).length)+' client(s)'
+        +((l&&l.camion===k)?' · déjà chargé du lot':'')+'</div></div>';
+      (function(kk){ d.onclick=function(){ closeModal('modal-lot-camion'); affecterLotChartres(kk); }; })(k);
+      box.appendChild(d);
+    });
+    var plus=document.createElement('div');
+    plus.className='modal-option';
+    plus.innerHTML='<div class="modal-icon" style="background:#e8f5e9;border:1.5px solid #009A44;">＋</div>'
+      +'<div><div class="modal-option-name">Nouveau camion</div>'
+      +'<div class="modal-option-sub">Pour ce déplacement</div></div>';
+    plus.onclick=function(){
+      closeModal('modal-lot-camion');
+      _lotEnAttenteAffect=true;
+      addTruck();
+    };
+    box.appendChild(plus);
+  }
+  openModal('modal-lot-camion');
 }
 
 function affecterLotChartres(k){
@@ -7671,6 +7703,11 @@ function _confirmerAddTruck(){
     var pa=_pendingAffect; _pendingAffect=null;
     setTimeout(function(){ openAffect(pa.id,pa.name); }, 350);
   }
+  if(_lotEnAttenteAffect){
+    _lotEnAttenteAffect=false;
+    setTimeout(function(){ ouvrirAffectLotChartres(); }, 350);
+  }
+  try{ if(typeof renderCollecteContent==='function') renderCollecteContent(); }catch(e){}
 }
 function demanderSupprimerCamion(k){
   curSupprimerCamion=k;
