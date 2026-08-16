@@ -1516,8 +1516,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.53.2';
-var APP_UPDATE = '18/08/2026 à 21:20';
+var APP_VERSION = 'v3.53.3';
+var APP_UPDATE = '18/08/2026 à 22:10';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5262,35 +5262,6 @@ function _htmlLotChartres(){
   return h;
 }
 
-// Le colis est monté par erreur, ou il faut lui refaire son emballage :
-// il redescend à Chartres, avec sa date de dépôt d'origine.
-function remettreAChartres(id){
-  var c=(franceData.clients||{})[id];
-  if(!c){ showToastNew('⚠️ Fiche introuvable.'); return; }
-  if(c.lieu!=='mitry'){ showToastNew('⚠️ Ce colis n\'est pas à Mitry-Mory.'); return; }
-  if(c.statut==='parti'){ showToastNew('⚠️ Ce dossier est déjà parti pour Dakar.'); return; }
-  if(!db || !firebaseReady){ showToastNew('❌ Connexion Firebase indisponible.'); return; }
-  if(!confirm('Remettre '+_nomAffiche(c)+' à Chartres ?\n\n'
-    +'Le colis quitte Mitry-Mory et repart en attente chez Global Logistique.')) return;
-  var qui=(currentUser||{}).name||'', now=Date.now();
-  var hist=(c.hist||[]).slice();
-  hist.push({q:qui, a:'a remis le colis à Chartres', ts:now});
-  var maj={};
-  maj['clients/'+id+'/lieu']='chartres';
-  maj['clients/'+id+'/statut']='ramasse';
-  maj['clients/'+id+'/mitryTs']=null;
-  maj['clients/'+id+'/mitryPar']=null;
-  maj['clients/'+id+'/mitryCamion']=null;
-  maj['clients/'+id+'/hist']=hist;
-  db.ref('france').update(maj).then(function(){
-    showToastNew('↩ '+_nomAffiche(c)+' remis à Chartres');
-    _activiteFrance('↩️', 'a remis <strong>'+_nomAffiche(c)+'</strong> à Chartres');
-    _renderLotChartres();
-    if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
-    try{ renderFrance(); }catch(e){}
-  }).catch(function(e){ showToastNew('❌ '+((e&&e.message)||'échec')); });
-}
-
 // On s'est trompé, ou une place s'est libérée cinq minutes plus tard :
 // le passage se rouvre et l'arrêt redevient modifiable.
 function reprendreLotChartres(){
@@ -5643,7 +5614,8 @@ function _renderLotChartres(){
     var hh='<div style="background:#f2fbf5;border:1.5px solid #009A44;border-radius:var(--radius);'
      + 'padding:12px 13px;margin-bottom:12px;font-size:12.5px;color:#006b2d;line-height:1.55;">'
      + '<b style="color:#111;">'+lc.length+' client'+(lc.length>1?'s':'')+' · '+cs+' colis</b><br>'
-     + 'rapportés de Chartres et déposés à Mitry-Mory</div>';
+     + 'rapportés de Chartres et déposés à Mitry-Mory'
+     + '<div style="font-size:11.5px;opacity:.85;margin-top:5px;">Pour en modifier un, reviens sur l\'arrêt et touche « ↩ Retour ».</div></div>';
     lc.forEach(function(c){
       hh+='<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);'
        +'padding:12px;margin-bottom:9px;box-shadow:var(--shadow);">'
@@ -5652,9 +5624,6 @@ function _renderLotChartres(){
        +'<div style="font-size:11.5px;color:#555;margin-top:4px;">📦 '+(c.nb||1)+' colis'+(c.colis?(' · '+c.colis):'')+'</div>'
        +'<div style="font-size:11px;color:#006b2d;margin-top:2px;">chargé par '+(c.mitryPar||'—')+' · '+_dateFr(c.mitryTs)+'</div>'
        + _rangee(_boutonNotes(c._id, _ACT_BLEU) + _boutonPhotos(c._id, _ACT_VIOLET))
-       + '<div onclick="remettreAChartres(\''+c._id+'\')" style="text-align:center;background:#fff;'
-       +   'border:1.5px solid #e08e0b;color:#92400e;border-radius:10px;padding:10px;font-size:12.5px;'
-       +   'font-weight:700;cursor:pointer;margin-top:8px;">↩ Remettre à Chartres</div>'
        +'</div>';
     });
     box.innerHTML=hh;
