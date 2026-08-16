@@ -1512,8 +1512,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.49.0';
-var APP_UPDATE = '18/08/2026 à 10:30';
+var APP_VERSION = 'v3.50.0';
+var APP_UPDATE = '18/08/2026 à 12:00';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -5166,6 +5166,7 @@ function _collecteDuLot(){
     // Une collecte terminée ne retient plus rien : ce qui n'a pas été
     // chargé — camion plein, oubli — repart dans le circuit et sera
     // proposé à la collecte suivante.
+    if(lots[colId].fait) return;   // passage déjà fait : le reste est libre
     var c=(collectes||[]).find(function(x){ return x.id===colId; });
     if(!c || c.statut==='terminee') return;
     trouve=colId;
@@ -5327,6 +5328,27 @@ var _chargeSel=[];
 function _htmlArretChartres(k){
   var l=_lotDuCamion(k);
   if(!l) return '';
+
+  // Passage déjà validé : la carte reste, à sa place, en vert.
+  if(l.fait){
+    var pris=l.pris||0, cs=l.prisColis||0, laisses=l.laisses||0;
+    return '<div onclick="ouvrirRapportesChartres()" style="background:#f2fbf5;border:2px solid #009A44;'
+     + 'border-radius:var(--radius);padding:13px 14px;margin-bottom:12px;cursor:pointer;">'
+     + '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+     +   '<div style="font-size:15px;font-weight:800;color:#006b2d;">🏭 Entrepôt de Chartres</div>'
+     +   '<span class="badge badge-green">✓ Validé</span></div>'
+     + '<div style="font-size:12.5px;color:#006b2d;margin-top:4px;line-height:1.5;">'
+     +   _adresseChartres()+(_heureChartres()?(' · 🕐 '+_heureChartres()):'')+'</div>'
+     + '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;">'
+     +   '<div style="font-size:13px;font-weight:800;color:#111;">'
+     +     pris+' client'+(pris>1?'s':'')+' · '+cs+' colis rapportés</div>'
+     +   '<div style="font-size:12.5px;font-weight:700;color:#006b2d;">Voir le détail →</div>'
+     + '</div>'
+     + (laisses?('<div style="font-size:11.5px;color:#992020;margin-top:5px;">✕ '+laisses+' colis laissé'+(laisses>1?'s':'')+' à Chartres</div>'):'')
+     + '<div style="font-size:11px;color:var(--text3);margin-top:5px;">validé par '+(l.faitPar||'—')+' · '+_dateFr(l.faitTs)+'</div>'
+     + '</div>';
+  }
+
   var refs=_refsChartres();
   if(!refs.length) return '';
   var colis=0; refs.forEach(function(c){ colis+=(c.nb||1); });
@@ -5366,7 +5388,7 @@ function _ligneFranceCamion(k){
   try{ pris=_chargesDuCamion(k).length; }catch(e){}
   try{
     var l=_lotDuCamion(k);
-    if(l) aPrendre=_refsChartres().length;
+    if(l && !l.fait) aPrendre=_refsChartres().length;
   }catch(e){}
   if(!pris && !aPrendre) return '';
   var bouts=[];
@@ -5447,6 +5469,17 @@ function validerLotChartres(){
     maj['clients/'+c._id+'/mitryCamion']=(typeof currentCamion!=='undefined'&&currentCamion)?currentCamion:'';
     maj['clients/'+c._id+'/hist']=hist;
   });
+  // Le lot n'est pas effacé : il reste sur la feuille de route, à sa
+  // place et à son heure, marqué comme fait — exactement comme un
+  // client validé qui ne disparaît pas de la tournée.
+  if(currentCollecteId){
+    maj['lots/'+currentCollecteId+'/fait']=true;
+    maj['lots/'+currentCollecteId+'/faitTs']=now;
+    maj['lots/'+currentCollecteId+'/faitPar']=qui;
+    maj['lots/'+currentCollecteId+'/pris']=pris.length;
+    maj['lots/'+currentCollecteId+'/prisColis']=colis;
+    maj['lots/'+currentCollecteId+'/laisses']=laisses.length;
+  }
   // Les refusés ne sont pas touchés : ni leur lieu, ni leur motif.
   db.ref('france').update(maj).then(function(){
     showToastNew(pris.length
@@ -5454,7 +5487,6 @@ function validerLotChartres(){
       : '✅ Passage validé · rien chargé');
     _activiteFrance('🏭', 'a validé le passage à Chartres — <strong>'+colis+' colis</strong> chargés'
       + (laisses.length?(', '+laisses.length+' laissé'+(laisses.length>1?'s':'')+' sur place'):''));
-    if(currentCollecteId){ try{ db.ref('france/lots/'+currentCollecteId).remove(); }catch(e){} }
     if(typeof currentCamion!=='undefined' && currentCamion) renderCamion(currentCamion);
     var sc=document.querySelector('.screen.active');
     if(sc && sc.id==='s-lot-chartres') goTo('s-camion');
@@ -8448,10 +8480,9 @@ function renderCamion(k){
     return tk.clients.indexOf(a)-tk.clients.indexOf(b);
   });
   var route=document.getElementById('camion-route');if(!route)return;
-  var _chartresHtml='', _chargesHtml='';
+  var _chartresHtml='';
   try{ _chartresHtml=_htmlArretChartres(k); }catch(e){}
-  try{ _chargesHtml=_htmlChargesChartres(k); }catch(e){}
-  if(!tk.clients.length && !_chartresHtml && !_chargesHtml){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
+  if(!tk.clients.length && !_chartresHtml){route.innerHTML='<div style="text-align:center;color:#aaa;padding:30px;border:2px dashed #ddd;border-radius:14px;">Aucun client affecté</div>';return;}
   route.innerHTML='';
   // L'arrêt de Chartres se glisse à sa place : avant les clients s'il
   // n'a pas d'heure, sinon au rang que son heure lui donne.
@@ -8466,7 +8497,6 @@ function renderCamion(k){
     var _cb=document.createElement('div'); _cb.innerHTML=_chartresHtml; route.appendChild(_cb);
   }
   if(_posCh===0) _poserChartres();
-  if(_chargesHtml){ var _cg=document.createElement('div'); _cg.innerHTML=_chargesHtml; route.appendChild(_cg); }
   try{
     var _lf=_ligneFranceCamion(k);
     var _cc=document.getElementById('c-count');
