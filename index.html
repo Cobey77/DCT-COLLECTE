@@ -1516,8 +1516,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.54.0';
-var APP_UPDATE = '19/08/2026 à 09:30';
+var APP_VERSION = 'v3.56.0';
+var APP_UPDATE = '19/08/2026 à 12:30';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4387,13 +4387,32 @@ function _renderFicheFrance(){
 
   // Suivi — l'étape en cours est marquée, pas seulement les étapes faites.
   var aChartres=(c.lieu==='chartres');
-  var jChartres=aChartres?_joursDepuis(c.depotTs):0;
-  var etChartres = aChartres
-    ? { t:'📍 En attente à Chartres', encours:true,
-        meta:(c.depotPar?(c.depotPar+' · '):'')+_dateFr(c.depotTs)+' · depuis '+jChartres+' j',
-        alerte:(c.nonCharge&&c.nonCharge.motif)
-          ? ('✕ Non chargé le '+_dateFr(c.nonCharge.ts)+' — '+_esc(c.nonCharge.motif))
-          : '' }
+  var jChartres=aChartres?_joursDepuis(c.chartresTs||c.depotTs):0;
+  // Passé par Chartres un jour ? L'étape reste, avec sa date, même
+  // une fois le colis arrivé à Mitry-Mory.
+  var passeChartres = aChartres || !!c.chartresTs
+    || (c.hist||[]).some(function(x){ return String(x.a||'').indexOf('Chartres')>=0; });
+  var tsChartres = c.chartresTs || (aChartres?c.depotTs:0);
+  // Chaque fois qu'un camion est reparti sans lui : la trace reste,
+  // même une fois le colis arrivé à Mitry-Mory.
+  var _refus=_notesDe(franceClientId).filter(function(n){
+    return String(n.t||'').indexOf('Non chargé à Chartres')>=0;
+  }).sort(function(a,b){ return (a.ts||0)-(b.ts||0); });
+  var _alerte='';
+  if(_refus.length){
+    _alerte='<b>'+_refus.length+' passage'+(_refus.length>1?'s':'')+' sans embarquer</b>';
+    _refus.forEach(function(n){
+      var m=String(n.t||'').split('—').slice(1).join('—').trim();
+      _alerte+='<br>✕ '+_dateFr(n.ts)+' — '+(m||'sans motif')+' · '+_auteurNote(n);
+    });
+  }
+  var etChartres = passeChartres
+    ? { t: aChartres ? '📍 En attente à Chartres' : '📍 Passé par Chartres',
+        ok: !aChartres, encours: aChartres,
+        meta:(c.chartresPar?(c.chartresPar+' · '):'')
+             + (tsChartres?_dateFr(tsChartres):'')
+             + (aChartres?(' · depuis '+jChartres+' j'):''),
+        alerte:_alerte }
     : null;
 
   var et=[
@@ -5045,6 +5064,12 @@ function validerDepot(lieu){
     maj['clients/'+id+'/lieu']=lieu;
     maj['clients/'+id+'/statut']=(lieu==='mitry'?'mitry':'ramasse');
     maj['clients/'+id+'/depotTs']=Date.now();
+    // Le passage par Chartres se garde : il ne doit pas s'effacer
+    // quand le colis rejoint Mitry-Mory.
+    if(lieu==='chartres'){
+      maj['clients/'+id+'/chartresTs']=Date.now();
+      maj['clients/'+id+'/chartresPar']=qui;
+    }
     maj['clients/'+id+'/hist']=hist;
   });
   maj['tournees/'+to.id+'/depots']=depots;
