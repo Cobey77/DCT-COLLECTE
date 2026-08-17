@@ -1516,8 +1516,8 @@ function sauvegarderFirebase(){
 
 // ===== FIN FIREBASE =====
 
-var APP_VERSION = 'v3.56.0';
-var APP_UPDATE = '19/08/2026 à 12:30';
+var APP_VERSION = 'v3.56.1';
+var APP_UPDATE = '19/08/2026 à 13:40';
 var COLLABS = [
   {id:'IS',name:'Issyaka',   bg:'#FFE8CC',color:'#A04800'},
   {id:'AB',name:'Abdoulaye', bg:'#E0E4FF',color:'#252599'},
@@ -4390,9 +4390,14 @@ function _renderFicheFrance(){
   var jChartres=aChartres?_joursDepuis(c.chartresTs||c.depotTs):0;
   // Passé par Chartres un jour ? L'étape reste, avec sa date, même
   // une fois le colis arrivé à Mitry-Mory.
-  var passeChartres = aChartres || !!c.chartresTs
-    || (c.hist||[]).some(function(x){ return String(x.a||'').indexOf('Chartres')>=0; });
-  var tsChartres = c.chartresTs || (aChartres?c.depotTs:0);
+  // Les fiches d'avant n'ont pas la date : on la retrouve dans leur
+  // historique, à la ligne du dépôt.
+  var _depot=(c.hist||[]).filter(function(x){
+    return String(x.a||'').indexOf('déposé à Chartres')>=0;
+  }).sort(function(a,b){ return (a.ts||0)-(b.ts||0); })[0];
+  var passeChartres = aChartres || !!c.chartresTs || !!_depot;
+  var tsChartres = c.chartresTs || (_depot&&_depot.ts) || (aChartres?c.depotTs:0);
+  var parChartres = c.chartresPar || (_depot&&_depot.q) || '';
   // Chaque fois qu'un camion est reparti sans lui : la trace reste,
   // même une fois le colis arrivé à Mitry-Mory.
   var _refus=_notesDe(franceClientId).filter(function(n){
@@ -4409,8 +4414,8 @@ function _renderFicheFrance(){
   var etChartres = passeChartres
     ? { t: aChartres ? '📍 En attente à Chartres' : '📍 Passé par Chartres',
         ok: !aChartres, encours: aChartres,
-        meta:(c.chartresPar?(c.chartresPar+' · '):'')
-             + (tsChartres?_dateFr(tsChartres):'')
+        meta:(parChartres?(parChartres+' · '):'')
+             + (tsChartres?('déposé le '+_dateFr(tsChartres)):'date inconnue')
              + (aChartres?(' · depuis '+jChartres+' j'):''),
         alerte:_alerte }
     : null;
