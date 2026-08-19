@@ -24,7 +24,13 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.0.0';
+var DEP_VERSION = 'v1.0.1';
+
+// Les profils qui pilotent : Issyaka et Cobey.
+// On teste l'identifiant et pas seulement le drapeau, parce que
+// chargerConfigFirebase() remplace le tableau COLLABS par celui
+// stocké dans dct_config/collabs — ce qui effaçait le drapeau.
+var IDS_DIRECTION = ['IS','AD'];
 
 var STATUTS_DEPART = {
   preparation : {label:'En préparation', bg:'#FFF4E0', color:'#A04800', dot:'#E58A00'},
@@ -75,9 +81,29 @@ function dateCourte(iso){
 }
 
 function estDirection(){
-  return !!(window.currentUser && (currentUser.admin || currentUser.patron));
+  var u = window.currentUser;
+  if(!u) return false;
+  return !!(u.admin || u.patron || IDS_DIRECTION.indexOf(u.id) >= 0);
 }
 window._estDirection = estDirection;
+
+// Réapplique les droits sur COLLABS. Appelée au démarrage, à chaque
+// rechargement de la config depuis Firebase, et juste avant la connexion.
+function appliquerProfils(){
+  try{
+    if(window.COLLABS && Array.isArray(window.COLLABS)){
+      COLLABS.forEach(function(c){
+        if(c && IDS_DIRECTION.indexOf(c.id) >= 0 && !c.admin) c.patron = true;
+      });
+      for(var i = COLLABS.length - 1; i >= 0; i--){
+        if(COLLABS[i] && COLLABS[i].id === 'AI') COLLABS.splice(i, 1);
+      }
+    }
+    if(window.currentUser && IDS_DIRECTION.indexOf(currentUser.id) >= 0 && !currentUser.admin){
+      currentUser.patron = true;
+    }
+  }catch(e){}
+}
 
 // Tous les clients de toutes les collectes, à plat
 function tousLesClients(){
@@ -382,6 +408,13 @@ function ecouterDeparts(){
     setTimeout(ecouterDeparts, 400);
     return;
   }
+  // Ton code recharge COLLABS depuis Firebase après la connexion :
+  // on remet les droits à chaque fois que cette liste change.
+  db.ref('dct_config/collabs').on('value', function(){
+    appliquerProfils();
+    setTimeout(appliquerProfils, 400);
+  });
+
   db.ref('departs').on('value', function(snap){
     window.departsData = snap.val() || {};
     _depPret = true;
@@ -849,20 +882,24 @@ function reinitialiserNouveauxChamps(){
 function greffer(){
 
   /* --- A. Les profils : IS devient patron, AI disparaît --- */
-  try{
-    if(window.COLLABS && Array.isArray(COLLABS)){
-      var is = COLLABS.filter(function(c){ return c.id === 'IS'; })[0];
-      if(is) is.patron = true;
-      for(var i = COLLABS.length - 1; i >= 0; i--){
-        if(COLLABS[i].id === 'AI') COLLABS.splice(i, 1);
-      }
-    }
-  }catch(e){}
+  appliquerProfils();
+
+  /* --- A bis. chargerConfigFirebase() remplace COLLABS puis appelle
+     _rafraichirLogin(). On se greffe juste là pour remettre les droits. --- */
+  if(typeof window._rafraichirLogin === 'function' && !window._rafraichirLogin._depPatch){
+    var origRafraichir = window._rafraichirLogin;
+    window._rafraichirLogin = function(){
+      appliquerProfils();
+      return origRafraichir.apply(this, arguments);
+    };
+    window._rafraichirLogin._depPatch = true;
+  }
 
   /* --- B. Après la connexion : bifurcation pour la direction --- */
   if(typeof window._finalisLoginCore === 'function' && !window._finalisLoginCore._depPatch){
     var origLogin = window._finalisLoginCore;
     window._finalisLoginCore = function(collab){
+      try{ appliquerProfils(); }catch(e){}
       try{ origLogin.apply(this, arguments); }
       catch(e){ console.error('departs: _finalisLoginCore original', e); }
       try{
