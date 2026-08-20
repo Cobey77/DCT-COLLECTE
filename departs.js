@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.7.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.10.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -70,6 +70,20 @@
        1 à 4, tous marqués "societe") ne sont plus redirigés vers
        l'écran des espaces (DÉPARTS/COLLECTE/CLIENT) à la connexion.
        Ils restent sur leur propre parcours, comme avant le module.
+   22. Facturation, étape 4/N : QR code sur la page facture, généré
+       à la volée (librairie chargée dynamiquement en CDN, rien à
+       ajouter dans index.html). Il encode un lien direct vers cette
+       facture précise ; un collaborateur qui le scanne et se
+       connecte est amené directement dessus, sans repasser par les
+       espaces.
+   23. Correctif : un contact/client supprimé pouvait revenir tout
+       seul (voir diagnostic dans LOT1_Livraison_departs_js.md). La
+       suppression Firebase part désormais directement des paires
+       collecte/client déjà connues localement (plus de relecture
+       serveur avant de supprimer, qui laissait une fenêtre de
+       course), avec en plus une vérification de rattrapage qui
+       re-supprime automatiquement si le client réapparaît quand
+       même dans les secondes qui suivent.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -79,7 +93,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.9.1';
+var DEP_VERSION = 'v1.10.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -118,6 +132,24 @@ var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un 
 var _depDepotEditId = null;     // id du client dépôt en cours de modification (null = création)
 var _depDepotPhotoTmp = null;   // photo en attente pour le formulaire dépôt
 var _depAjoutClientCarre = false; // true : le prochain saveClientConfirme() vient du carré Client
+
+// Lien de facture scanné (QR) avant même la connexion : ?facture=C|colId|clientId
+// (collecte) ou ?facture=D||clientId (dépôt direct). Consommé une seule fois,
+// juste après la connexion, dans la greffe sur _finalisLoginCore.
+var _depFactureDeepLink = null; // { collecteId, clientId, depot }
+try{
+  var _mFactureLien = /[?&]facture=([^&]+)/.exec(location.search);
+  if(_mFactureLien){
+    var _partsFactureLien = decodeURIComponent(_mFactureLien[1]).split('|');
+    if(_partsFactureLien.length === 3 && _partsFactureLien[2]){
+      _depFactureDeepLink = {
+        depot: _partsFactureLien[0] === 'D',
+        collecteId: _partsFactureLien[1] || '',
+        clientId: _partsFactureLien[2]
+      };
+    }
+  }
+}catch(e){}
 
 /* ─────────────────────────────────────────────
    2. PETITS OUTILS
@@ -1034,6 +1066,45 @@ window.depOuvrirFacture = function(collecteId, clientId, depot){
   goTo('s-facture');
 };
 
+// Lien direct vers une facture précise (utilisé par le QR code) :
+// même page (quel que soit l'endroit où le site est hébergé), avec
+// un paramètre ?facture=... repris au chargement (voir _depFactureDeepLink).
+function depLienFacture(ctx){
+  var code = (ctx.depot ? 'D' : 'C') + '|' + (ctx.collecteId || '') + '|' + ctx.clientId;
+  return location.origin + location.pathname + '?facture=' + encodeURIComponent(code);
+}
+
+// Chargement à la demande de la librairie de génération de QR code
+// (QRious, un seul fichier, aucune dépendance) : on ne l'ajoute au
+// CDN que la première fois qu'une facture est réellement affichée,
+// pas à chaque chargement de l'appli.
+var _depQrEnCours = false;
+function _depChargerQR(cb){
+  if(window.QRious){ cb(); return; }
+  if(_depQrEnCours){ setTimeout(function(){ _depChargerQR(cb); }, 200); return; }
+  _depQrEnCours = true;
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js';
+  s.onload = function(){ _depQrEnCours = false; cb(); };
+  s.onerror = function(){ _depQrEnCours = false; console.error('departs: échec chargement de la librairie QR (connexion internet ?)'); };
+  document.head.appendChild(s);
+}
+
+// Génère le QR dans le canvas de la page facture, une fois la librairie
+// disponible. Revérifie que le canvas existe encore (l'utilisateur a pu
+// changer d'écran pendant le chargement de la librairie).
+function depGenererQR(ctx){
+  if(!ctx) return;
+  var lien = depLienFacture(ctx);
+  _depChargerQR(function(){
+    try{
+      var canvas = $('dep-fact-qr');
+      if(!canvas) return;
+      new QRious({ element: canvas, value: lien, size: 176, background: '#fff', foreground: '#222' });
+    }catch(e){ console.error('departs: génération QR', e); }
+  });
+}
+
 // "1755701520000" → "20/08/2026 14:32"
 function dateHeureFr(ts){
   if(!ts) return '—';
@@ -1162,10 +1233,21 @@ function depRenderFacture(c){
     +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;"></div>'
     + '<button class="btn btn-green" onclick="depAjouterVersement()">&#9989; Enregistrer le versement</button>';
 
-  h += '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:16px;">QR code et envoi WhatsApp &mdash; &agrave; venir.</div>';
+  // QR code — lien direct vers cette facture précise. La librairie est
+  // chargée à la demande (voir depGenererQR) : le canvas reste vide un
+  // court instant le temps du chargement, puis se remplit.
+  h += '<div class="dep-sec">QR code</div>'
+    + '<div style="text-align:center;padding:6px 0 10px;">'
+    +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
+    +   '<div style="font-size:10.5px;color:var(--text3);margin-top:8px;">&Agrave; scanner pour retrouver directement cette facture</div>'
+    + '</div>';
+
+  h += '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:16px;">Envoi WhatsApp &mdash; &agrave; venir.</div>';
 
   var box = $('dep-fact-content');
   if(box) box.innerHTML = h;
+
+  try{ depGenererQR(_depFactureCtx); }catch(e){ console.error('departs: QR', e); }
 }
 
 /* ─────────────────────────────────────────────
@@ -2155,6 +2237,20 @@ function greffer(){
         if(btn) btn.style.display = estDirection() ? 'flex' : 'none';
         depMajBoutonEspaces();
         depRenderEspaces();
+        // Lien de facture scanné (QR, voir depGenererQR) : on va directement
+        // dessus au lieu des espaces, si la facture visée existe toujours.
+        if(_depFactureDeepLink){
+          var dl = _depFactureDeepLink;
+          _depFactureDeepLink = null;
+          var cible = dl.depot
+            ? (window.depotClients || {})[dl.clientId]
+            : (((window.clientsParCollecte || {})[dl.collecteId]) || {})[dl.clientId];
+          if(cible){
+            depOuvrirFacture(dl.collecteId, dl.clientId, dl.depot);
+            return;
+          }
+          toast('⚠️ Facture introuvable pour ce lien.');
+        }
         goTo('s-espaces');
       }catch(e){}
     };
@@ -2418,6 +2514,114 @@ function greffer(){
       catch(e){ _depOrigOpenContactEdit.apply(this, arguments); }
     };
     window.openContactEdit._depPatch = true;
+  }
+
+  /* --- H. Correctif : un contact/client supprimé pouvait revenir tout
+     seul. L'original (confirmerSupprimerContact) supprime en local tout
+     de suite, mais relit TOUT dct/clients depuis le serveur (once('value'))
+     avant d'envoyer la suppression réelle : pendant ce délai réseau (deux
+     allers-retours successifs), une mise à jour temps réel venue d'ailleurs
+     peut recopier le client "pas encore supprimé côté serveur" dans l'état
+     local — et sauvegarderFirebase() finit par le réécrire pour de bon.
+     On remplace entièrement la fonction : les paires collecte/client à
+     supprimer sont déjà connues localement au moment même où on les
+     efface (pas besoin de les redemander au serveur), donc la suppression
+     Firebase part directement, en un seul aller-retour au lieu de deux.
+     Une vérification de rattrapage, quelques secondes après, re-supprime
+     silencieusement si jamais le client était quand même revenu. --- */
+  if(typeof window.confirmerSupprimerContact === 'function' && !window.confirmerSupprimerContact._depPatch){
+    window.confirmerSupprimerContact = function(){
+      var key = ($('del-contact-key')||{}).value || '';
+      var name = '';
+
+      if(window.dctContacts && window.dctContacts[key]){
+        name = window.dctContacts[key].name || '';
+        delete window.dctContacts[key];
+      }
+
+      var removed = 0;
+      var paires = []; // { colId, clientId } — déjà connues localement
+      Object.keys(clientsParCollecte).forEach(function(colId){
+        var cls = clientsParCollecte[colId];
+        if(!cls) return;
+        Object.keys(cls).forEach(function(clientId){
+          var c = cls[clientId];
+          if(!c) return;
+          var k = c.tel ? c.tel.replace(/ /g,'') : (c.prenom+'_'+c.nom).toLowerCase();
+          if(k === key){
+            if(dispatchParCollecte[colId]){
+              var asgn = dispatchParCollecte[colId].assigned;
+              var trks = dispatchParCollecte[colId].trucks;
+              var tk = asgn && asgn[clientId];
+              if(tk && trks && trks[tk]){
+                trks[tk].clients = (trks[tk].clients||[]).filter(function(i){return i!==clientId;});
+                trks[tk].validated = (trks[tk].validated||[]).filter(function(i){return i!==clientId;});
+                trks[tk].refused = (trks[tk].refused||[]).filter(function(i){return i!==clientId;});
+                if(trks[tk].hours) delete trks[tk].hours[clientId];
+              }
+              if(asgn) delete asgn[clientId];
+            }
+            if(!name && c.name) name = c.name;
+            delete cls[clientId];
+            removed++;
+            paires.push({ colId: colId, clientId: clientId });
+          }
+        });
+      });
+
+      if(firebaseReady && db){
+        var updates = {};
+        updates['dct/contacts/'+key] = null;
+        paires.forEach(function(p){
+          updates['dct/clients/'+p.colId+'/'+p.clientId] = null;
+          updates['dct/dispatch/'+p.colId+'/assigned/'+p.clientId] = null;
+        });
+        db.ref().update(updates);
+        sauvegarder();
+        // Vérification de rattrapage : si le client est quand même revenu
+        // (fusion temps réel en plein milieu de la suppression), on le
+        // supprime à nouveau, silencieusement.
+        [1500, 4000].forEach(function(delai){
+          setTimeout(function(){ _depVerifierSuppression(key, paires); }, delai);
+        });
+      } else {
+        sauvegarder();
+      }
+
+      addActivity('🗑️', currentUser.bg,
+        '<strong style="color:'+currentUser.color+'">'+currentUser.name+'</strong> a supprimé le contact <strong>'+(name||key)+'</strong>',
+        "À l'instant"
+      );
+      closeModal('modal-del-contact');
+      closeModal('modal-contact-edit');
+      renderContacts();
+      renderCollectesList();
+      showToastNew('✅ Contact supprimé'+(removed?' de '+removed+' collecte(s)':'')+'.');
+    };
+    window.confirmerSupprimerContact._depPatch = true;
+  }
+}
+
+// Rattrapage appelé quelques secondes après une suppression : si le
+// contact ou l'un de ses clients est réapparu localement (fusion temps
+// réel arrivée avec des données pas encore à jour), on le supprime à
+// nouveau, sans rien afficher — l'utilisateur a déjà vu la confirmation.
+function _depVerifierSuppression(key, paires){
+  if(!firebaseReady || !db) return;
+  var revenu = false;
+  if(window.dctContacts && window.dctContacts[key]){ delete window.dctContacts[key]; revenu = true; }
+  paires.forEach(function(p){
+    var cls = clientsParCollecte[p.colId];
+    if(cls && cls[p.clientId]){ delete cls[p.clientId]; revenu = true; }
+  });
+  if(revenu){
+    var updates = {};
+    updates['dct/contacts/'+key] = null;
+    paires.forEach(function(p){ updates['dct/clients/'+p.colId+'/'+p.clientId] = null; });
+    db.ref().update(updates);
+    sauvegarder();
+    try{ renderContacts(); renderCollectesList(); }catch(e){}
+    console.warn('[departs] le contact "'+key+'" était revenu après suppression — re-supprimé automatiquement.');
   }
 }
 
