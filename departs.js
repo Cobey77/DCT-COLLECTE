@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.1.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.2.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -18,6 +18,8 @@
    6. La fiche client affiche et modifie tous ces champs
    7. Rattachement en masse d'une collecte entière à un départ
    8. Corrige une perte de données de saveClientEdit() (voir plus bas)
+   9. Cliquer sur un client dans le détail d'un départ ouvre sa fiche
+   10. Détacher une collecte entière d'un départ (annule un rattachement)
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -27,7 +29,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.1.1';
+var DEP_VERSION = 'v1.2.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -52,6 +54,8 @@ var _depPret = false;
 var _depPhotoFiche = null;      // photo en attente sur la fiche client
 var _depRattachDepart = null;   // départ cible du rattachement en masse
 var _depRattachCollecte = '';   // collecte choisie pour le rattachement
+var _depDetachDepart = null;    // départ cible du détachement en masse
+var _depDetachCollecte = '';    // collecte choisie pour le détachement
 
 /* ─────────────────────────────────────────────
    2. PETITS OUTILS
@@ -329,6 +333,28 @@ function injecterEcrans(){
   +   '</div>'
   +   '<div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">'
   +     '<button class="btn btn-green" style="margin:0;" id="dep-r-btn" onclick="depRattachValider()">Rattacher</button>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 6 : détacher une collecte de ce départ ---- */
+  + '<div class="screen" id="s-depart-detacher">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depDetail(_depDetailIdPublic())">&larr; Retour</button>'
+  +     '<div style="text-align:center;"><div class="h-title">D&eacute;tacher des clients</div>'
+  +     '<div class="h-sub" id="dep-x-cible"></div></div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div class="fg"><label class="fl">Choisir une collecte</label>'
+  +       '<select class="fi" id="dep-x-collecte" onchange="depDetachChoisirCollecte(this.value)"></select></div>'
+  +     '<div id="dep-x-actions" style="display:none;margin-bottom:12px;">'
+  +       '<button type="button" class="dep-cli-btn" onclick="depDetachTout(true)">Tout cocher</button> '
+  +       '<button type="button" class="dep-cli-btn" onclick="depDetachTout(false)">Tout d&eacute;cocher</button>'
+  +     '</div>'
+  +     '<div id="dep-x-liste"></div>'
+  +   '</div>'
+  +   '<div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">'
+  +     '<button class="btn btn-gray" style="margin:0;border-color:#F5C6C6;background:#FDEDED;color:#992020;" id="dep-x-btn" onclick="depDetachValider()">D&eacute;tacher</button>'
   +   '</div>'
   + '</div>';
 
@@ -716,6 +742,10 @@ window.depDetail = function(id){
   if(d.statut === 'preparation' && estDirection()){
     h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#C5CAE9;background:#EEF0FA;color:#252599;" '
       +  'onclick="depRattachOuvrir()">&#128206; Rattacher une collecte enti&egrave;re</button>';
+    if(clients.length){
+      h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#F5C6C6;background:#FDEDED;color:#992020;" '
+        +  'onclick="depDetachOuvrir()">&#8617; D&eacute;tacher une collecte de ce d&eacute;part</button>';
+    }
   }
   h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:4px;">Clients de ce d&eacute;part</div>';
 
@@ -978,6 +1008,122 @@ window.depRattachValider = function(){
     + esc(nomCollecte(_depRattachCollecte)) + ' au départ <strong>'+esc(d.nom||'')+'</strong>');
   toast('✅ ' + n + ' client' + (n>1?'s':'') + ' rattaché' + (n>1?'s':''));
   depDetail(_depRattachDepart);
+};
+
+/* ─────────────────────────────────────────────
+   11 quater. DÉTACHER UNE COLLECTE (annuler un rattachement)
+   ───────────────────────────────────────────── */
+
+window.depDetachOuvrir = function(){
+  if(!estDirection()){ toast('🔒 Réservé à Issyaka.'); return; }
+  _depDetachDepart = _depDetailId;
+  _depDetachCollecte = '';
+  var d = (window.departsData||{})[_depDetachDepart] || {};
+  var t = $('dep-x-cible'); if(t) t.textContent = 'De : ' + (d.nom || '');
+
+  // Seulement les collectes qui ont effectivement des clients dans CE départ
+  var parCollecte = {};
+  tousLesClients().forEach(function(x){
+    if(x.c.departId !== _depDetachDepart) return;
+    parCollecte[x.collecteId] = (parCollecte[x.collecteId] || 0) + 1;
+  });
+  var h = '<option value="">— Choisir une collecte —</option>';
+  Object.keys(parCollecte).forEach(function(colId){
+    var n = parCollecte[colId];
+    h += '<option value="'+colId+'">'+esc(nomCollecte(colId))+' — '+n+' client'+(n>1?'s':'')+' dans ce d&eacute;part</option>';
+  });
+  var sel = $('dep-x-collecte'); if(sel){ sel.innerHTML = h; sel.value = ''; }
+  var box = $('dep-x-liste'); if(box) box.innerHTML = '<div class="dep-vide">Choisissez une collecte ci-dessus.</div>';
+  var act = $('dep-x-actions'); if(act) act.style.display = 'none';
+  depDetachMajBouton();
+  goTo('s-depart-detacher');
+};
+
+window.depDetachChoisirCollecte = function(colId){
+  _depDetachCollecte = colId || '';
+  var box = $('dep-x-liste');
+  var act = $('dep-x-actions');
+  if(!colId){
+    if(box) box.innerHTML = '<div class="dep-vide">Choisissez une collecte ci-dessus.</div>';
+    if(act) act.style.display = 'none';
+    depDetachMajBouton();
+    return;
+  }
+  var cls = (window.clientsParCollecte||{})[colId] || {};
+  var ids = Object.keys(cls).filter(function(cid){ return cls[cid] && cls[cid].departId === _depDetachDepart; });
+  if(!ids.length){
+    if(box) box.innerHTML = '<div class="dep-vide">Aucun client de cette collecte n\'est dans ce d&eacute;part.</div>';
+    if(act) act.style.display = 'none';
+    depDetachMajBouton();
+    return;
+  }
+  ids.sort(function(a,b){ return String(cls[a].name||'').localeCompare(String(cls[b].name||'')); });
+
+  var h = '';
+  ids.forEach(function(cid){
+    var c = cls[cid];
+    h += '<label class="dep-cli" style="cursor:pointer;">'
+      +   '<input type="checkbox" class="dep-x-case" value="'+cid+'" checked '
+      +     'onchange="depDetachMajBouton()" style="width:20px;height:20px;flex-shrink:0;accent-color:#c0392b;">'
+      +   '<div style="flex:1;min-width:0;">'
+      +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+'</div>'
+      +     '<div class="dep-cli-s">'+(parseFloat(c.prix)||0)+' €</div>'
+      +   '</div>'
+      + '</label>';
+  });
+  if(box) box.innerHTML = h;
+  if(act) act.style.display = 'block';
+  depDetachMajBouton();
+};
+
+window.depDetachTout = function(oui){
+  Array.prototype.forEach.call(document.querySelectorAll('.dep-x-case'), function(el){ el.checked = !!oui; });
+  depDetachMajBouton();
+};
+
+window.depDetachMajBouton = function(){
+  var n = _depDetachSelection().length;
+  var b = $('dep-x-btn');
+  if(!b) return;
+  b.textContent = n ? ('Détacher '+n+' client'+(n>1?'s':'')) : 'Aucun client sélectionné';
+  b.disabled = !n;
+  b.style.opacity = n ? '1' : '0.5';
+};
+
+function _depDetachSelection(){
+  var out = [];
+  Array.prototype.forEach.call(document.querySelectorAll('.dep-x-case'), function(el){
+    if(el.checked) out.push(el.value);
+  });
+  return out;
+}
+
+window.depDetachValider = function(){
+  var ids = _depDetachSelection();
+  if(!ids.length) return;
+  if(!_depDetachDepart || !_depDetachCollecte) return;
+
+  var d = (window.departsData||{})[_depDetachDepart] || {};
+  if(!confirm('Détacher ' + ids.length + ' client(s) du départ « ' + (d.nom||'') + ' » ?\n\nIls redeviennent "sans départ" — la collecte et les clients eux-mêmes ne sont pas touchés.')) return;
+
+  var u = window.currentUser || {};
+  var cls = (window.clientsParCollecte||{})[_depDetachCollecte] || {};
+  var n = 0;
+  ids.forEach(function(cid){
+    var c = cls[cid];
+    if(!c || c.departId !== _depDetachDepart) return;
+    var hist = c.historiqueDepart || [];
+    hist.push({ de: c.departId || '', vers: '', par: u.id || '', le: Date.now() });
+    c.departId = '';
+    c.historiqueDepart = hist;
+    n++;
+  });
+
+  try{ sauvegarder(); }catch(e){}
+  depActivite('↩️', 'a détaché <strong>'+n+' client'+(n>1?'s':'')+'</strong> de '
+    + esc(nomCollecte(_depDetachCollecte)) + ' du départ <strong>'+esc(d.nom||'')+'</strong>');
+  toast('✅ ' + n + ' client' + (n>1?'s':'') + ' détaché' + (n>1?'s':''));
+  depDetail(_depDetachDepart);
 };
 
 /* ─────────────────────────────────────────────
