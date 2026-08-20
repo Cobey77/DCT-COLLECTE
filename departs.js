@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.2.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.3.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -11,7 +11,7 @@
 
    CE QU'IL APPORTE
    1. Fusion des deux profils Issyaka (IS garde son prénom + les droits)
-   2. Un écran de choix d'espace : DÉPARTS | COLLECTE
+   2. Un écran de choix d'espace : DÉPARTS | COLLECTE | CLIENT, pour tous
    3. L'espace Départs complet (créer, ouvrir, statuts, détail)
    4. Le champ Départ obligatoire + les nouveaux champs sur la fiche client
    5. Photo du colis, avec la même compression que les photos France
@@ -20,6 +20,9 @@
    8. Corrige une perte de données de saveClientEdit() (voir plus bas)
    9. Cliquer sur un client dans le détail d'un départ ouvre sa fiche
    10. Détacher une collecte entière d'un départ (annule un rattachement)
+   11. Carré CLIENT : carnet de contacts, export/import CSV, ajout avec
+       choix explicite de la collecte (l'onglet Clients de l'accueil
+       disparaît, remplacé par ce carré)
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -29,7 +32,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.2.0';
+var DEP_VERSION = 'v1.3.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -56,6 +59,7 @@ var _depRattachDepart = null;   // départ cible du rattachement en masse
 var _depRattachCollecte = '';   // collecte choisie pour le rattachement
 var _depDetachDepart = null;    // départ cible du détachement en masse
 var _depDetachCollecte = '';    // collecte choisie pour le détachement
+var _depAjoutCarre = false;     // true quand "+ Ajouter un client" vient du carré Client (pas d'une collecte déjà ouverte)
 
 /* ─────────────────────────────────────────────
    2. PETITS OUTILS
@@ -243,7 +247,7 @@ function injecterEcrans(){
   +     '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-bottom:14px;">'
   +       'Où souhaitez-vous travailler ?</div>'
   +     '<div class="dep-cases">'
-  +       '<div class="dep-case" style="border-color:#252599;" onclick="depOuvrirEspaceDeparts()">'
+  +       '<div class="dep-case" id="dep-case-departs" style="border-color:#252599;" onclick="depOuvrirEspaceDeparts()">'
   +         '<div class="dep-case-ico">&#128230;</div>'
   +         '<div class="dep-case-tit" style="color:#252599;">D&Eacute;PARTS</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-dep">—</div>'
@@ -252,6 +256,11 @@ function injecterEcrans(){
   +         '<div class="dep-case-ico">&#128197;</div>'
   +         '<div class="dep-case-tit" style="color:#009A44;">COLLECTE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-col">—</div>'
+  +       '</div>'
+  +       '<div class="dep-case" style="border-color:#7c3aed;" onclick="depOuvrirEspaceClient()">'
+  +         '<div class="dep-case-ico">&#128100;</div>'
+  +         '<div class="dep-case-tit" style="color:#7c3aed;">CLIENT</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-cli">—</div>'
   +       '</div>'
   +     '</div>'
   +     '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:22px;">Module départs '+DEP_VERSION+'</div>'
@@ -390,8 +399,24 @@ function injecterChampsClient(){
   var content = ecran.querySelector('.content');
   if(!content) return;
 
-  /* --- Le départ, tout en haut, juste après le bandeau --- */
+  /* --- La collecte, visible seulement quand on ajoute depuis le carré
+     Client (sinon la collecte en cours est déjà connue) --- */
   var banniere = content.querySelector('.info-banner');
+  var blocCollecte = document.createElement('div');
+  blocCollecte.id = 'f-bloc-collecte';
+  blocCollecte.style.display = 'none';
+  blocCollecte.innerHTML = ''
+    + '<div class="fg" style="margin-bottom:14px;">'
+    +   '<label class="fl" style="color:#009A44;">Collecte &middot; obligatoire</label>'
+    +   '<select class="fi" id="f-collecte" style="border-color:#009A44;border-width:2px;font-weight:700;" '
+    +     'onchange="window.currentCollecteId=this.value;">'
+    +     '<option value="">— Choisir une collecte —</option>'
+    +   '</select>'
+    + '</div>';
+  if(banniere && banniere.nextSibling) content.insertBefore(blocCollecte, banniere.nextSibling);
+  else content.insertBefore(blocCollecte, content.firstChild);
+
+  /* --- Le départ, tout en haut, juste après le bandeau (et après la collecte) --- */
   var blocDepart = document.createElement('div');
   blocDepart.innerHTML = ''
     + '<div class="fg" style="margin-bottom:14px;">'
@@ -401,8 +426,15 @@ function injecterChampsClient(){
     +   '</select>'
     +   '<div id="f-depart-msg" style="display:none;font-size:12px;font-weight:700;color:#c0392b;margin-top:6px;"></div>'
     + '</div>';
-  if(banniere && banniere.nextSibling) content.insertBefore(blocDepart, banniere.nextSibling);
-  else content.insertBefore(blocDepart, content.firstChild);
+  content.insertBefore(blocDepart, blocCollecte.nextSibling);
+
+  /* --- Des id stables sur Retour/Annuler pour pouvoir les re-brancher
+     quand on vient du carré Client --- */
+  var backBtn = ecran.querySelector('.header .btn-back');
+  if(backBtn && !backBtn.id) backBtn.id = 'add-back-btn';
+  var cancelBtn = null;
+  Array.prototype.forEach.call(content.querySelectorAll('.btn-gray'), function(b){ cancelBtn = b; });
+  if(cancelBtn && !cancelBtn.id) cancelBtn.id = 'add-cancel-btn';
 
   /* --- Les nouveaux champs, avant les boutons --- */
   var boutons = null;
@@ -493,14 +525,18 @@ window.depRenderEspaces = function(){
     a.style.border = '2px solid ' + (u.color || '#ccc');
   }
 
-  // Case DÉPARTS
-  var ouverts = departsDisponibles().length;
-  var total   = tousLesDeparts().length;
-  var sd = $('dep-case-sub-dep');
-  if(sd){
-    sd.innerHTML = total === 0
-      ? 'Aucun d&eacute;part<br>&Agrave; cr&eacute;er'
-      : '<b style="color:#252599;">'+ouverts+'</b> ouvert'+(ouverts>1?'s':'')+'<br>'+total+' au total';
+  // Case DÉPARTS — réservée à la direction
+  var cd = $('dep-case-departs');
+  if(cd) cd.style.display = estDirection() ? '' : 'none';
+  if(estDirection()){
+    var ouverts = departsDisponibles().length;
+    var total   = tousLesDeparts().length;
+    var sd = $('dep-case-sub-dep');
+    if(sd){
+      sd.innerHTML = total === 0
+        ? 'Aucun d&eacute;part<br>&Agrave; cr&eacute;er'
+        : '<b style="color:#252599;">'+ouverts+'</b> ouvert'+(ouverts>1?'s':'')+'<br>'+total+' au total';
+    }
   }
 
   // Case COLLECTE
@@ -515,6 +551,20 @@ window.depRenderEspaces = function(){
       sc.innerHTML = 'Aucune collecte<br>en cours';
     }
   }
+
+  // Case CLIENT
+  var scl = $('dep-case-sub-cli');
+  if(scl){
+    var nbC = Object.keys(window.dctContacts||{}).length;
+    scl.innerHTML = nbC === 0
+      ? 'Aucun contact'
+      : '<b style="color:#7c3aed;">'+nbC+'</b> contact'+(nbC>1?'s':'')+'<br>enregistr&eacute;'+(nbC>1?'s':'');
+  }
+};
+
+window.depOuvrirEspaceClient = function(){
+  goTo('s-clients');
+  try{ renderContacts(); }catch(e){}
 };
 
 window.depOuvrirEspaceDeparts = function(){
@@ -1127,6 +1177,212 @@ window.depDetachValider = function(){
 };
 
 /* ─────────────────────────────────────────────
+   12. LE CARRÉ CLIENT — export/import du carnet,
+       ajout d'un client avec choix explicite de la collecte
+   ───────────────────────────────────────────── */
+
+// Cache l'icône "Clients" du bas de l'écran partout dans l'appli :
+// ce carnet est désormais accessible via le carré CLIENT.
+function cacherOngletClientAccueil(){
+  Array.prototype.forEach.call(document.querySelectorAll('.bottomnav .nav-item'), function(item){
+    var lab = item.querySelector('.nav-label');
+    if(lab && lab.textContent.trim() === 'Clients') item.style.display = 'none';
+  });
+}
+
+// Boutons Ajouter / Export / Import sur l'écran #s-clients
+function injecterBoutonsClient(){
+  var ecran = $('s-clients');
+  if(!ecran || $('dep-cli-actions')) return;
+  var content = ecran.querySelector('.content');
+  if(!content) return;
+  var recherche = content.querySelector('.search-wrap');
+
+  var bloc = document.createElement('div');
+  bloc.id = 'dep-cli-actions';
+  bloc.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;';
+  bloc.innerHTML = ''
+    + '<button type="button" class="btn btn-green" style="flex:1;min-width:140px;margin:0;" '
+    +   'onclick="depOuvrirAjoutClientCarre()">+ Ajouter un client</button>'
+    + '<button type="button" class="dep-cli-btn" onclick="depExporterClients()">&#11015;&#65039; Export</button>'
+    + '<button type="button" class="dep-cli-btn" onclick="document.getElementById(\'dep-cli-import-input\').click()">&#11014;&#65039; Import</button>'
+    + '<input type="file" id="dep-cli-import-input" accept=".csv,text/csv" style="display:none;" onchange="depImporterClients(this)">';
+
+  if(recherche) content.insertBefore(bloc, recherche);
+  else content.insertBefore(bloc, content.firstChild);
+}
+
+/* ---- Ajouter un client depuis le carré Client (collecte à choisir) ---- */
+
+window.depOuvrirAjoutClientCarre = function(){
+  if(typeof window.ouvrirAjoutClient !== 'function'){ toast('⚠️ Fonction indisponible.'); return; }
+  window.ouvrirAjoutClient();     // réinitialise les champs, ouvre s-add, remet _depAjoutCarre à false
+  _depAjoutCarre = true;
+
+  var lb = $('add-collecte-label'); if(lb) lb.textContent = 'Choisissez la collecte ci-dessous';
+
+  var cols = (window.collectes || []).filter(function(c){ return c && c.statut !== 'terminee'; });
+  var h = '<option value="">— Choisir une collecte —</option>'
+    + cols.map(function(c){ return '<option value="'+c.id+'">'+esc(c.date||c.id)+'</option>'; }).join('');
+  var sel = $('f-collecte');
+  if(sel){
+    sel.innerHTML = h;
+    sel.value = cols.length === 1 ? cols[0].id : '';
+    if(cols.length === 1) window.currentCollecteId = cols[0].id;
+  }
+  var bc = $('f-bloc-collecte'); if(bc) bc.style.display = 'block';
+  if(!cols.length) toast('⚠️ Aucune collecte à venir. Créez-en une d\'abord depuis l\'accueil.');
+
+  var back = $('add-back-btn'); if(back) back.onclick = depAnnulerAjoutCarre;
+  var cancel = $('add-cancel-btn'); if(cancel) cancel.onclick = depAnnulerAjoutCarre;
+};
+
+window.depAnnulerAjoutCarre = function(){
+  _depAjoutCarre = false;
+  var bc = $('f-bloc-collecte'); if(bc) bc.style.display = 'none';
+  goTo('s-clients');
+  try{ renderContacts(); }catch(e){}
+};
+
+/* ---- Export CSV du carnet de contacts ---- */
+
+var _DEP_CSV_CHAMPS  = ['civilite','prenom','nom','tel','tel2','adresse','infos','ville','cp'];
+var _DEP_CSV_ENTETES = ['Civilite','Prenom','Nom','Telephone','Telephone2','Adresse','Infos','Ville','CodePostal'];
+
+function _depCsvEchapper(v){
+  v = (v===undefined || v===null) ? '' : String(v);
+  return '"' + v.replace(/"/g, '""') + '"';
+}
+
+window.depExporterClients = function(){
+  var contacts = window.dctContacts || {};
+  var lignes = [_DEP_CSV_ENTETES.map(_depCsvEchapper).join(';')];
+  Object.keys(contacts).sort().forEach(function(k){
+    var c = contacts[k] || {};
+    lignes.push(_DEP_CSV_CHAMPS.map(function(champ){ return _depCsvEchapper(c[champ]); }).join(';'));
+  });
+  var csv = '﻿' + lignes.join('\r\n');
+  var blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url;
+  a.download = 'dct_contacts_' + (new Date().toISOString().slice(0,10)) + '.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  toast('✅ ' + Object.keys(contacts).length + ' contact(s) exporté(s)');
+};
+
+/* ---- Import CSV du carnet de contacts ---- */
+
+// Parseur simple : gère les champs entre guillemets (avec ; ou , dedans)
+// et les guillemets échappés en les doublant (""), séparateur ; ou ,.
+function _depParserCSV(texte){
+  var lignes = [];
+  var ligne = [];
+  var champ = '';
+  var enGuillemets = false;
+  var i = 0;
+  texte = texte.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  while(i < texte.length){
+    var car = texte[i];
+    if(enGuillemets){
+      if(car === '"'){
+        if(texte[i+1] === '"'){ champ += '"'; i += 2; continue; }
+        enGuillemets = false; i++; continue;
+      }
+      champ += car; i++; continue;
+    }
+    if(car === '"'){ enGuillemets = true; i++; continue; }
+    if(car === ';' || car === ','){ ligne.push(champ); champ = ''; i++; continue; }
+    if(car === '\n'){ ligne.push(champ); lignes.push(ligne); ligne = []; champ = ''; i++; continue; }
+    champ += car; i++;
+  }
+  if(champ.length || ligne.length){ ligne.push(champ); lignes.push(ligne); }
+  return lignes.filter(function(l){ return l.length > 1 || (l[0]||'').trim() !== ''; });
+}
+
+var _DEP_CSV_ALIAS = {
+  civilite : ['civilite','civilité'],
+  prenom   : ['prenom','prénom'],
+  nom      : ['nom'],
+  tel      : ['telephone','téléphone','tel'],
+  tel2     : ['telephone2','téléphone2','tel2'],
+  adresse  : ['adresse'],
+  infos    : ['infos','informations'],
+  ville    : ['ville'],
+  cp       : ['codepostal','cp']
+};
+
+function _depNormaliserEntete(s){
+  return String(s||'').trim().toLowerCase()
+    .replace(/[éèê]/g,'e').replace(/[àâ]/g,'a').replace(/[ûù]/g,'u');
+}
+
+window.depImporterClients = function(input){
+  var fichier = input && input.files && input.files[0];
+  if(!fichier) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var lignes = _depParserCSV(String(e.target.result||''));
+      if(lignes.length < 2){ toast('⚠️ Fichier vide ou illisible.'); input.value=''; return; }
+      var entetes = lignes[0].map(_depNormaliserEntete);
+      var index = {};
+      Object.keys(_DEP_CSV_ALIAS).forEach(function(champ){
+        var pos = -1;
+        _DEP_CSV_ALIAS[champ].forEach(function(alias){
+          var p = entetes.indexOf(_depNormaliserEntete(alias));
+          if(p >= 0) pos = p;
+        });
+        index[champ] = pos;
+      });
+      if(index.tel < 0 && index.nom < 0){
+        toast('⚠️ Colonnes non reconnues (il faut au moins Nom ou Telephone).');
+        input.value = ''; return;
+      }
+
+      var lignesDonnees = lignes.slice(1);
+      if(!confirm('Importer ' + lignesDonnees.length + ' ligne(s) dans le carnet de contacts ?\n\n'
+        + 'Un numéro déjà connu sera mis à jour, un numéro nouveau sera créé.')){
+        input.value = ''; return;
+      }
+
+      if(!window.dctContacts) window.dctContacts = {};
+      var nbCrees = 0, nbMaj = 0;
+      lignesDonnees.forEach(function(l){
+        var val = {};
+        Object.keys(_DEP_CSV_ALIAS).forEach(function(champ){
+          val[champ] = index[champ] >= 0 ? (l[index[champ]]||'').trim() : '';
+        });
+        if(!val.tel && !val.nom && !val.prenom) return;
+        var ckey = val.tel ? val.tel.replace(/ /g,'') : (val.prenom+'_'+val.nom).toLowerCase();
+        if(!ckey) return;
+        var nouveauxChamps = {
+          civilite : val.civilite, prenom: val.prenom, nom: val.nom,
+          name     : _composeNom(val.civilite, val.prenom, val.nom),
+          tel      : val.tel, tel2: val.tel2, adresse: val.adresse, infos: val.infos,
+          ville    : val.ville, cp: val.cp, dept: (val.cp||'').substring(0,2)
+        };
+        var existant = window.dctContacts[ckey];
+        window.dctContacts[ckey] = Object.assign({}, existant||{}, nouveauxChamps);
+        if(existant) nbMaj++; else nbCrees++;
+      });
+
+      try{ sauvegarder(); }catch(e){}
+      try{ renderContacts(); }catch(e){}
+      toast('✅ Import terminé : ' + nbCrees + ' créé(s), ' + nbMaj + ' mis à jour');
+    }catch(err){
+      console.error('departs: import CSV', err);
+      toast('⚠️ Erreur pendant l\'import.');
+    }
+    input.value = '';
+  };
+  reader.readAsText(fichier, 'UTF-8');
+};
+
+/* ─────────────────────────────────────────────
    11 ter. LA FICHE CLIENT — affichage et modification
    ───────────────────────────────────────────── */
 
@@ -1397,7 +1653,8 @@ function greffer(){
     window._rafraichirLogin._depPatch = true;
   }
 
-  /* --- B. Après la connexion : bifurcation pour la direction --- */
+  /* --- B. Après la connexion : bifurcation pour tout le monde
+     (les carrés visibles dépendent du rôle, gérés dans depRenderEspaces) --- */
   if(typeof window._finalisLoginCore === 'function' && !window._finalisLoginCore._depPatch){
     var origLogin = window._finalisLoginCore;
     window._finalisLoginCore = function(collab){
@@ -1409,29 +1666,41 @@ function greffer(){
         var btn = $('btn-admin-panel');
         if(btn) btn.style.display = estDirection() ? 'flex' : 'none';
         depMajBoutonEspaces();
-        if(estDirection()){
-          depRenderEspaces();
-          goTo('s-espaces');
-        }
+        depRenderEspaces();
+        goTo('s-espaces');
       }catch(e){}
     };
     window._finalisLoginCore._depPatch = true;
   }
 
-  /* --- C. Ouverture du formulaire client : on remet nos champs à zéro --- */
+  /* --- C. Ouverture du formulaire client : on remet nos champs à zéro ---
+     Par défaut (bouton "+Ajouter" classique, depuis une collecte déjà
+     ouverte) on n'est PAS en mode carré Client — depOuvrirAjoutClientCarre()
+     remet le drapeau à true juste après avoir appelé cette même fonction. */
   if(typeof window.ouvrirAjoutClient === 'function' && !window.ouvrirAjoutClient._depPatch){
     var origOuvrir = window.ouvrirAjoutClient;
     window.ouvrirAjoutClient = function(){
+      _depAjoutCarre = false;
+      var bc = $('f-bloc-collecte'); if(bc) bc.style.display = 'none';
       origOuvrir.apply(this, arguments);
       try{ reinitialiserNouveauxChamps(); }catch(e){}
     };
     window.ouvrirAjoutClient._depPatch = true;
   }
 
-  /* --- D. Enregistrement : le départ est obligatoire --- */
+  /* --- D. Enregistrement : le départ est obligatoire, et la collecte
+     aussi quand on ajoute depuis le carré Client --- */
   if(typeof window.saveClient === 'function' && !window.saveClient._depPatch){
     var origSave = window.saveClient;
     window.saveClient = function(){
+      if(_depAjoutCarre){
+        var selC = $('f-collecte');
+        if(selC && !selC.value){
+          toast('⚠️ Choisissez la collecte avant d\'enregistrer.');
+          try{ selC.focus(); selC.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
+          return;
+        }
+      }
       var sel = $('f-depart');
       if(sel && !sel.value){
         toast('⚠️ Choisissez le départ avant d\'enregistrer.');
@@ -1449,6 +1718,7 @@ function greffer(){
     window.saveClientConfirme = function(){
       var colId  = window.currentCollecteId;
       var avant  = Object.keys((window.clientsParCollecte||{})[colId] || {});
+      var depuisCarre = _depAjoutCarre;
 
       var extras = {
         departId         : (($('f-depart')||{}).value || ''),
@@ -1482,6 +1752,16 @@ function greffer(){
         }
         _depPhotoTmp = null;
       }catch(e){}
+
+      // Ajouté depuis le carré Client : l'original ramène vers s-collecte
+      // après son propre toast (1.5s) — on corrige juste après vers s-clients.
+      if(depuisCarre){
+        _depAjoutCarre = false;
+        var bcc = $('f-bloc-collecte'); if(bcc) bcc.style.display = 'none';
+        setTimeout(function(){
+          try{ goTo('s-clients'); renderContacts(); }catch(e){}
+        }, 1650);
+      }
     };
     window.saveClientConfirme._depPatch = true;
   }
@@ -1608,14 +1888,17 @@ function depMajBoutonEspaces(){
     b = document.createElement('button');
     b.id = 'dep-btn-espaces';
     b.setAttribute('onclick', "goTo('s-espaces');depRenderEspaces();");
+    b.title = 'Retour aux espaces';
     b.style.cssText = 'background:#252599;color:#fff;border:none;border-radius:8px;padding:7px 11px;'
       + 'font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);display:none;';
-    b.innerHTML = '&#128230;';
+    b.innerHTML = '&#9635;';
     var droite = header.lastElementChild;
     if(droite && droite.firstChild) droite.insertBefore(b, droite.firstChild);
     else header.appendChild(b);
   }
-  b.style.display = estDirection() ? 'block' : 'none';
+  // Tout le monde a désormais un écran d'espaces, donc tout le monde
+  // doit pouvoir y revenir depuis l'accueil.
+  b.style.display = 'block';
 }
 
 /* --- Écrire dans le fil d'activité (la direction reste visible) --- */
@@ -1645,6 +1928,8 @@ function demarrer(){
   try{ injecterEcrans(); }catch(e){ console.error('departs: écrans', e); }
   try{ injecterChampsClient(); }catch(e){ console.error('departs: champs', e); }
   try{ injecterChampsFiche(); }catch(e){ console.error('departs: champs fiche', e); }
+  try{ injecterBoutonsClient(); }catch(e){ console.error('departs: boutons client', e); }
+  try{ cacherOngletClientAccueil(); }catch(e){ console.error('departs: onglet client', e); }
   try{ greffer(); }catch(e){ console.error('departs: greffes', e); }
   try{ depSetLivraison(false); }catch(e){}
   try{ depSetLivraisonFiche(false); }catch(e){}
