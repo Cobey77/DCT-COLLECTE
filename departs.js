@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.6.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.7.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -48,6 +48,13 @@
        Modifier (fonctionnel), et anticipe les briques à venir :
        Historique d'envoi / Factures, Impression de facture avec QR
        code, Bordereau d'envoi (affichés mais marqués "à venir").
+   18. Première brique de la Facturation (LOT 2, étape 1/N) : chaque
+       client rattaché à un départ (collecte ou dépôt direct) a
+       maintenant une page Facture en lecture seule — colis, prix,
+       destinataire, livraison, statut de paiement (Non payé /
+       Partiellement payé / Payé, calculé automatiquement). Les
+       versements et la traçabilité des modifications arrivent dans
+       une prochaine étape.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -57,7 +64,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.6.0';
+var DEP_VERSION = 'v1.7.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -72,6 +79,14 @@ var STATUTS_DEPART = {
   cloture     : {label:'Clôturé',        bg:'#EDEDED', color:'#777777', dot:'#999999'}
 };
 var ORDRE_STATUTS = ['preparation','parti','arrive','cloture'];
+
+// Statut de paiement d'une facture — jamais choisi à la main, toujours
+// recalculé à partir des versements enregistrés (voir depCalculerPaiement).
+var STATUTS_PAIEMENT = {
+  non_paye : {label:'Non payé',            bg:'#FDEDED', color:'#992020', dot:'#c0392b'},
+  partiel  : {label:'Partiellement payé',  bg:'#FFF4E0', color:'#A04800', dot:'#E58A00'},
+  paye     : {label:'Payé',                bg:'#D4F0E0', color:'#006b2d', dot:'#009A44'}
+};
 
 window.departsData = {};        // { id: {nom, dateDepart, ...} }
 var _depEditId   = null;        // départ en cours de modification
@@ -469,6 +484,16 @@ function injecterEcrans(){
   +       '<div class="dep-fc-val" id="dep-fc-ville">—</div></div>'
   +     '<button class="btn btn-green" style="margin-top:10px;" onclick="depOuvrirActionsContact()">&#8942; Actions</button>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 7 : facture d'un client (lecture seule) ---- */
+  + '<div class="screen" id="s-facture">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" id="dep-fact-retour" onclick="depDetail(_depDetailIdPublic())">&larr; D&eacute;part</button>'
+  +     '<div class="h-title">Facture</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content" id="dep-fact-content"></div>'
   + '</div>';
 
   while(w.firstChild) parent.appendChild(w.firstChild);
@@ -946,13 +971,15 @@ window.depDetail = function(id){
         +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
         +   '</div>'
-        +   (peutBouger
-            ? '<div style="display:flex;gap:6px;flex-shrink:0;">'
-              + '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
-              + '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
-                + 'onclick="event.stopPropagation();depDetacherClient(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;tacher</button>'
-              + '</div>'
-            : '')
+        +   '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">'
+              + '<button class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
+                + 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#129534; Facture</button>'
+              + (peutBouger
+                ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
+                  + '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
+                  + 'onclick="event.stopPropagation();depDetacherClient(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;tacher</button>'
+                : '')
+            + '</div>'
         + '</div>';
     });
   }
@@ -963,7 +990,91 @@ window.depDetail = function(id){
 };
 
 /* ─────────────────────────────────────────────
-   10bis. OUVRIR LA FICHE D'UN CLIENT DEPUIS LE DÉPART
+   10bis. FACTURE D'UN CLIENT (lecture seule — étape 1/N de la
+   Facturation) : ni versement, ni QR, ni WhatsApp pour l'instant,
+   juste l'affichage. Aucune nouvelle case Firebase : on lit
+   directement la fiche client déjà en base (collecte ou dépôt).
+   ───────────────────────────────────────────── */
+
+// Le statut de paiement n'est jamais choisi à la main : toujours
+// recalculé à partir des versements (vide pour l'instant, viendra
+// dans une prochaine étape).
+window.depCalculerPaiement = function(c){
+  var total = parseFloat(c.prix) || 0;
+  var versements = Array.isArray(c.versements) ? c.versements : [];
+  var paye = versements.reduce(function(s, v){ return s + (parseFloat(v && v.montant) || 0); }, 0);
+  var reste = Math.max(0, total - paye);
+  var statut = paye <= 0 ? 'non_paye' : (reste > 0 ? 'partiel' : 'paye');
+  return { total: total, paye: paye, reste: reste, statut: statut };
+}
+
+window.depOuvrirFacture = function(collecteId, clientId, depot){
+  var c = depot
+    ? (window.depotClients || {})[clientId]
+    : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
+  if(!c){ toast('⚠️ Facture introuvable.'); return; }
+  depRenderFacture(c);
+  goTo('s-facture');
+};
+
+function depRenderFacture(c){
+  var pay = depCalculerPaiement(c);
+  var st = STATUTS_PAIEMENT[pay.statut];
+  var prixLivraison = parseFloat(c.prixLivraison) || 0;
+  var totalAvecLivraison = pay.total + (c.livraisonDakar ? prixLivraison : 0);
+  var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+
+  var kv = function(lab, val){
+    return '<div class="dep-fc-champ"><div class="dep-fc-lab">'+lab+'</div><div class="dep-fc-val">'+val+'</div></div>';
+  };
+
+  var h = '';
+  h += '<div style="text-align:center;margin-bottom:16px;">'
+    + '<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';font-size:12.5px;padding:7px 16px;display:inline-block;">'+st.label+'</div>'
+    + '</div>';
+
+  h += kv('Client', esc(nom));
+  h += kv('T&eacute;l&eacute;phone', esc(c.tel || '—'));
+  h += kv('Colis', esc(c.colis || '—'));
+
+  if(c.destinataireNom || c.destinataireTel){
+    h += kv('Destinataire', esc(c.destinataireNom || '—') + (c.destinataireTel ? (' &middot; ' + esc(c.destinataireTel)) : ''));
+  }
+  if(c.livraisonDakar){
+    h += kv('Livraison &agrave; Dakar', esc(c.livraisonAdresse || '—'));
+  }
+
+  // Le total colis est mis en avant (c'est ce qui compte pour la
+  // compta DCT) ; la livraison reste visible mais secondaire.
+  h += '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;margin:16px 0;text-align:center;">'
+    + '<div style="font-size:11px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;">Total colis</div>'
+    + '<div style="font-size:28px;font-weight:800;color:var(--text);margin:4px 0;">' + pay.total + ' &euro;</div>'
+    + (c.livraisonDakar
+        ? '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;">+ ' + prixLivraison + ' &euro; livraison &middot; total avec livraison : ' + totalAvecLivraison + ' &euro;</div>'
+        : '')
+    + '</div>';
+
+  h += '<div style="display:flex;gap:10px;margin-bottom:16px;">'
+    + '<div style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px;text-align:center;">'
+      + '<div style="font-size:17px;font-weight:800;color:#006b2d;">' + pay.paye + ' &euro;</div>'
+      + '<div style="font-size:10px;color:var(--text3);font-weight:700;">PAY&Eacute;</div></div>'
+    + '<div style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px;text-align:center;">'
+      + '<div style="font-size:17px;font-weight:800;color:#992020;">' + pay.reste + ' &euro;</div>'
+      + '<div style="font-size:10px;color:var(--text3);font-weight:700;">RESTE &Agrave; PAYER</div></div>'
+    + '</div>';
+
+  if(c.note){
+    h += kv('Note', esc(c.note));
+  }
+
+  h += '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:6px;">Ajout de versement, QR code et envoi WhatsApp &mdash; &agrave; venir.</div>';
+
+  var box = $('dep-fact-content');
+  if(box) box.innerHTML = h;
+}
+
+/* ─────────────────────────────────────────────
+   10ter. OUVRIR LA FICHE D'UN CLIENT DEPUIS LE DÉPART
    ───────────────────────────────────────────── */
 
 window.depOuvrirFicheClient = function(collecteId, clientId){
@@ -985,7 +1096,7 @@ window.depOuvrirFicheClient = function(collecteId, clientId){
 };
 
 /* ─────────────────────────────────────────────
-   10ter. INSCRIRE UN CLIENT DIRECTEMENT AU DÉPÔT
+   10quater. INSCRIRE UN CLIENT DIRECTEMENT AU DÉPÔT
    (hors collecte — réservé à Issyaka et Cobey)
    ───────────────────────────────────────────── */
 
