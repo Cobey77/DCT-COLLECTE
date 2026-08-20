@@ -58,8 +58,14 @@
        affiché (montant, date/heure, collaborateur), et statut de
        paiement recalculé automatiquement à chaque enregistrement.
        Accessible à tous les collaborateurs connectés, ainsi qu'aux
-       clients du dépôt direct. La traçabilité des modifications
-       (prix, colis, destinataire...) arrive dans une prochaine étape.
+       clients du dépôt direct.
+   20. Facturation, étape 3/N : traçabilité des modifications de
+       facture (prix, colis, destinataire, livraison, note), avec le
+       même mécanisme que la fiche France & Europe — historique
+       affiché sur la facture (qui a fait quoi, quand) et notification
+       dans le fil d'Activité partagé. La modification des factures
+       est ouverte à tous les collaborateurs, plus de verrou "seul
+       l'auteur peut modifier".
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -69,7 +75,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.8.0';
+var DEP_VERSION = 'v1.9.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -1117,6 +1123,19 @@ function depRenderFacture(c){
     h += kv('Note', esc(c.note));
   }
 
+  // Historique des modifications de la facture (prix, colis, destinataire,
+  // livraison, note) — même mécanisme que la fiche France & Europe, le plus
+  // récent en premier. Vide tant qu'aucune modification n'a été faite.
+  var histFact = Array.isArray(c.hist) ? c.hist.slice().reverse() : [];
+  h += '<div class="dep-sec">Historique des modifications</div>';
+  if(!histFact.length){
+    h += '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucune modification enregistr&eacute;e pour l\'instant.</div>';
+  } else {
+    h += '<div class="dep-fc-champ" style="font-size:12px;color:var(--text2);line-height:1.9;">'
+      + histFact.map(function(x){ return esc(dateHeureFr(x.ts))+' &mdash; <b>'+esc(x.q||'')+'</b> '+esc(x.a||''); }).join('<br>')
+      + '</div>';
+  }
+
   // Historique des versements — le plus récent en premier.
   var versements = Array.isArray(c.versements) ? c.versements.slice().sort(function(a,b){ return (b.le||0)-(a.le||0); }) : [];
   h += '<div class="dep-sec">Historique des versements</div>';
@@ -1330,6 +1349,28 @@ window.depEnregistrerDepot = function(){
   if(photo){ fiche.aPhotoColis = true; }
   else if(photo === ''){ fiche.aPhotoColis = false; }
   else { fiche.aPhotoColis = (existant && existant.aPhotoColis) || false; }
+
+  // Traçabilité des modifications de facture — uniquement en édition (pas à
+  // la création), même mécanisme que pour les clients de collecte. .set()
+  // remplaçant tout le nœud, l'historique existant doit être recopié dans
+  // tous les cas, sinon il serait perdu même sans changement cette fois-ci.
+  if(existant){
+    var histD = existant.hist || [];
+    var changeD = [];
+    if((parseFloat(fiche.prix)||0) !== (parseFloat(existant.prix)||0)) changeD.push('montant');
+    if((fiche.colis||'') !== (existant.colis||'')) changeD.push('colis');
+    if((fiche.destinataireNom||'') !== (existant.destinataireNom||'') || (fiche.destinataireTel||'') !== (existant.destinataireTel||'')) changeD.push('destinataire');
+    if(!!fiche.livraisonDakar !== !!existant.livraisonDakar || (fiche.livraisonAdresse||'') !== (existant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(existant.prixLivraison)||0)) changeD.push('livraison');
+    if((fiche.note||'') !== (existant.note||'')) changeD.push('note');
+    if(changeD.length){
+      histD.push({ q: u.name || u.id || '', a: 'a modifié la facture — '+changeD.join(', '), ts: Date.now() });
+      depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(changeD.join(', ')));
+    }
+    fiche.hist = histD;
+    // .set() remplace tout le nœud : sans ça, corriger la fiche d'un client
+    // dépôt effacerait aussi ses versements déjà enregistrés (v1.8.0).
+    fiche.versements = existant.versements || [];
+  }
 
   db.ref('dct_depot/'+id).set(fiche);
   if(photo){
@@ -2291,6 +2332,25 @@ function greffer(){
             fiche.historiqueDepart = hist;
           }
           fiche.departId = nouveauDepart;
+          // 3bis. Traçabilité des modifications de facture (demande de Cobey,
+          // 20/08/2026) : même mécanisme que la fiche France & Europe
+          // (hist[] : {q:auteur, a:action, ts:horodatage}), ouvert à tous
+          // les collaborateurs — plus de verrou "seul l'auteur peut modifier".
+          (function(){
+            var uH = window.currentUser || {};
+            var change = [];
+            if((parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)) change.push('montant');
+            if((fiche.colis||'') !== (avant.colis||'')) change.push('colis');
+            if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')) change.push('destinataire');
+            if(!!fiche.livraisonDakar !== !!avant.livraisonDakar || (fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)) change.push('livraison');
+            if((fiche.note||'') !== (avant.note||'')) change.push('note');
+            if(change.length){
+              var histFact = fiche.hist || [];
+              histFact.push({ q: uH.name || uH.id || '', a: 'a modifié la facture — '+change.join(', '), ts: Date.now() });
+              fiche.hist = histFact;
+              depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(change.join(', ')));
+            }
+          })();
           // 4. La photo
           if(photo === ''){
             fiche.aPhotoColis = false;
