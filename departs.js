@@ -66,6 +66,10 @@
        dans le fil d'Activité partagé. La modification des factures
        est ouverte à tous les collaborateurs, plus de verrou "seul
        l'auteur peut modifier".
+   21. Correctif : les comptes Global Logistique (Danny Diop + Postes
+       1 à 4, tous marqués "societe") ne sont plus redirigés vers
+       l'écran des espaces (DÉPARTS/COLLECTE/CLIENT) à la connexion.
+       Ils restent sur leur propre parcours, comme avant le module.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -75,7 +79,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.9.0';
+var DEP_VERSION = 'v1.9.1';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -2140,6 +2144,11 @@ function greffer(){
       try{ appliquerProfils(); }catch(e){}
       try{ origLogin.apply(this, arguments); }
       catch(e){ console.error('departs: _finalisLoginCore original', e); }
+      // Comptes Global Logistique (Danny + Postes 1-4, tous marqués
+      // "societe") : à part, hors DCT. L'original les a déjà routés vers
+      // leur propre écran (_finalisLoginPartenaire / ouvrirPoste) — on ne
+      // touche à rien de plus, surtout pas de goTo('s-espaces').
+      if(collab && collab.societe) return;
       try{
         // Le bouton ⚙️ suit la direction, pas seulement l'admin technique
         var btn = $('btn-admin-panel');
