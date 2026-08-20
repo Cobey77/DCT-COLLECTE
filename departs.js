@@ -52,9 +52,14 @@
        client rattaché à un départ (collecte ou dépôt direct) a
        maintenant une page Facture en lecture seule — colis, prix,
        destinataire, livraison, statut de paiement (Non payé /
-       Partiellement payé / Payé, calculé automatiquement). Les
-       versements et la traçabilité des modifications arrivent dans
-       une prochaine étape.
+       Partiellement payé / Payé, calculé automatiquement).
+   19. Facturation, étape 2/N : ajout de versements directement sur la
+       page facture (montant + bouton), avec historique des versements
+       affiché (montant, date/heure, collaborateur), et statut de
+       paiement recalculé automatiquement à chaque enregistrement.
+       Accessible à tous les collaborateurs connectés, ainsi qu'aux
+       clients du dépôt direct. La traçabilité des modifications
+       (prix, colis, destinataire...) arrive dans une prochaine étape.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -64,7 +69,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.7.0';
+var DEP_VERSION = 'v1.8.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -96,6 +101,7 @@ var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depPhotoFiche = null;      // photo en attente sur la fiche client
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
+var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
 
 window.depotClients = {};       // { id: {...} } — clients inscrits directement au dépôt, hors collecte
 var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un client du dépôt
@@ -990,10 +996,10 @@ window.depDetail = function(id){
 };
 
 /* ─────────────────────────────────────────────
-   10bis. FACTURE D'UN CLIENT (lecture seule — étape 1/N de la
-   Facturation) : ni versement, ni QR, ni WhatsApp pour l'instant,
-   juste l'affichage. Aucune nouvelle case Firebase : on lit
-   directement la fiche client déjà en base (collecte ou dépôt).
+   10bis. FACTURE D'UN CLIENT (étapes 1 et 2/N de la Facturation) :
+   affichage + ajout de versements. QR code et WhatsApp pour une
+   prochaine étape. Aucune nouvelle case Firebase : on lit et on met
+   à jour directement la fiche client déjà en base (collecte ou dépôt).
    ───────────────────────────────────────────── */
 
 // Le statut de paiement n'est jamais choisi à la main : toujours
@@ -1013,8 +1019,52 @@ window.depOuvrirFacture = function(collecteId, clientId, depot){
     ? (window.depotClients || {})[clientId]
     : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
   if(!c){ toast('⚠️ Facture introuvable.'); return; }
+  _depFactureCtx = { collecteId: collecteId || '', clientId: clientId, depot: !!depot };
   depRenderFacture(c);
   goTo('s-facture');
+};
+
+// "1755701520000" → "20/08/2026 14:32"
+function dateHeureFr(ts){
+  if(!ts) return '—';
+  var d = new Date(ts);
+  var jj = ('0'+d.getDate()).slice(-2);
+  var mm = ('0'+(d.getMonth()+1)).slice(-2);
+  var hh = ('0'+d.getHours()).slice(-2);
+  var mi = ('0'+d.getMinutes()).slice(-2);
+  return jj+'/'+mm+'/'+d.getFullYear()+' '+hh+':'+mi;
+}
+
+window.depAjouterVersement = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
+
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  var input = $('dep-fact-vers-montant');
+  var montant = parseFloat(input && input.value) || 0;
+  if(montant <= 0){ toast('⚠️ Indiquez un montant supérieur à 0.'); return; }
+
+  var u = window.currentUser || {};
+  var versements = Array.isArray(c.versements) ? c.versements : [];
+  versements.push({ montant: montant, le: Date.now(), par: u.name || u.id || '' });
+  c.versements = versements;
+
+  if(ctx.depot){
+    db.ref('dct_depot/'+ctx.clientId).update({ versements: versements });
+  } else {
+    try{ sauvegarder(); }catch(e){}
+  }
+
+  depActivite('&#128176;', 'a enregistr&eacute; un versement de <strong>'+montant+' &euro;</strong> pour <strong>'+esc(c.name||'')+'</strong>');
+
+  toast('✅ Versement enregistré');
+  if(input) input.value = '';
+  depRenderFacture(c);
 };
 
 function depRenderFacture(c){
@@ -1067,7 +1117,29 @@ function depRenderFacture(c){
     h += kv('Note', esc(c.note));
   }
 
-  h += '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:6px;">Ajout de versement, QR code et envoi WhatsApp &mdash; &agrave; venir.</div>';
+  // Historique des versements — le plus récent en premier.
+  var versements = Array.isArray(c.versements) ? c.versements.slice().sort(function(a,b){ return (b.le||0)-(a.le||0); }) : [];
+  h += '<div class="dep-sec">Historique des versements</div>';
+  if(!versements.length){
+    h += '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucun versement enregistr&eacute; pour l\'instant.</div>';
+  } else {
+    versements.forEach(function(v){
+      h += '<div class="dep-fc-champ" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+        + '<div style="font-size:15px;font-weight:800;color:#006b2d;">' + (parseFloat(v.montant)||0) + ' &euro;</div>'
+        + '<div style="font-size:11px;color:var(--text3);text-align:right;">' + esc(dateHeureFr(v.le))
+        +   (v.par ? '<br>'+esc(v.par) : '') + '</div>'
+        + '</div>';
+    });
+  }
+
+  // Ajout d'un versement — ouvert à tous les collaborateurs connectés.
+  h += '<div class="dep-sec">Ajouter un versement</div>'
+    + '<div class="fg"><label class="fl">Montant (&euro;)</label>'
+    +   '<input class="fi" id="dep-fact-vers-montant" type="number" min="0" step="1" placeholder="0" '
+    +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;"></div>'
+    + '<button class="btn btn-green" onclick="depAjouterVersement()">&#9989; Enregistrer le versement</button>';
+
+  h += '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:16px;">QR code et envoi WhatsApp &mdash; &agrave; venir.</div>';
 
   var box = $('dep-fact-content');
   if(box) box.innerHTML = h;
