@@ -27,7 +27,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.1.0';
+var DEP_VERSION = 'v1.1.1';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -726,14 +726,14 @@ window.depDetail = function(id){
     clients.forEach(function(x){
       var c = x.c;
       var peutBouger = (d.statut === 'preparation');
-      h += '<div class="dep-cli">'
+      h += '<div class="dep-cli" style="cursor:pointer;" onclick="depOuvrirFicheClient(\''+x.collecteId+'\',\''+x.clientId+'\')">'
         +   '<div style="flex:1;min-width:0;">'
         +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+'</div>'
         +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
         +   '</div>'
         +   (peutBouger
-            ? '<button class="dep-cli-btn" onclick="depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
+            ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
             : '')
         + '</div>';
     });
@@ -742,6 +742,28 @@ window.depDetail = function(id){
   var box = $('dep-d-content');
   if(box) box.innerHTML = h;
   goTo('s-depart-detail');
+};
+
+/* ─────────────────────────────────────────────
+   10bis. OUVRIR LA FICHE D'UN CLIENT DEPUIS LE DÉPART
+   ───────────────────────────────────────────── */
+
+window.depOuvrirFicheClient = function(collecteId, clientId){
+  if(typeof openClientFiche !== 'function'){ toast('⚠️ Fonction indisponible.'); return; }
+  var cls = (window.clientsParCollecte||{})[collecteId] || {};
+  if(!cls[clientId]){ toast('⚠️ Client introuvable.'); return; }
+
+  // Se positionner sur la bonne collecte avant d'ouvrir la fiche : un départ
+  // peut regrouper des clients venant de plusieurs collectes différentes.
+  window.currentCollecteId = collecteId;
+
+  openClientFiche(clientId, 's-depart-detail');
+
+  // Le retour/annuler d'origine se contente d'un goTo() figé ; on le remplace
+  // pour re-render l'écran du départ (compteurs et liste à jour après édition).
+  var retourDepart = function(){ depDetail(_depDetailId); };
+  var bk = $('client-back'); if(bk) bk.onclick = retourDepart;
+  var cn = $('client-cancel'); if(cn) cn.onclick = retourDepart;
 };
 
 /* ─────────────────────────────────────────────
