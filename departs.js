@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.3.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.4.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -20,9 +20,20 @@
    8. Corrige une perte de données de saveClientEdit() (voir plus bas)
    9. Cliquer sur un client dans le détail d'un départ ouvre sa fiche
    10. Détacher une collecte entière d'un départ (annule un rattachement)
-   11. Carré CLIENT : carnet de contacts, export/import CSV, ajout avec
-       choix explicite de la collecte (l'onglet Clients de l'accueil
-       disparaît, remplacé par ce carré)
+   11. Carré CLIENT : carnet de contacts, export/import CSV (le bouton
+       "+ Ajouter" a été retiré : tout client passe par une collecte,
+       ou par l'inscription directe au dépôt — voir point 14)
+   12. Le nom et le prénom sont désormais facultatifs à l'inscription :
+       au moins l'un des deux est requis, en plus de la civilité
+       (M. / Mme / Société)
+   13. Le départ n'est plus choisi à la création du client : il est
+       attribué plus tard, quand le colis est confié à un container
+       (le champ reste modifiable par la direction depuis la fiche)
+   14. Bouton "Inscrire un client au dépôt", réservé à Issyaka et
+       Cobey, dans le détail d'un départ : pour les clients qui ne
+       passent pas par une collecte du dimanche et valident leur colis
+       directement avec un collaborateur. Ces clients sont stockés à
+       part (nœud Firebase dct_depot), hors du système de collectes.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -32,7 +43,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.3.0';
+var DEP_VERSION = 'v1.4.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -59,7 +70,11 @@ var _depRattachDepart = null;   // départ cible du rattachement en masse
 var _depRattachCollecte = '';   // collecte choisie pour le rattachement
 var _depDetachDepart = null;    // départ cible du détachement en masse
 var _depDetachCollecte = '';    // collecte choisie pour le détachement
-var _depAjoutCarre = false;     // true quand "+ Ajouter un client" vient du carré Client (pas d'une collecte déjà ouverte)
+
+window.depotClients = {};       // { id: {...} } — clients inscrits directement au dépôt, hors collecte
+var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un client du dépôt
+var _depDepotEditId = null;     // id du client dépôt en cours de modification (null = création)
+var _depDepotPhotoTmp = null;   // photo en attente pour le formulaire dépôt
 
 /* ─────────────────────────────────────────────
    2. PETITS OUTILS
@@ -141,6 +156,13 @@ function compteursDepart(departId){
     if(x.c.departId === departId){
       n++;
       euros += (parseFloat(x.c.prix) || 0);
+    }
+  });
+  Object.keys(window.depotClients||{}).forEach(function(id){
+    var c = window.depotClients[id];
+    if(c && c.departId === departId){
+      n++;
+      euros += (parseFloat(c.prix) || 0);
     }
   });
   return { clients:n, euros:euros };
@@ -365,6 +387,67 @@ function injecterEcrans(){
   +   '<div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">'
   +     '<button class="btn btn-gray" style="margin:0;border-color:#F5C6C6;background:#FDEDED;color:#992020;" id="dep-x-btn" onclick="depDetachValider()">D&eacute;tacher</button>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 7 : inscrire / modifier un client au dépôt ---- */
+  + '<div class="screen" id="s-depot-form">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depDetail(_depDepotDepartPublic())">&larr; Retour</button>'
+  +     '<div class="h-title" id="dp-form-titre">Client au d&eacute;p&ocirc;t</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div class="dep-alert">&#127970; Ce client ne passe pas par une collecte du dimanche : il s\'inscrit directement, ici, dans ce d&eacute;part.</div>'
+  +     '<div class="fg"><label class="fl">Civilit&eacute;</label><div id="dp-civ" style="display:flex;gap:6px;"></div></div>'
+  +     '<div class="form-row">'
+  +       '<div class="fg" id="dp-bloc-prenom"><label class="fl">Pr&eacute;nom</label><input class="fi" id="dp-prenom" placeholder="Fatou"></div>'
+  +       '<div class="fg"><label class="fl" id="dp-lab-nom">Nom</label><input class="fi" id="dp-nom" placeholder="Diallo"></div>'
+  +     '</div>'
+  +     '<div class="fg"><label class="fl">T&eacute;l&eacute;phone</label><input class="fi" id="dp-tel" type="tel" placeholder="06 00 00 00 00"></div>'
+  +     '<div class="fg"><label class="fl">Deuxi&egrave;me num&eacute;ro <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label><input class="fi" id="dp-tel2" type="tel" placeholder="07 00 00 00 00"></div>'
+  +     '<div class="fg"><label class="fl">Adresse</label><input class="fi" id="dp-adresse" placeholder="12 rue Pasteur"></div>'
+  +     '<div class="fg"><label class="fl">Infos compl&eacute;mentaires</label><input class="fi" id="dp-infos" placeholder="Appt 3B &middot; B&acirc;t C..."></div>'
+  +     '<div class="form-row">'
+  +       '<div class="fg"><label class="fl">Code postal</label><input class="fi" id="dp-cp" placeholder="93300" maxlength="5"></div>'
+  +       '<div class="fg"><label class="fl">Ville</label><input class="fi" id="dp-ville" placeholder="Aubervilliers"></div>'
+  +     '</div>'
+  +     '<div class="fg"><label class="fl">Description du colis</label><textarea class="fi" id="dp-colis" rows="3" placeholder="ex: 2 valises + 1 carton..." style="resize:none;"></textarea></div>'
+  +     '<div class="fg"><label class="fl">Prix (&euro;)</label><input class="fi" id="dp-prix" placeholder="100" type="number" min="0" style="font-size:20px;font-weight:700;text-align:center;padding:14px;"></div>'
+
+  +     '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
+  +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dp-dest-nom" placeholder="Awa Ndiaye"></div>'
+  +     '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label><input class="fi" id="dp-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
+
+  +     '<div class="dep-sec">Livraison &agrave; Dakar</div>'
+  +     '<div class="fg"><label class="fl">Le colis doit-il &ecirc;tre livr&eacute; ?</label>'
+  +       '<div style="display:flex;gap:8px;">'
+  +         '<button type="button" class="dep-st" id="dp-liv-non" onclick="depSetLivraisonDepot(false)">Non &middot; retrait sur place</button>'
+  +         '<button type="button" class="dep-st" id="dp-liv-oui" onclick="depSetLivraisonDepot(true)">Oui &middot; livraison</button>'
+  +       '</div></div>'
+  +     '<div id="dp-liv-bloc" style="display:none;">'
+  +       '<div class="fg"><label class="fl">Ville / adresse de livraison</label><input class="fi" id="dp-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+  +       '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label><input class="fi" id="dp-liv-prix" type="number" min="0" placeholder="0"></div>'
+  +     '</div>'
+
+  +     '<div class="dep-sec">Photo et note</div>'
+  +     '<div class="dep-photo-box" id="dp-photo-box" onclick="depOuvrirPhotoDepot()">'
+  +       '<div id="dp-photo-vide"><div style="font-size:28px;">&#128247;</div>'
+  +       '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
+  +       '<img id="dp-photo-apercu" style="display:none;">'
+  +     '</div>'
+  +     '<input type="file" id="dp-photo-input" accept="image/*" style="display:none;" onchange="depPhotoChoisieDepot(this)">'
+  +     '<div id="dp-photo-actions" style="display:none;margin-bottom:12px;">'
+  +       '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhotoDepot()">&#128465; Retirer la photo</button>'
+  +     '</div>'
+  +     '<div class="fg"><label class="fl">Note <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+  +       '<textarea class="fi" id="dp-note" rows="2" placeholder="Remarque..." style="resize:none;"></textarea></div>'
+
+  +     '<div style="margin-top:6px;">'
+  +       '<button class="btn btn-green" onclick="depEnregistrerDepot()">&#9989; Enregistrer</button>'
+  +       '<button class="btn btn-gray" onclick="depDetail(_depDepotDepartPublic())">&#10005; Annuler</button>'
+  +     '</div>'
+  +     '<div id="dp-suppr" style="display:none;margin-top:6px;"></div>'
+  +   '</div>'
   + '</div>';
 
   while(w.firstChild) parent.appendChild(w.firstChild);
@@ -389,52 +472,24 @@ function injecterEcrans(){
 // petit pont pour le bouton "Modifier" de l'en-tête
 window._depDetailIdPublic = function(){ return _depDetailId; };
 
+// petit pont pour les boutons "Retour"/"Annuler" de l'écran dépôt
+window._depDepotDepartPublic = function(){ return _depDepotDepart; };
+
 /* ─────────────────────────────────────────────
    5. LES CHAMPS AJOUTÉS À LA FICHE CLIENT (s-add)
    ───────────────────────────────────────────── */
 
 function injecterChampsClient(){
   var ecran = $('s-add');
-  if(!ecran || $('f-depart')) return;
+  if(!ecran || $('f-dest-nom')) return;
   var content = ecran.querySelector('.content');
   if(!content) return;
 
-  /* --- La collecte, visible seulement quand on ajoute depuis le carré
-     Client (sinon la collecte en cours est déjà connue) --- */
-  var banniere = content.querySelector('.info-banner');
-  var blocCollecte = document.createElement('div');
-  blocCollecte.id = 'f-bloc-collecte';
-  blocCollecte.style.display = 'none';
-  blocCollecte.innerHTML = ''
-    + '<div class="fg" style="margin-bottom:14px;">'
-    +   '<label class="fl" style="color:#009A44;">Collecte &middot; obligatoire</label>'
-    +   '<select class="fi" id="f-collecte" style="border-color:#009A44;border-width:2px;font-weight:700;" '
-    +     'onchange="window.currentCollecteId=this.value;">'
-    +     '<option value="">— Choisir une collecte —</option>'
-    +   '</select>'
-    + '</div>';
-  if(banniere && banniere.nextSibling) content.insertBefore(blocCollecte, banniere.nextSibling);
-  else content.insertBefore(blocCollecte, content.firstChild);
-
-  /* --- Le départ, tout en haut, juste après le bandeau (et après la collecte) --- */
-  var blocDepart = document.createElement('div');
-  blocDepart.innerHTML = ''
-    + '<div class="fg" style="margin-bottom:14px;">'
-    +   '<label class="fl" style="color:#252599;">D&eacute;part &middot; obligatoire</label>'
-    +   '<select class="fi" id="f-depart" style="border-color:#252599;border-width:2px;font-weight:700;">'
-    +     '<option value="">— Choisir un d&eacute;part —</option>'
-    +   '</select>'
-    +   '<div id="f-depart-msg" style="display:none;font-size:12px;font-weight:700;color:#c0392b;margin-top:6px;"></div>'
-    + '</div>';
-  content.insertBefore(blocDepart, blocCollecte.nextSibling);
-
-  /* --- Des id stables sur Retour/Annuler pour pouvoir les re-brancher
-     quand on vient du carré Client --- */
-  var backBtn = ecran.querySelector('.header .btn-back');
-  if(backBtn && !backBtn.id) backBtn.id = 'add-back-btn';
-  var cancelBtn = null;
-  Array.prototype.forEach.call(content.querySelectorAll('.btn-gray'), function(b){ cancelBtn = b; });
-  if(cancelBtn && !cancelBtn.id) cancelBtn.id = 'add-cancel-btn';
+  /* --- Le départ n'est PLUS choisi à l'inscription : il est attribué
+     plus tard, quand le colis est confié à un container (au moment de
+     la facture, ou via le rattachement en masse depuis un départ).
+     Idem pour la collecte : un client est toujours ajouté depuis une
+     collecte déjà ouverte, currentCollecteId est donc déjà connu. --- */
 
   /* --- Les nouveaux champs, avant les boutons --- */
   var boutons = null;
@@ -507,6 +562,14 @@ function ecouterDeparts(){
     try{ if($('s-departs') && $('s-departs').classList.contains('active')) depRenderListe(); }catch(e){}
     try{ if($('s-espaces') && $('s-espaces').classList.contains('active')) depRenderEspaces(); }catch(e){}
     try{ if($('s-add') && $('s-add').classList.contains('active')) depRemplirSelect(); }catch(e){}
+  });
+
+  // Clients inscrits directement au dépôt, hors collecte
+  db.ref('dct_depot').on('value', function(snap){
+    window.depotClients = snap.val() || {};
+    try{
+      if(_depDetailId && $('s-depart-detail') && $('s-depart-detail').classList.contains('active')) depDetail(_depDetailId);
+    }catch(e){}
   });
 }
 
@@ -787,8 +850,13 @@ window.depDetail = function(id){
     +   '</div>'
     + '</div>';
 
-  // Les clients rattachés
+  // Les clients rattachés : ceux venus d'une collecte + ceux inscrits
+  // directement au dépôt (hors collecte)
   var clients = tousLesClients().filter(function(x){ return x.c.departId === id; });
+  var clientsDepot = Object.keys(window.depotClients||{})
+    .filter(function(k){ return window.depotClients[k] && window.depotClients[k].departId === id; })
+    .map(function(k){ return { depot:true, clientId:k, c: window.depotClients[k] }; });
+
   if(d.statut === 'preparation' && estDirection()){
     h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#C5CAE9;background:#EEF0FA;color:#252599;" '
       +  'onclick="depRattachOuvrir()">&#128206; Rattacher une collecte enti&egrave;re</button>';
@@ -796,19 +864,26 @@ window.depDetail = function(id){
       h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#F5C6C6;background:#FDEDED;color:#992020;" '
         +  'onclick="depDetachOuvrir()">&#8617; D&eacute;tacher une collecte de ce d&eacute;part</button>';
     }
+    h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#C8E6D0;background:#EAF7EE;color:#006b2d;" '
+      +  'onclick="depOuvrirDepotForm(\''+id+'\')">&#127970; Inscrire un client au d&eacute;p&ocirc;t</button>';
   }
   h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:4px;">Clients de ce d&eacute;part</div>';
 
-  if(!clients.length){
+  var tousAffiches = clients.concat(clientsDepot);
+  if(!tousAffiches.length){
     h += '<div class="dep-vide" style="padding:28px 16px;">Aucun client rattach&eacute; pour l\'instant.</div>';
   } else {
-    clients.sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
-    clients.forEach(function(x){
+    tousAffiches.sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
+    tousAffiches.forEach(function(x){
       var c = x.c;
-      var peutBouger = (d.statut === 'preparation');
-      h += '<div class="dep-cli" style="cursor:pointer;" onclick="depOuvrirFicheClient(\''+x.collecteId+'\',\''+x.clientId+'\')">'
+      var peutBouger = (d.statut === 'preparation') && !x.depot;
+      var clic = x.depot
+        ? "depOuvrirDepotForm('"+id+"','"+x.clientId+"')"
+        : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"')";
+      h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
         +   '<div style="flex:1;min-width:0;">'
-        +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+'</div>'
+        +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
+        +       (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
         +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
         +   '</div>'
@@ -844,6 +919,214 @@ window.depOuvrirFicheClient = function(collecteId, clientId){
   var retourDepart = function(){ depDetail(_depDetailId); };
   var bk = $('client-back'); if(bk) bk.onclick = retourDepart;
   var cn = $('client-cancel'); if(cn) cn.onclick = retourDepart;
+};
+
+/* ─────────────────────────────────────────────
+   10ter. INSCRIRE UN CLIENT DIRECTEMENT AU DÉPÔT
+   (hors collecte — réservé à Issyaka et Cobey)
+   ───────────────────────────────────────────── */
+
+window.depOuvrirDepotForm = function(departId, clientId){
+  if(!estDirection()){ toast('🔒 Réservé à la direction.'); return; }
+  _depDepotDepart = departId;
+  _depDepotEditId = clientId || null;
+  _depDepotPhotoTmp = null;
+
+  var titre = $('dp-form-titre');
+  if(titre) titre.textContent = clientId ? 'Modifier ce client' : 'Client au dépôt';
+
+  var c = clientId ? (((window.depotClients||{})[clientId]) || {}) : {};
+
+  ['dp-prenom','dp-nom','dp-tel','dp-tel2','dp-adresse','dp-infos','dp-cp','dp-ville',
+   'dp-colis','dp-prix','dp-dest-nom','dp-dest-tel','dp-liv-adresse','dp-liv-prix','dp-note']
+    .forEach(function(id){ var el = $(id); if(el) el.value = ''; });
+
+  _civDct.dp = c.civilite || '';
+  _renderCivDct('dp');
+
+  if(clientId){
+    var e;
+    e = $('dp-prenom');     if(e) e.value = c.prenom || '';
+    e = $('dp-nom');        if(e) e.value = c.nom || '';
+    e = $('dp-tel');        if(e) e.value = c.tel || '';
+    e = $('dp-tel2');       if(e) e.value = c.tel2 || '';
+    e = $('dp-adresse');    if(e) e.value = c.adresse || '';
+    e = $('dp-infos');      if(e) e.value = c.infos || '';
+    e = $('dp-cp');         if(e) e.value = c.cp || '';
+    e = $('dp-ville');      if(e) e.value = c.ville || '';
+    e = $('dp-colis');      if(e) e.value = c.colis || '';
+    e = $('dp-prix');       if(e) e.value = c.prix ? String(c.prix) : '';
+    e = $('dp-dest-nom');   if(e) e.value = c.destinataireNom || '';
+    e = $('dp-dest-tel');   if(e) e.value = c.destinataireTel || '';
+    e = $('dp-liv-adresse');if(e) e.value = c.livraisonAdresse || '';
+    e = $('dp-liv-prix');   if(e) e.value = c.prixLivraison ? String(c.prixLivraison) : '';
+    e = $('dp-note');       if(e) e.value = c.note || '';
+  }
+
+  depSetLivraisonDepot(c.livraisonDakar === true);
+  _afficherPhotoDepot(null);
+  if(clientId && c.aPhotoColis && window.db && window.firebaseReady){
+    db.ref('dct_photos_colis/'+clientId).once('value', function(snap){
+      var v = snap.val();
+      if(v && v.d && _depDepotEditId === clientId) _afficherPhotoDepot(v.d);
+    });
+  }
+
+  var suppr = $('dp-suppr');
+  if(suppr){
+    if(clientId){
+      suppr.style.display = 'block';
+      suppr.innerHTML = '<button class="btn btn-gray" style="border-color:#F5C6C6;background:#FDEDED;color:#992020;" '
+        + 'onclick="depSupprimerDepot()">&#128465; Supprimer ce client</button>';
+    } else {
+      suppr.style.display = 'none';
+      suppr.innerHTML = '';
+    }
+  }
+
+  goTo('s-depot-form');
+};
+
+function _afficherPhotoDepot(data){
+  var img = $('dp-photo-apercu'), vide = $('dp-photo-vide'), act = $('dp-photo-actions');
+  if(data){
+    if(img){ img.src = data; img.style.display = 'block'; }
+    if(vide) vide.style.display = 'none';
+    if(act) act.style.display = 'block';
+  } else {
+    if(img){ img.src = ''; img.style.display = 'none'; }
+    if(vide) vide.style.display = 'block';
+    if(act) act.style.display = 'none';
+  }
+}
+
+window.depSetLivraisonDepot = function(oui){
+  var bOui = $('dp-liv-oui'), bNon = $('dp-liv-non'), bloc = $('dp-liv-bloc');
+  if(bOui) bOui.className = 'dep-st' + (oui ? ' on' : '');
+  if(bNon) bNon.className = 'dep-st' + (oui ? '' : ' on');
+  if(bloc) bloc.style.display = oui ? 'block' : 'none';
+  window._depLivraisonDepot = oui;
+};
+
+window.depOuvrirPhotoDepot = function(){
+  var i = $('dp-photo-input');
+  if(i) i.click();
+};
+
+window.depPhotoChoisieDepot = function(input){
+  var f = input && input.files && input.files[0];
+  input.value = '';
+  if(!f) return;
+  toast('⏳ Préparation de la photo…');
+  try{
+    _compresserPhoto(f, function(data){
+      if(!data){ toast('❌ Photo illisible.'); return; }
+      _depDepotPhotoTmp = data;
+      _afficherPhotoDepot(data);
+      toast('📷 Photo prête — enregistrez la fiche');
+    });
+  }catch(e){ toast('❌ Photo illisible.'); }
+};
+
+window.depRetirerPhotoDepot = function(){
+  _depDepotPhotoTmp = '';   // chaîne vide = suppression demandée
+  _afficherPhotoDepot(null);
+};
+
+window.depEnregistrerDepot = function(){
+  if(!estDirection()){ toast('🔒 Réservé à la direction.'); return; }
+  var departId = _depDepotDepart;
+  if(!departId){ toast('⚠️ Départ introuvable.'); return; }
+
+  var prenom = (($('dp-prenom')||{}).value || '').trim();
+  var nom    = (($('dp-nom')||{}).value || '').trim();
+  var cp     = (($('dp-cp')||{}).value || '').trim();
+  var tel    = (($('dp-tel')||{}).value || '').trim();
+
+  if(!prenom && !nom){ toast('⚠️ Indiquez au moins le nom ou le prénom.'); return; }
+  if(!cp){ toast('⚠️ Le code postal est requis.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
+
+  var tel2      = (($('dp-tel2')||{}).value || '').trim();
+  var adresse   = (($('dp-adresse')||{}).value || '').trim();
+  var infos     = (($('dp-infos')||{}).value || '').trim();
+  var ville     = (($('dp-ville')||{}).value || '').trim();
+  var colis     = (($('dp-colis')||{}).value || '').trim();
+  var prix      = parseFloat(($('dp-prix')||{}).value) || 0;
+  var dnom      = (($('dp-dest-nom')||{}).value || '').trim();
+  var dtel      = (($('dp-dest-tel')||{}).value || '').trim();
+  var livraison = !!window._depLivraisonDepot;
+  var ladresse  = livraison ? (($('dp-liv-adresse')||{}).value || '').trim() : '';
+  var lprix     = livraison ? (parseFloat(($('dp-liv-prix')||{}).value) || 0) : 0;
+  var note      = (($('dp-note')||{}).value || '').trim();
+  var civ       = _civDct.dp || '';
+  var dept      = cp.substring(0,2);
+  var u = window.currentUser || {};
+
+  var existant = _depDepotEditId ? ((window.depotClients||{})[_depDepotEditId]) : null;
+  var id = _depDepotEditId || ('D'+(Date.now()%999999));
+
+  var fiche = {
+    civilite: civ, prenom: prenom, nom: nom, name: _composeNom(civ, prenom, nom),
+    tel: tel, tel2: tel2, adresse: adresse, infos: infos, ville: ville, cp: cp, dept: dept,
+    colis: colis, prix: prix,
+    departId: departId,
+    destinataireNom: dnom, destinataireTel: dtel,
+    livraisonDakar: livraison, livraisonAdresse: ladresse, prixLivraison: lprix,
+    note: note,
+    bg: (existant && existant.bg) || u.bg || '#eee',
+    color: (existant && existant.color) || u.color || '#333',
+    by: (existant && existant.by) || u.name || '',
+    creeLe: (existant && existant.creeLe) || Date.now()
+  };
+
+  var photo = _depDepotPhotoTmp;
+  if(photo){ fiche.aPhotoColis = true; }
+  else if(photo === ''){ fiche.aPhotoColis = false; }
+  else { fiche.aPhotoColis = (existant && existant.aPhotoColis) || false; }
+
+  db.ref('dct_depot/'+id).set(fiche);
+  if(photo){
+    db.ref('dct_photos_colis/'+id).set({ d: photo, ts: Date.now(), q: (u.name||''), uid: (u.id||'') });
+  } else if(photo === ''){
+    db.ref('dct_photos_colis/'+id).remove();
+  }
+
+  // Le carnet de contacts global aussi, comme pour un client normal
+  if(!window.dctContacts) window.dctContacts = {};
+  var ckey = tel ? tel.replace(/\s/g,'') : (prenom+'_'+nom).toLowerCase();
+  window.dctContacts[ckey] = {
+    civilite: civ, prenom: prenom, nom: nom, name: fiche.name, tel: tel, tel2: tel2,
+    adresse: adresse, infos: infos, ville: ville, cp: cp, dept: dept, by: (u.name||'')
+  };
+  try{ sauvegarder(); }catch(e){}
+
+  depActivite('&#127970;', (_depDepotEditId ? 'a modifi&eacute; ' : 'a inscrit ')
+    + '<strong>'+esc(fiche.name)+'</strong> directement au d&eacute;p&ocirc;t — '+prix+' &euro;');
+
+  toast('✅ ' + fiche.name + ' enregistré');
+  _depDepotPhotoTmp = null;
+  _depDepotEditId = null;
+  depDetail(departId);
+};
+
+window.depSupprimerDepot = function(){
+  if(!estDirection()){ toast('🔒 Réservé à la direction.'); return; }
+  if(!_depDepotEditId) return;
+  if(!confirm('Supprimer définitivement ce client du dépôt ?')) return;
+
+  var id = _depDepotEditId;
+  var departId = _depDepotDepart;
+  var nom = (((window.depotClients||{})[id])||{}).name || '';
+
+  if(window.db && window.firebaseReady){
+    db.ref('dct_depot/'+id).remove();
+    db.ref('dct_photos_colis/'+id).remove();
+  }
+  depActivite('&#128465;', 'a supprim&eacute; <strong>'+esc(nom)+'</strong> du d&eacute;p&ocirc;t');
+  toast('🗑️ Client supprimé');
+  _depDepotEditId = null;
+  depDetail(departId);
 };
 
 /* ─────────────────────────────────────────────
@@ -1202,9 +1485,7 @@ function injecterBoutonsClient(){
   bloc.id = 'dep-cli-actions';
   bloc.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;';
   bloc.innerHTML = ''
-    + '<button type="button" class="btn btn-green" style="flex:1;min-width:140px;margin:0;" '
-    +   'onclick="depOuvrirAjoutClientCarre()">+ Ajouter un client</button>'
-    + '<button type="button" class="dep-cli-btn" onclick="depExporterClients()">&#11015;&#65039; Export</button>'
+    + '<button type="button" class="dep-cli-btn" style="flex:1;min-width:120px;" onclick="depExporterClients()">&#11015;&#65039; Export</button>'
     + '<button type="button" class="dep-cli-btn" onclick="document.getElementById(\'dep-cli-import-input\').click()">&#11014;&#65039; Import</button>'
     + '<input type="file" id="dep-cli-import-input" accept=".csv,text/csv" style="display:none;" onchange="depImporterClients(this)">';
 
@@ -1213,36 +1494,6 @@ function injecterBoutonsClient(){
 }
 
 /* ---- Ajouter un client depuis le carré Client (collecte à choisir) ---- */
-
-window.depOuvrirAjoutClientCarre = function(){
-  if(typeof window.ouvrirAjoutClient !== 'function'){ toast('⚠️ Fonction indisponible.'); return; }
-  window.ouvrirAjoutClient();     // réinitialise les champs, ouvre s-add, remet _depAjoutCarre à false
-  _depAjoutCarre = true;
-
-  var lb = $('add-collecte-label'); if(lb) lb.textContent = 'Choisissez la collecte ci-dessous';
-
-  var cols = (window.collectes || []).filter(function(c){ return c && c.statut !== 'terminee'; });
-  var h = '<option value="">— Choisir une collecte —</option>'
-    + cols.map(function(c){ return '<option value="'+c.id+'">'+esc(c.date||c.id)+'</option>'; }).join('');
-  var sel = $('f-collecte');
-  if(sel){
-    sel.innerHTML = h;
-    sel.value = cols.length === 1 ? cols[0].id : '';
-    if(cols.length === 1) window.currentCollecteId = cols[0].id;
-  }
-  var bc = $('f-bloc-collecte'); if(bc) bc.style.display = 'block';
-  if(!cols.length) toast('⚠️ Aucune collecte à venir. Créez-en une d\'abord depuis l\'accueil.');
-
-  var back = $('add-back-btn'); if(back) back.onclick = depAnnulerAjoutCarre;
-  var cancel = $('add-cancel-btn'); if(cancel) cancel.onclick = depAnnulerAjoutCarre;
-};
-
-window.depAnnulerAjoutCarre = function(){
-  _depAjoutCarre = false;
-  var bc = $('f-bloc-collecte'); if(bc) bc.style.display = 'none';
-  goTo('s-clients');
-  try{ renderContacts(); }catch(e){}
-};
 
 /* ---- Export CSV du carnet de contacts ---- */
 
@@ -1673,41 +1924,67 @@ function greffer(){
     window._finalisLoginCore._depPatch = true;
   }
 
-  /* --- C. Ouverture du formulaire client : on remet nos champs à zéro ---
-     Par défaut (bouton "+Ajouter" classique, depuis une collecte déjà
-     ouverte) on n'est PAS en mode carré Client — depOuvrirAjoutClientCarre()
-     remet le drapeau à true juste après avoir appelé cette même fonction. */
+  /* --- C. Ouverture du formulaire client : on remet nos champs à zéro --- */
   if(typeof window.ouvrirAjoutClient === 'function' && !window.ouvrirAjoutClient._depPatch){
     var origOuvrir = window.ouvrirAjoutClient;
     window.ouvrirAjoutClient = function(){
-      _depAjoutCarre = false;
-      var bc = $('f-bloc-collecte'); if(bc) bc.style.display = 'none';
       origOuvrir.apply(this, arguments);
       try{ reinitialiserNouveauxChamps(); }catch(e){}
     };
     window.ouvrirAjoutClient._depPatch = true;
   }
 
-  /* --- D. Enregistrement : le départ est obligatoire, et la collecte
-     aussi quand on ajoute depuis le carré Client --- */
+  /* --- D. Enregistrement : prénom OU nom (pas forcément les deux) ---
+     L'original exige toujours les deux (`if(!prenom||!nom||!cp)`), ce qui
+     bloque même la civilité Société (le prénom y est vidé exprès). On ne
+     court-circuite l'original QUE quand un seul des deux est rempli — sinon
+     (cas normal, les deux remplis) l'original gère tout très bien seul. */
   if(typeof window.saveClient === 'function' && !window.saveClient._depPatch){
     var origSave = window.saveClient;
     window.saveClient = function(){
-      if(_depAjoutCarre){
-        var selC = $('f-collecte');
-        if(selC && !selC.value){
-          toast('⚠️ Choisissez la collecte avant d\'enregistrer.');
-          try{ selC.focus(); selC.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
+      var prenom = (($('f-prenom')||{}).value || '').trim();
+      var nom    = (($('f-nom')||{}).value || '').trim();
+      var cp     = (($('f-cp')||{}).value || '').trim();
+
+      if(!prenom && !nom){
+        toast('⚠️ Indiquez au moins le nom ou le prénom.');
+        return;
+      }
+      if(!cp){
+        toast('⚠️ Le code postal est requis.');
+        return;
+      }
+      if(prenom && nom) return origSave.apply(this, arguments);
+
+      // Un seul des deux champs est rempli : on reproduit la vérification
+      // de doublon de l'original (inchangée), puis on ouvre la même modale.
+      var tel = (($('f-tel')||{}).value || '').trim();
+      var cls = clientsParCollecte[currentCollecteId] || {};
+      var nomComplet = (prenom+' '+nom).toLowerCase();
+      var telClean = tel.replace(/\s/g,'');
+      var doublon = Object.values(cls).find(function(c){
+        var memeNom = (c.name||'').toLowerCase() === nomComplet;
+        var memeTel = telClean && c.tel && c.tel.replace(/\s/g,'') === telClean;
+        return memeNom || memeTel;
+      });
+      if(doublon){
+        document.getElementById('doublon-nom').textContent = doublon.name;
+        document.getElementById('doublon-info').textContent = (doublon.colis||'')+' — '+(doublon.prix||0)+' €';
+        openModal('modal-doublon');
+        return;
+      }
+      if(telClean && window.dctContacts){
+        var contactExistant = Object.values(window.dctContacts).find(function(c){
+          return c.tel && c.tel.replace(/\s/g,'') === telClean;
+        });
+        if(contactExistant && contactExistant.name.toLowerCase() !== nomComplet){
+          document.getElementById('doublon-nom').textContent = contactExistant.name+' (carnet)';
+          document.getElementById('doublon-info').textContent = 'Même téléphone: '+tel;
+          openModal('modal-doublon');
           return;
         }
       }
-      var sel = $('f-depart');
-      if(sel && !sel.value){
-        toast('⚠️ Choisissez le départ avant d\'enregistrer.');
-        try{ sel.focus(); sel.scrollIntoView({behavior:'smooth', block:'center'}); }catch(e){}
-        return;
-      }
-      return origSave.apply(this, arguments);
+      ouvrirConfirmClient();
     };
     window.saveClient._depPatch = true;
   }
@@ -1718,10 +1995,8 @@ function greffer(){
     window.saveClientConfirme = function(){
       var colId  = window.currentCollecteId;
       var avant  = Object.keys((window.clientsParCollecte||{})[colId] || {});
-      var depuisCarre = _depAjoutCarre;
 
       var extras = {
-        departId         : (($('f-depart')||{}).value || ''),
         destinataireNom  : (($('f-dest-nom')||{}).value || '').trim(),
         destinataireTel  : (($('f-dest-tel')||{}).value || '').trim(),
         note             : (($('f-note')||{}).value || '').trim(),
@@ -1752,16 +2027,6 @@ function greffer(){
         }
         _depPhotoTmp = null;
       }catch(e){}
-
-      // Ajouté depuis le carré Client : l'original ramène vers s-collecte
-      // après son propre toast (1.5s) — on corrige juste après vers s-clients.
-      if(depuisCarre){
-        _depAjoutCarre = false;
-        var bcc = $('f-bloc-collecte'); if(bcc) bcc.style.display = 'none';
-        setTimeout(function(){
-          try{ goTo('s-clients'); renderContacts(); }catch(e){}
-        }, 1650);
-      }
     };
     window.saveClientConfirme._depPatch = true;
   }
@@ -1850,21 +2115,21 @@ function greffer(){
     window.saveClientEdit._depPatch = true;
   }
 
-  /* --- F. Le récapitulatif de confirmation montre le départ --- */
+  /* --- F. Le récapitulatif de confirmation montre destinataire /
+     livraison / photo (le départ n'est plus choisi à la création,
+     il n'y a donc plus rien à afficher à ce sujet ici) --- */
   if(typeof window.ouvrirConfirmClient === 'function' && !window.ouvrirConfirmClient._depPatch){
     var origConfirmUI = window.ouvrirConfirmClient;
     window.ouvrirConfirmClient = function(){
       origConfirmUI.apply(this, arguments);
       try{
         var recap = $('confirm-client-recap');
-        var sel   = $('f-depart');
-        if(recap && sel && sel.value){
-          var dest = (($('f-dest-nom')||{}).value || '').trim();
-          var liv  = !!window._depLivraison;
-          var pliv = liv ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0;
+        var dest = (($('f-dest-nom')||{}).value || '').trim();
+        var liv  = !!window._depLivraison;
+        var pliv = liv ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0;
+        if(recap && (dest || liv || _depPhotoTmp)){
           var sup = '<div style="margin-top:8px;padding-top:8px;border-top:1.5px dashed #ddd;">'
-            + '<div style="font-size:12.5px;font-weight:800;color:#252599;">&#128230; '+esc(nomDepart(sel.value))+'</div>'
-            + (dest ? '<div style="font-size:12.5px;color:#555;margin-top:3px;">&#127968; Destinataire : '+esc(dest)+'</div>' : '')
+            + (dest ? '<div style="font-size:12.5px;color:#555;">&#127968; Destinataire : '+esc(dest)+'</div>' : '')
             + (liv  ? '<div style="font-size:12.5px;color:#555;margin-top:3px;">&#128666; Livraison Dakar'
                       + (pliv ? ' : '+pliv+' &euro;' : ' (prix &agrave; d&eacute;finir)') + '</div>' : '')
             + (_depPhotoTmp ? '<div style="font-size:12.5px;color:#555;margin-top:3px;">&#128247; 1 photo</div>' : '')
@@ -1933,6 +2198,7 @@ function demarrer(){
   try{ greffer(); }catch(e){ console.error('departs: greffes', e); }
   try{ depSetLivraison(false); }catch(e){}
   try{ depSetLivraisonFiche(false); }catch(e){}
+  try{ depSetLivraisonDepot(false); }catch(e){}
   try{ ecouterDeparts(); }catch(e){ console.error('departs: firebase', e); }
   console.log('%c[DCT] Module départs ' + DEP_VERSION + ' chargé', 'color:#252599;font-weight:bold;');
 }
