@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.5.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.6.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -37,6 +37,17 @@
    14. Départs et Client sont des espaces autonomes (flèche "← Espaces",
        pas de barre du bas) ; Activité est accessible d'une icône sur
        l'écran des espaces plutôt que depuis la Collecte.
+   15. L'accueil Collecte a lui aussi une flèche "← Espaces" (à la place
+       du petit bouton carré, moins intuitif) pour revenir au choix
+       des carrés.
+   16. Ramassage France & Europe a désormais son propre carré sur
+       l'écran des espaces (au lieu d'une bannière dans la Collecte).
+   17. Carré CLIENT : cliquer sur un contact ouvre une fiche de
+       consultation en lecture seule (fini les modifications directes,
+       source d'erreurs de frappe). Un bouton "Actions" propose de le
+       Modifier (fonctionnel), et anticipe les briques à venir :
+       Historique d'envoi / Factures, Impression de facture avec QR
+       code, Bordereau d'envoi (affichés mais marqués "à venir").
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -46,7 +57,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.5.0';
+var DEP_VERSION = 'v1.6.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -242,7 +253,22 @@ function injecterStyles(){
     +   'text-align:center;cursor:pointer;background:#fafafa;margin-bottom:12px;}'
     + '.dep-photo-box img{max-width:100%;max-height:180px;border-radius:8px;display:block;margin:0 auto;}'
     + '.dep-sec{font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.06em;'
-    +   'text-transform:uppercase;margin:18px 0 9px;padding-top:14px;border-top:1.5px solid var(--border);}';
+    +   'text-transform:uppercase;margin:18px 0 9px;padding-top:14px;border-top:1.5px solid var(--border);}'
+    + '.dep-fc-champ{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);'
+    +   'padding:11px 13px;margin-bottom:9px;}'
+    + '.dep-fc-lab{font-size:10.5px;font-weight:800;color:var(--text3);letter-spacing:0.04em;'
+    +   'text-transform:uppercase;margin-bottom:3px;}'
+    + '.dep-fc-val{font-size:14px;font-weight:600;color:var(--text);word-break:break-word;}'
+    + '.dep-menu-item{display:flex;align-items:center;gap:12px;width:100%;background:#fff;'
+    +   'border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;'
+    +   'margin-bottom:9px;font-family:var(--font);cursor:pointer;text-align:left;}'
+    + '.dep-menu-ico{font-size:19px;flex-shrink:0;}'
+    + '.dep-menu-txt{font-size:13.5px;font-weight:700;color:var(--text);flex:1;'
+    +   'display:flex;align-items:center;gap:8px;}'
+    + '.dep-menu-item.dep-menu-avenir{background:#fafafa;}'
+    + '.dep-menu-item.dep-menu-avenir .dep-menu-txt{color:var(--text3);}'
+    + '.dep-menu-tag{font-size:9.5px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;'
+    +   'background:#EEE;color:#999;padding:2px 7px;border-radius:20px;}';
   document.head.appendChild(s);
 }
 
@@ -289,6 +315,11 @@ function injecterEcrans(){
   +         '<div class="dep-case-ico">&#128100;</div>'
   +         '<div class="dep-case-tit" style="color:#7c3aed;">CLIENT</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-cli">—</div>'
+  +       '</div>'
+  +       '<div class="dep-case" id="dep-case-france" style="border-color:#1a237e;" onclick="ouvrirFrance()">'
+  +         '<div class="dep-case-ico">&#127467;&#127479;</div>'
+  +         '<div class="dep-case-tit" style="color:#1a237e;">FRANCE &amp; EUROPE</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-fr">—</div>'
   +       '</div>'
   +     '</div>'
   +     '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:22px;">Module départs '+DEP_VERSION+'</div>'
@@ -410,6 +441,34 @@ function injecterEcrans(){
   +     '</div>'
   +     '<div id="dp-suppr" style="display:none;margin-top:6px;"></div>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 6 : fiche client en lecture seule (carré Client) ---- */
+  + '<div class="screen" id="s-client-fiche">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-clients\');try{renderContacts();}catch(e){}">&larr; Clients</button>'
+  +     '<div class="h-title" id="dep-fc-nom">Client</div>'
+  +     '<button class="btn-back" onclick="depOuvrirActionsContact()">Actions</button>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div style="text-align:center;margin-bottom:18px;">'
+  +       '<div class="av" id="dep-fc-av" style="width:56px;height:56px;font-size:19px;margin:0 auto 10px;">--</div>'
+  +       '<div style="font-size:17px;font-weight:800;" id="dep-fc-titre">—</div>'
+  +     '</div>'
+  +     '<div class="dep-fc-champ"><div class="dep-fc-lab">T&eacute;l&eacute;phone</div>'
+  +       '<div class="dep-fc-val" id="dep-fc-tel">—</div></div>'
+  +     '<div class="dep-fc-champ" id="dep-fc-bloc-tel2" style="display:none;">'
+  +       '<div class="dep-fc-lab">Deuxi&egrave;me num&eacute;ro</div>'
+  +       '<div class="dep-fc-val" id="dep-fc-tel2">—</div></div>'
+  +     '<div class="dep-fc-champ"><div class="dep-fc-lab">Adresse</div>'
+  +       '<div class="dep-fc-val" id="dep-fc-adresse">—</div></div>'
+  +     '<div class="dep-fc-champ" id="dep-fc-bloc-infos" style="display:none;">'
+  +       '<div class="dep-fc-lab">Infos compl&eacute;mentaires</div>'
+  +       '<div class="dep-fc-val" id="dep-fc-infos">—</div></div>'
+  +     '<div class="dep-fc-champ"><div class="dep-fc-lab">Ville</div>'
+  +       '<div class="dep-fc-val" id="dep-fc-ville">—</div></div>'
+  +     '<button class="btn btn-green" style="margin-top:10px;" onclick="depOuvrirActionsContact()">&#8942; Actions</button>'
+  +   '</div>'
   + '</div>';
 
   while(w.firstChild) parent.appendChild(w.firstChild);
@@ -443,6 +502,29 @@ function injecterEcrans(){
     +   '<button class="btn-sm" style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;" onclick="depConfirmerDetacherClient()">D&eacute;tacher</button>'
     + '</div></div></div>';
   document.body.appendChild(m2);
+
+  /* ---- Modale : actions sur un contact (depuis la fiche en lecture seule) ---- */
+  var m3 = document.createElement('div');
+  m3.className = 'modal-overlay';
+  m3.id = 'modal-dep-client-actions';
+  m3.innerHTML = '<div class="modal-sheet">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+    +   '<div class="modal-title" style="margin-bottom:0;">Actions</div>'
+    +   '<button onclick="closeModal(\'modal-dep-client-actions\')" style="background:none;border:none;font-size:22px;cursor:pointer;">&times;</button>'
+    + '</div>'
+    + '<button type="button" class="dep-menu-item" onclick="depModifierContactActuel()">'
+    +   '<span class="dep-menu-ico">&#9999;&#65039;</span><span class="dep-menu-txt">Modifier</span></button>'
+    + '<button type="button" class="dep-menu-item dep-menu-avenir" onclick="depActionAVenir(\'Historique d&#39;envoi / Factures\')">'
+    +   '<span class="dep-menu-ico">&#129534;</span><span class="dep-menu-txt">Historique d&rsquo;envoi / Factures'
+    +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
+    + '<button type="button" class="dep-menu-item dep-menu-avenir" onclick="depActionAVenir(\'Impression de facture avec QR code\')">'
+    +   '<span class="dep-menu-ico">&#128424;&#65039;</span><span class="dep-menu-txt">Imprimer facture (QR code)'
+    +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
+    + '<button type="button" class="dep-menu-item dep-menu-avenir" onclick="depActionAVenir(\'Bordereau d&#39;envoi\')">'
+    +   '<span class="dep-menu-ico">&#128203;</span><span class="dep-menu-txt">Bordereau d&rsquo;envoi'
+    +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
+    + '</div>';
+  document.body.appendChild(m3);
 }
 
 // petit pont pour le bouton "Modifier" de l'en-tête
@@ -598,6 +680,13 @@ window.depRenderEspaces = function(){
     scl.innerHTML = nbC === 0
       ? 'Aucun contact'
       : '<b style="color:#7c3aed;">'+nbC+'</b> contact'+(nbC>1?'s':'')+'<br>enregistr&eacute;'+(nbC>1?'s':'');
+  }
+
+  // Case FRANCE & EUROPE
+  var scfr = $('dep-case-sub-fr');
+  if(scfr){
+    var cfr = (typeof compteursFrance === 'function') ? compteursFrance() : {attente:0,chartres:0};
+    scfr.innerHTML = '<b style="color:#1a237e;">'+cfr.attente+'</b> en attente<br>'+cfr.chartres+' &agrave; Chartres';
   }
 };
 
@@ -1288,6 +1377,17 @@ function nettoyerEspacesAutonomes(){
     var retour = act.querySelector('.header .btn-back');
     if(retour) retour.setAttribute('onclick', "goTo('s-espaces');depRenderEspaces();");
   }
+
+  // #s-france a désormais son propre carré sur l'écran des espaces :
+  // sa flèche retour (qui visait s-home) pointe vers les espaces, et
+  // la bannière devenue redondante dans l'accueil Collecte est cachée.
+  var fr = $('s-france');
+  if(fr){
+    var retourFr = fr.querySelector('.header .btn-back');
+    if(retourFr) retourFr.setAttribute('onclick', "goTo('s-espaces');depRenderEspaces();");
+  }
+  var bannFr = $('btn-france');
+  if(bannFr) bannFr.style.display = 'none';
 }
 
 // Boutons Ajouter / Export / Import sur l'écran #s-clients
@@ -1321,6 +1421,82 @@ window.depOuvrirAjoutClientCarre = function(){
   window.currentCollecteId = enc.id;
   _depAjoutClientCarre = true;
   if(typeof ouvrirAjoutClient === 'function') ouvrirAjoutClient();
+};
+
+/* ---- Fiche client en lecture seule (carré Client) ----
+   Cliquer sur un contact ouvrait directement une modale 100% modifiable
+   (risque de mauvaise frappe). On ouvre désormais une fiche de
+   consultation, avec un bouton Actions qui propose de le modifier
+   (fonctionnel) ainsi que des actions qui anticipent des briques pas
+   encore construites (Facturation, Étiquettes) : elles sont visibles
+   mais marquées "à venir". ---- */
+
+var _depFicheContactKey = null;
+var _depOrigOpenContactEdit = null;
+
+function _depLookupContact(contactKey){
+  var c = window.dctContacts && window.dctContacts[contactKey];
+  if(!c){
+    Object.values(window.clientsParCollecte || {}).forEach(function(cls){
+      Object.values(cls || {}).forEach(function(client){
+        var k = client.tel ? client.tel.replace(/ /g, '') : (client.prenom + '_' + client.nom).toLowerCase();
+        if(k === contactKey) c = client;
+      });
+    });
+  }
+  return c;
+}
+
+window.depOuvrirFicheContact = function(contactKey){
+  var c = _depLookupContact(contactKey);
+  if(!c){ if(typeof toast === 'function') toast('Contact introuvable.'); return; }
+  _depFicheContactKey = contactKey;
+
+  var col = ((typeof COLLABS !== 'undefined' ? COLLABS : []).find(function(co){ return co.name === c.by; })) || {bg:'#e0e0e0', color:'#555'};
+  var av = $('dep-fc-av');
+  if(av){
+    av.textContent = (typeof initiales === 'function') ? initiales(c.prenom, c.nom) : '';
+    av.style.background = col.bg; av.style.color = col.color;
+  }
+  var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+  var titre = $('dep-fc-titre'); if(titre) titre.textContent = nom;
+  var nomH  = $('dep-fc-nom');   if(nomH)  nomH.textContent  = nom;
+  var tel = $('dep-fc-tel'); if(tel) tel.textContent = c.tel || '—';
+
+  var bt2 = $('dep-fc-bloc-tel2'), t2 = $('dep-fc-tel2');
+  if(c.tel2){ if(bt2) bt2.style.display=''; if(t2) t2.textContent = c.tel2; }
+  else if(bt2) bt2.style.display = 'none';
+
+  var adr = $('dep-fc-adresse'); if(adr) adr.textContent = c.adresse || '—';
+
+  var binf = $('dep-fc-bloc-infos'), inf = $('dep-fc-infos');
+  if(c.infos){ if(binf) binf.style.display=''; if(inf) inf.textContent = c.infos; }
+  else if(binf) binf.style.display = 'none';
+
+  var ville = $('dep-fc-ville');
+  if(ville) ville.textContent = ((c.cp||'') + ' ' + (c.ville||'')).trim() || '—';
+
+  goTo('s-client-fiche');
+};
+
+window.depOuvrirActionsContact = function(){
+  if(!_depFicheContactKey) return;
+  openModal('modal-dep-client-actions');
+};
+
+window.depModifierContactActuel = function(){
+  var key = _depFicheContactKey;
+  closeModal('modal-dep-client-actions');
+  // On revient sur la liste (qui se rafraîchit après l'enregistrement) :
+  // la modale d'édition originale s'ouvre par-dessus.
+  goTo('s-clients');
+  try{ renderContacts(); }catch(e){}
+  if(key && typeof _depOrigOpenContactEdit === 'function') _depOrigOpenContactEdit(key);
+};
+
+window.depActionAVenir = function(label){
+  closeModal('modal-dep-client-actions');
+  if(typeof toast === 'function') toast('🚧 ' + label + ' — bientôt disponible.');
 };
 
 /* ---- Export CSV du carnet de contacts ---- */
@@ -1978,6 +2154,19 @@ function greffer(){
     };
     window.ouvrirConfirmClient._depPatch = true;
   }
+
+  /* --- G. Le carré Client : cliquer sur un contact ouvre désormais une
+     fiche de consultation en lecture seule, plutôt que la modale
+     d'édition directe. "Modifier" (dans le menu Actions de la fiche)
+     rouvre cette modale d'origine, inchangée. --- */
+  if(typeof window.openContactEdit === 'function' && !window.openContactEdit._depPatch){
+    _depOrigOpenContactEdit = window.openContactEdit;
+    window.openContactEdit = function(contactKey){
+      try{ window.depOuvrirFicheContact(contactKey); }
+      catch(e){ _depOrigOpenContactEdit.apply(this, arguments); }
+    };
+    window.openContactEdit._depPatch = true;
+  }
 }
 
 /* --- Le bouton de retour vers les espaces, dans l'en-tête de l'accueil --- */
@@ -1986,22 +2175,24 @@ function depMajBoutonEspaces(){
   if(!home) return;
   var header = home.querySelector('.header');
   if(!header) return;
-  var b = $('dep-btn-espaces');
+
+  // Ancien petit bouton carré : moins intuitif qu'une flèche de retour
+  // classique, on le retire s'il traîne encore.
+  var old = $('dep-btn-espaces');
+  if(old && old.parentNode) old.parentNode.removeChild(old);
+
+  // Tout le monde a désormais un écran d'espaces, donc tout le monde
+  // doit pouvoir y revenir depuis l'accueil, via la même flèche
+  // "← Espaces" que sur les autres espaces autonomes (Départs, Client).
+  var b = $('dep-home-retour');
   if(!b){
     b = document.createElement('button');
-    b.id = 'dep-btn-espaces';
+    b.id = 'dep-home-retour';
+    b.className = 'btn-back';
     b.setAttribute('onclick', "goTo('s-espaces');depRenderEspaces();");
-    b.title = 'Retour aux espaces';
-    b.style.cssText = 'background:#252599;color:#fff;border:none;border-radius:8px;padding:7px 11px;'
-      + 'font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);display:none;';
-    b.innerHTML = '&#9635;';
-    var droite = header.lastElementChild;
-    if(droite && droite.firstChild) droite.insertBefore(b, droite.firstChild);
-    else header.appendChild(b);
+    b.innerHTML = '&larr; Espaces';
+    header.insertBefore(b, header.firstChild);
   }
-  // Tout le monde a désormais un écran d'espaces, donc tout le monde
-  // doit pouvoir y revenir depuis l'accueil.
-  b.style.display = 'block';
 }
 
 /* --- Écrire dans le fil d'activité (la direction reste visible) --- */
