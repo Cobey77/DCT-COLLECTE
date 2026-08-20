@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.4.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.5.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -13,27 +13,30 @@
    1. Fusion des deux profils Issyaka (IS garde son prénom + les droits)
    2. Un écran de choix d'espace : DÉPARTS | COLLECTE | CLIENT, pour tous
    3. L'espace Départs complet (créer, ouvrir, statuts, détail)
-   4. Le champ Départ obligatoire + les nouveaux champs sur la fiche client
+   4. Le champ Départ + les nouveaux champs sur la fiche client
    5. Photo du colis, avec la même compression que les photos France
    6. La fiche client affiche et modifie tous ces champs
-   7. Rattachement en masse d'une collecte entière à un départ
-   8. Corrige une perte de données de saveClientEdit() (voir plus bas)
-   9. Cliquer sur un client dans le détail d'un départ ouvre sa fiche
-   10. Détacher une collecte entière d'un départ (annule un rattachement)
-   11. Carré CLIENT : carnet de contacts, export/import CSV (le bouton
-       "+ Ajouter" a été retiré : tout client passe par une collecte,
-       ou par l'inscription directe au dépôt — voir point 14)
-   12. Le nom et le prénom sont désormais facultatifs à l'inscription :
+   7. Corrige une perte de données de saveClientEdit() (voir plus bas)
+   8. Cliquer sur un client dans le détail d'un départ ouvre sa fiche
+   9. Détacher UN client de son départ (pour toute raison, avec modale
+      de confirmation) — le rattachement/détachement d'une collecte
+      entière a été retiré, il n'a plus de sens depuis le point 12
+   10. Carré CLIENT : carnet de contacts, ajout (dans la collecte en
+       cours), export/import CSV
+   11. Le nom et le prénom sont désormais facultatifs à l'inscription :
        au moins l'un des deux est requis, en plus de la civilité
        (M. / Mme / Société)
-   13. Le départ n'est plus choisi à la création du client : il est
+   12. Le départ n'est plus choisi à la création du client : il est
        attribué plus tard, quand le colis est confié à un container
        (le champ reste modifiable par la direction depuis la fiche)
-   14. Bouton "Inscrire un client au dépôt", réservé à Issyaka et
+   13. Bouton "Inscrire un client au dépôt", réservé à Issyaka et
        Cobey, dans le détail d'un départ : pour les clients qui ne
        passent pas par une collecte du dimanche et valident leur colis
        directement avec un collaborateur. Ces clients sont stockés à
        part (nœud Firebase dct_depot), hors du système de collectes.
+   14. Départs et Client sont des espaces autonomes (flèche "← Espaces",
+       pas de barre du bas) ; Activité est accessible d'une icône sur
+       l'écran des espaces plutôt que depuis la Collecte.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -43,7 +46,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.4.0';
+var DEP_VERSION = 'v1.5.0';
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -66,15 +69,13 @@ var _depPhotoTmp = null;        // photo du colis en attente d'enregistrement
 var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depPhotoFiche = null;      // photo en attente sur la fiche client
-var _depRattachDepart = null;   // départ cible du rattachement en masse
-var _depRattachCollecte = '';   // collecte choisie pour le rattachement
-var _depDetachDepart = null;    // départ cible du détachement en masse
-var _depDetachCollecte = '';    // collecte choisie pour le détachement
+var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
 
 window.depotClients = {};       // { id: {...} } — clients inscrits directement au dépôt, hors collecte
 var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un client du dépôt
 var _depDepotEditId = null;     // id du client dépôt en cours de modification (null = création)
 var _depDepotPhotoTmp = null;   // photo en attente pour le formulaire dépôt
+var _depAjoutClientCarre = false; // true : le prochain saveClientConfirme() vient du carré Client
 
 /* ─────────────────────────────────────────────
    2. PETITS OUTILS
@@ -263,7 +264,12 @@ function injecterEcrans(){
   +   '<div class="header">'
   +     '<div><div class="h-title">Dakar City Transport</div>'
   +     '<div class="h-sub" id="dep-esp-greet">Bonjour !</div></div>'
-  +     '<div id="dep-esp-av" class="av" style="cursor:pointer;" onclick="depDeconnexion()"></div>'
+  +     '<div style="display:flex;align-items:center;gap:8px;">'
+  +       '<button id="dep-esp-activite-btn" onclick="setNav(\'activite\')" title="Activit&eacute;" '
+  +         'style="background:#1a1a2e;color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:15px;'
+  +         'cursor:pointer;font-family:var(--font);line-height:1;">&#128337;</button>'
+  +       '<div id="dep-esp-av" class="av" style="cursor:pointer;" onclick="depDeconnexion()"></div>'
+  +     '</div>'
   +   '</div>'
   +   '<div class="content">'
   +     '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-bottom:14px;">'
@@ -345,51 +351,7 @@ function injecterEcrans(){
   +   '<div class="content" id="dep-d-content"></div>'
   + '</div>'
 
-  /* ---- ÉCRAN 5 : rattacher une collecte entière ---- */
-  + '<div class="screen" id="s-depart-rattacher">'
-  +   '<div class="header">'
-  +     '<button class="btn-back" onclick="depDetail(_depDetailIdPublic())">&larr; Retour</button>'
-  +     '<div style="text-align:center;"><div class="h-title">Rattacher des clients</div>'
-  +     '<div class="h-sub" id="dep-r-cible"></div></div>'
-  +     '<div style="width:60px;"></div>'
-  +   '</div>'
-  +   '<div class="content">'
-  +     '<div class="fg"><label class="fl">Choisir une collecte</label>'
-  +       '<select class="fi" id="dep-r-collecte" onchange="depRattachChoisirCollecte(this.value)"></select></div>'
-  +     '<div id="dep-r-actions" style="display:none;margin-bottom:12px;">'
-  +       '<button type="button" class="dep-cli-btn" onclick="depRattachTout(true)">Tout cocher</button> '
-  +       '<button type="button" class="dep-cli-btn" onclick="depRattachTout(false)">Tout d&eacute;cocher</button>'
-  +     '</div>'
-  +     '<div id="dep-r-liste"></div>'
-  +   '</div>'
-  +   '<div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">'
-  +     '<button class="btn btn-green" style="margin:0;" id="dep-r-btn" onclick="depRattachValider()">Rattacher</button>'
-  +   '</div>'
-  + '</div>'
-
-  /* ---- ÉCRAN 6 : détacher une collecte de ce départ ---- */
-  + '<div class="screen" id="s-depart-detacher">'
-  +   '<div class="header">'
-  +     '<button class="btn-back" onclick="depDetail(_depDetailIdPublic())">&larr; Retour</button>'
-  +     '<div style="text-align:center;"><div class="h-title">D&eacute;tacher des clients</div>'
-  +     '<div class="h-sub" id="dep-x-cible"></div></div>'
-  +     '<div style="width:60px;"></div>'
-  +   '</div>'
-  +   '<div class="content">'
-  +     '<div class="fg"><label class="fl">Choisir une collecte</label>'
-  +       '<select class="fi" id="dep-x-collecte" onchange="depDetachChoisirCollecte(this.value)"></select></div>'
-  +     '<div id="dep-x-actions" style="display:none;margin-bottom:12px;">'
-  +       '<button type="button" class="dep-cli-btn" onclick="depDetachTout(true)">Tout cocher</button> '
-  +       '<button type="button" class="dep-cli-btn" onclick="depDetachTout(false)">Tout d&eacute;cocher</button>'
-  +     '</div>'
-  +     '<div id="dep-x-liste"></div>'
-  +   '</div>'
-  +   '<div style="background:#fff;border-top:1px solid var(--border);padding:10px 14px 14px;flex-shrink:0;">'
-  +     '<button class="btn btn-gray" style="margin:0;border-color:#F5C6C6;background:#FDEDED;color:#992020;" id="dep-x-btn" onclick="depDetachValider()">D&eacute;tacher</button>'
-  +   '</div>'
-  + '</div>'
-
-  /* ---- ÉCRAN 7 : inscrire / modifier un client au dépôt ---- */
+  /* ---- ÉCRAN 5 : inscrire / modifier un client au dépôt ---- */
   + '<div class="screen" id="s-depot-form">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="depDetail(_depDepotDepartPublic())">&larr; Retour</button>'
@@ -467,6 +429,20 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-green-sm" onclick="depConfirmerMove()">D&eacute;placer</button>'
     + '</div></div></div>';
   document.body.appendChild(m);
+
+  /* ---- Modale : détacher un client de ce départ ---- */
+  var m2 = document.createElement('div');
+  m2.className = 'modal-overlay';
+  m2.id = 'modal-dep-detach-client';
+  m2.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#8617;</div>'
+    + '<div class="modal-confirm-title">D&eacute;tacher ce client ?</div>'
+    + '<div id="dep-dc-info" style="font-size:13px;color:#555;margin:8px 0 12px;"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-detach-client\')">Annuler</button>'
+    +   '<button class="btn-sm" style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;" onclick="depConfirmerDetacherClient()">D&eacute;tacher</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m2);
 }
 
 // petit pont pour le bouton "Modifier" de l'en-tête
@@ -858,12 +834,6 @@ window.depDetail = function(id){
     .map(function(k){ return { depot:true, clientId:k, c: window.depotClients[k] }; });
 
   if(d.statut === 'preparation' && estDirection()){
-    h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#C5CAE9;background:#EEF0FA;color:#252599;" '
-      +  'onclick="depRattachOuvrir()">&#128206; Rattacher une collecte enti&egrave;re</button>';
-    if(clients.length){
-      h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#F5C6C6;background:#FDEDED;color:#992020;" '
-        +  'onclick="depDetachOuvrir()">&#8617; D&eacute;tacher une collecte de ce d&eacute;part</button>';
-    }
     h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#C8E6D0;background:#EAF7EE;color:#006b2d;" '
       +  'onclick="depOuvrirDepotForm(\''+id+'\')">&#127970; Inscrire un client au d&eacute;p&ocirc;t</button>';
   }
@@ -888,7 +858,11 @@ window.depDetail = function(id){
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
         +   '</div>'
         +   (peutBouger
-            ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
+            ? '<div style="display:flex;gap:6px;flex-shrink:0;">'
+              + '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
+              + '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
+                + 'onclick="event.stopPropagation();depDetacherClient(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;tacher</button>'
+              + '</div>'
             : '')
         + '</div>';
     });
@@ -1210,254 +1184,50 @@ window.depConfirmerMove = function(){
 };
 
 /* ─────────────────────────────────────────────
-   11 bis. RATTACHER UNE COLLECTE ENTIÈRE
+   11 bis. DÉTACHER UN CLIENT DE CE DÉPART (direction seulement)
+   Le rattachement/détachement d'une collecte entière n'a plus de sens
+   depuis que le container n'est plus choisi à la création du client :
+   l'affectation se fera client par client, au moment de la facture.
    ───────────────────────────────────────────── */
 
-function nomCollecte(id){
-  var c = (window.collectes || []).filter(function(x){ return x && x.id === id; })[0];
-  return c ? (c.date || id) : id;
-}
+window.depDetacherClient = function(collecteId, clientId){
+  if(!estDirection()){ toast('🔒 Seul Issyaka peut détacher un client.'); return; }
+  var c = ((window.clientsParCollecte||{})[collecteId]||{})[clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
 
-window.depRattachOuvrir = function(){
-  if(!estDirection()){ toast('🔒 Réservé à Issyaka.'); return; }
-  _depRattachDepart = _depDetailId;
-  _depRattachCollecte = '';
-  var d = (window.departsData||{})[_depRattachDepart] || {};
-  var t = $('dep-r-cible'); if(t) t.textContent = 'Vers : ' + (d.nom || '');
+  _depDetachClient = { collecteId:collecteId, clientId:clientId, nom:(c.name||''), departId:(c.departId||'') };
 
-  // Les collectes, avec le nombre de clients encore sans départ
-  var cols = (window.collectes || []).filter(Boolean).slice();
-  var h = '<option value="">— Choisir une collecte —</option>';
-  cols.forEach(function(c){
-    var cls = (window.clientsParCollecte||{})[c.id] || {};
-    var total = Object.keys(cls).length;
-    if(!total) return;
-    var sans = Object.keys(cls).filter(function(k){ return !cls[k].departId; }).length;
-    var suffixe = sans ? (sans + ' sans départ') : 'tous rattachés';
-    var fini = (c.statut === 'terminee') ? ' · terminée' : '';
-    h += '<option value="'+c.id+'">'+esc(c.date||c.id)+' — '+total+' client'+(total>1?'s':'')
-       + ' · '+suffixe+fini+'</option>';
-  });
-  var sel = $('dep-r-collecte'); if(sel){ sel.innerHTML = h; sel.value = ''; }
-  var box = $('dep-r-liste'); if(box) box.innerHTML = '<div class="dep-vide">Choisissez une collecte ci-dessus.</div>';
-  var act = $('dep-r-actions'); if(act) act.style.display = 'none';
-  depRattachMajBouton();
-  goTo('s-depart-rattacher');
+  var info = $('dep-dc-info');
+  if(info) info.innerHTML = '<b>'+esc(c.name||'')+'</b> sera retir&eacute; de <b>'+esc(nomDepart(c.departId))+'</b> '
+    + 'et redeviendra &laquo;&nbsp;sans d&eacute;part&nbsp;&raquo;.';
+
+  openModal('modal-dep-detach-client');
 };
 
-window.depRattachChoisirCollecte = function(colId){
-  _depRattachCollecte = colId || '';
-  var box = $('dep-r-liste');
-  var act = $('dep-r-actions');
-  if(!colId){
-    if(box) box.innerHTML = '<div class="dep-vide">Choisissez une collecte ci-dessus.</div>';
-    if(act) act.style.display = 'none';
-    depRattachMajBouton();
-    return;
-  }
-  var cls = (window.clientsParCollecte||{})[colId] || {};
-  var ids = Object.keys(cls);
-  if(!ids.length){
-    if(box) box.innerHTML = '<div class="dep-vide">Cette collecte ne contient aucun client.</div>';
-    if(act) act.style.display = 'none';
-    depRattachMajBouton();
-    return;
-  }
-  ids.sort(function(a,b){ return String(cls[a].name||'').localeCompare(String(cls[b].name||'')); });
-
-  var h = '';
-  ids.forEach(function(cid){
-    var c = cls[cid];
-    var dejaIci  = (c.departId === _depRattachDepart);
-    var ailleurs = (c.departId && !dejaIci);
-    var coche    = (!c.departId);           // on ne coche que ceux qui n'ont aucun départ
-    var sousTitre;
-    if(dejaIci)       sousTitre = '<span style="color:#006b2d;font-weight:700;">✓ déjà dans ce départ</span>';
-    else if(ailleurs) sousTitre = '<span style="color:#A04800;font-weight:700;">actuellement : '+esc(nomDepart(c.departId))+'</span>';
-    else              sousTitre = '<span style="color:#c0392b;font-weight:700;">aucun départ</span>';
-
-    h += '<label class="dep-cli" style="cursor:'+(dejaIci?'default':'pointer')+';opacity:'+(dejaIci?'0.55':'1')+';">'
-      +   '<input type="checkbox" class="dep-r-case" value="'+cid+'" '
-      +     (coche?'checked ':'') + (dejaIci?'disabled ':'')
-      +     'onchange="depRattachMajBouton()" style="width:20px;height:20px;flex-shrink:0;accent-color:#009A44;">'
-      +   '<div style="flex:1;min-width:0;">'
-      +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+'</div>'
-      +     '<div class="dep-cli-s">'+(parseFloat(c.prix)||0)+' € · '+sousTitre+'</div>'
-      +   '</div>'
-      + '</label>';
-  });
-  if(box) box.innerHTML = h;
-  if(act) act.style.display = 'block';
-  depRattachMajBouton();
-};
-
-window.depRattachTout = function(oui){
-  Array.prototype.forEach.call(document.querySelectorAll('.dep-r-case'), function(el){
-    if(!el.disabled) el.checked = !!oui;
-  });
-  depRattachMajBouton();
-};
-
-window.depRattachMajBouton = function(){
-  var n = _depRattachSelection().length;
-  var b = $('dep-r-btn');
-  if(!b) return;
-  b.textContent = n ? ('Rattacher '+n+' client'+(n>1?'s':'')) : 'Aucun client sélectionné';
-  b.disabled = !n;
-  b.style.opacity = n ? '1' : '0.5';
-};
-
-function _depRattachSelection(){
-  var out = [];
-  Array.prototype.forEach.call(document.querySelectorAll('.dep-r-case'), function(el){
-    if(el.checked && !el.disabled) out.push(el.value);
-  });
-  return out;
-}
-
-window.depRattachValider = function(){
-  var ids = _depRattachSelection();
-  if(!ids.length) return;
-  if(!_depRattachDepart || !_depRattachCollecte) return;
-
-  var d = (window.departsData||{})[_depRattachDepart] || {};
-  if(!confirm('Rattacher ' + ids.length + ' client(s) au départ « ' + (d.nom||'') + ' » ?')) return;
+window.depConfirmerDetacherClient = function(){
+  if(!_depDetachClient) return;
+  var dc = _depDetachClient;
+  var cls = (window.clientsParCollecte||{})[dc.collecteId] || {};
+  var c   = cls[dc.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
 
   var u = window.currentUser || {};
-  var cls = (window.clientsParCollecte||{})[_depRattachCollecte] || {};
-  var n = 0;
-  ids.forEach(function(cid){
-    var c = cls[cid];
-    if(!c) return;
-    var hist = c.historiqueDepart || [];
-    hist.push({ de: c.departId || '', vers: _depRattachDepart, par: u.id || '', le: Date.now() });
-    c.departId = _depRattachDepart;
-    c.historiqueDepart = hist;
-    n++;
-  });
+  var hist = c.historiqueDepart || [];
+  hist.push({ de: c.departId || '', vers: '', par: u.id || '', le: Date.now() });
+
+  var ancienDepart = c.departId;
+  c.departId = '';
+  c.historiqueDepart = hist;
 
   try{ sauvegarder(); }catch(e){}
-  depActivite('📦', 'a rattaché <strong>'+n+' client'+(n>1?'s':'')+'</strong> de '
-    + esc(nomCollecte(_depRattachCollecte)) + ' au départ <strong>'+esc(d.nom||'')+'</strong>');
-  toast('✅ ' + n + ' client' + (n>1?'s':'') + ' rattaché' + (n>1?'s':''));
-  depDetail(_depRattachDepart);
+  depActivite('&#8617;', 'a d&eacute;tach&eacute; <strong>'+esc(c.name||'')+'</strong> du d&eacute;part <strong>'+esc(nomDepart(ancienDepart))+'</strong>');
+
+  closeModal('modal-dep-detach-client');
+  toast('✅ Client détaché');
+  _depDetachClient = null;
+  if(_depDetailId) depDetail(_depDetailId);
 };
 
-/* ─────────────────────────────────────────────
-   11 quater. DÉTACHER UNE COLLECTE (annuler un rattachement)
-   ───────────────────────────────────────────── */
-
-window.depDetachOuvrir = function(){
-  if(!estDirection()){ toast('🔒 Réservé à Issyaka.'); return; }
-  _depDetachDepart = _depDetailId;
-  _depDetachCollecte = '';
-  var d = (window.departsData||{})[_depDetachDepart] || {};
-  var t = $('dep-x-cible'); if(t) t.textContent = 'De : ' + (d.nom || '');
-
-  // Seulement les collectes qui ont effectivement des clients dans CE départ
-  var parCollecte = {};
-  tousLesClients().forEach(function(x){
-    if(x.c.departId !== _depDetachDepart) return;
-    parCollecte[x.collecteId] = (parCollecte[x.collecteId] || 0) + 1;
-  });
-  var h = '<option value="">— Choisir une collecte —</option>';
-  Object.keys(parCollecte).forEach(function(colId){
-    var n = parCollecte[colId];
-    h += '<option value="'+colId+'">'+esc(nomCollecte(colId))+' — '+n+' client'+(n>1?'s':'')+' dans ce d&eacute;part</option>';
-  });
-  var sel = $('dep-x-collecte'); if(sel){ sel.innerHTML = h; sel.value = ''; }
-  var box = $('dep-x-liste'); if(box) box.innerHTML = '<div class="dep-vide">Choisissez une collecte ci-dessus.</div>';
-  var act = $('dep-x-actions'); if(act) act.style.display = 'none';
-  depDetachMajBouton();
-  goTo('s-depart-detacher');
-};
-
-window.depDetachChoisirCollecte = function(colId){
-  _depDetachCollecte = colId || '';
-  var box = $('dep-x-liste');
-  var act = $('dep-x-actions');
-  if(!colId){
-    if(box) box.innerHTML = '<div class="dep-vide">Choisissez une collecte ci-dessus.</div>';
-    if(act) act.style.display = 'none';
-    depDetachMajBouton();
-    return;
-  }
-  var cls = (window.clientsParCollecte||{})[colId] || {};
-  var ids = Object.keys(cls).filter(function(cid){ return cls[cid] && cls[cid].departId === _depDetachDepart; });
-  if(!ids.length){
-    if(box) box.innerHTML = '<div class="dep-vide">Aucun client de cette collecte n\'est dans ce d&eacute;part.</div>';
-    if(act) act.style.display = 'none';
-    depDetachMajBouton();
-    return;
-  }
-  ids.sort(function(a,b){ return String(cls[a].name||'').localeCompare(String(cls[b].name||'')); });
-
-  var h = '';
-  ids.forEach(function(cid){
-    var c = cls[cid];
-    h += '<label class="dep-cli" style="cursor:pointer;">'
-      +   '<input type="checkbox" class="dep-x-case" value="'+cid+'" checked '
-      +     'onchange="depDetachMajBouton()" style="width:20px;height:20px;flex-shrink:0;accent-color:#c0392b;">'
-      +   '<div style="flex:1;min-width:0;">'
-      +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+'</div>'
-      +     '<div class="dep-cli-s">'+(parseFloat(c.prix)||0)+' €</div>'
-      +   '</div>'
-      + '</label>';
-  });
-  if(box) box.innerHTML = h;
-  if(act) act.style.display = 'block';
-  depDetachMajBouton();
-};
-
-window.depDetachTout = function(oui){
-  Array.prototype.forEach.call(document.querySelectorAll('.dep-x-case'), function(el){ el.checked = !!oui; });
-  depDetachMajBouton();
-};
-
-window.depDetachMajBouton = function(){
-  var n = _depDetachSelection().length;
-  var b = $('dep-x-btn');
-  if(!b) return;
-  b.textContent = n ? ('Détacher '+n+' client'+(n>1?'s':'')) : 'Aucun client sélectionné';
-  b.disabled = !n;
-  b.style.opacity = n ? '1' : '0.5';
-};
-
-function _depDetachSelection(){
-  var out = [];
-  Array.prototype.forEach.call(document.querySelectorAll('.dep-x-case'), function(el){
-    if(el.checked) out.push(el.value);
-  });
-  return out;
-}
-
-window.depDetachValider = function(){
-  var ids = _depDetachSelection();
-  if(!ids.length) return;
-  if(!_depDetachDepart || !_depDetachCollecte) return;
-
-  var d = (window.departsData||{})[_depDetachDepart] || {};
-  if(!confirm('Détacher ' + ids.length + ' client(s) du départ « ' + (d.nom||'') + ' » ?\n\nIls redeviennent "sans départ" — la collecte et les clients eux-mêmes ne sont pas touchés.')) return;
-
-  var u = window.currentUser || {};
-  var cls = (window.clientsParCollecte||{})[_depDetachCollecte] || {};
-  var n = 0;
-  ids.forEach(function(cid){
-    var c = cls[cid];
-    if(!c || c.departId !== _depDetachDepart) return;
-    var hist = c.historiqueDepart || [];
-    hist.push({ de: c.departId || '', vers: '', par: u.id || '', le: Date.now() });
-    c.departId = '';
-    c.historiqueDepart = hist;
-    n++;
-  });
-
-  try{ sauvegarder(); }catch(e){}
-  depActivite('↩️', 'a détaché <strong>'+n+' client'+(n>1?'s':'')+'</strong> de '
-    + esc(nomCollecte(_depDetachCollecte)) + ' du départ <strong>'+esc(d.nom||'')+'</strong>');
-  toast('✅ ' + n + ' client' + (n>1?'s':'') + ' détaché' + (n>1?'s':''));
-  depDetail(_depDetachDepart);
-};
 
 /* ─────────────────────────────────────────────
    12. LE CARRÉ CLIENT — export/import du carnet,
@@ -1473,6 +1243,53 @@ function cacherOngletClientAccueil(){
   });
 }
 
+// Cache l'onglet "Activité" du bas de l'écran (Accueil/Suivi de la
+// Collecte) : il est désormais accessible depuis l'icône dédiée sur
+// l'écran des espaces (#s-espaces), inutile de le dupliquer ici.
+function cacherOngletActiviteAccueil(){
+  Array.prototype.forEach.call(document.querySelectorAll('.bottomnav .nav-item'), function(item){
+    var lab = item.querySelector('.nav-label');
+    if(lab && lab.textContent.trim() === 'Activité') item.style.display = 'none';
+  });
+}
+
+// Le carré Client et l'écran Activité sont désormais des espaces
+// autonomes, comme Départs : pas de barre du bas, juste la flèche
+// "← Espaces" pour revenir au choix des carrés.
+function nettoyerEspacesAutonomes(){
+  ['s-clients','s-activite'].forEach(function(id){
+    var ecran = $(id);
+    if(!ecran) return;
+    var bn = ecran.querySelector('.bottomnav');
+    if(bn) bn.style.display = 'none';
+  });
+
+  // #s-clients n'a nativement aucun bouton retour
+  var cli = $('s-clients');
+  if(cli && !$('dep-cli-retour')){
+    var header = cli.querySelector('.header');
+    if(header){
+      var btn = document.createElement('button');
+      btn.id = 'dep-cli-retour';
+      btn.className = 'btn-back';
+      btn.setAttribute('onclick', "goTo('s-espaces');depRenderEspaces();");
+      btn.innerHTML = '&larr; Espaces';
+      header.insertBefore(btn, header.firstChild);
+      var spacer = document.createElement('div');
+      spacer.style.cssText = 'width:70px;flex-shrink:0;';
+      header.appendChild(spacer);
+    }
+  }
+
+  // #s-activite a déjà une flèche retour, mais elle vise s-home :
+  // on la fait pointer vers les espaces à la place.
+  var act = $('s-activite');
+  if(act){
+    var retour = act.querySelector('.header .btn-back');
+    if(retour) retour.setAttribute('onclick', "goTo('s-espaces');depRenderEspaces();");
+  }
+}
+
 // Boutons Ajouter / Export / Import sur l'écran #s-clients
 function injecterBoutonsClient(){
   var ecran = $('s-clients');
@@ -1485,7 +1302,9 @@ function injecterBoutonsClient(){
   bloc.id = 'dep-cli-actions';
   bloc.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;';
   bloc.innerHTML = ''
-    + '<button type="button" class="dep-cli-btn" style="flex:1;min-width:120px;" onclick="depExporterClients()">&#11015;&#65039; Export</button>'
+    + '<button type="button" class="dep-cli-btn" style="flex:1;min-width:120px;background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
+      + 'onclick="depOuvrirAjoutClientCarre()">&#10133; Ajouter</button>'
+    + '<button type="button" class="dep-cli-btn" style="flex:1;min-width:100px;" onclick="depExporterClients()">&#11015;&#65039; Export</button>'
     + '<button type="button" class="dep-cli-btn" onclick="document.getElementById(\'dep-cli-import-input\').click()">&#11014;&#65039; Import</button>'
     + '<input type="file" id="dep-cli-import-input" accept=".csv,text/csv" style="display:none;" onchange="depImporterClients(this)">';
 
@@ -1493,7 +1312,16 @@ function injecterBoutonsClient(){
   else content.insertBefore(bloc, content.firstChild);
 }
 
-/* ---- Ajouter un client depuis le carré Client (collecte à choisir) ---- */
+/* ---- Ajouter un client depuis le carré Client (collecte en cours, automatique) ---- */
+
+window.depOuvrirAjoutClientCarre = function(){
+  var cols = window.collectes || [];
+  var enc = cols.filter(function(x){ return x && x.statut === 'en_cours'; })[0];
+  if(!enc){ toast('⚠️ Aucune collecte en cours pour l\'instant.'); return; }
+  window.currentCollecteId = enc.id;
+  _depAjoutClientCarre = true;
+  if(typeof ouvrirAjoutClient === 'function') ouvrirAjoutClient();
+};
 
 /* ---- Export CSV du carnet de contacts ---- */
 
@@ -2005,6 +1833,8 @@ function greffer(){
         prixLivraison    : window._depLivraison ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0
       };
       var photo = _depPhotoTmp;
+      var venantDuCarre = _depAjoutClientCarre;
+      _depAjoutClientCarre = false;
 
       origConfirme.apply(this, arguments);
 
@@ -2027,6 +1857,14 @@ function greffer(){
         }
         _depPhotoTmp = null;
       }catch(e){}
+
+      // Ajouté depuis le carré Client : on revient sur le carnet, pas sur la collecte
+      if(venantDuCarre){
+        setTimeout(function(){
+          goTo('s-clients');
+          try{ renderContacts(); }catch(e){}
+        }, 1600);
+      }
     };
     window.saveClientConfirme._depPatch = true;
   }
@@ -2195,6 +2033,8 @@ function demarrer(){
   try{ injecterChampsFiche(); }catch(e){ console.error('departs: champs fiche', e); }
   try{ injecterBoutonsClient(); }catch(e){ console.error('departs: boutons client', e); }
   try{ cacherOngletClientAccueil(); }catch(e){ console.error('departs: onglet client', e); }
+  try{ cacherOngletActiviteAccueil(); }catch(e){ console.error('departs: onglet activité', e); }
+  try{ nettoyerEspacesAutonomes(); }catch(e){ console.error('departs: espaces autonomes', e); }
   try{ greffer(); }catch(e){ console.error('departs: greffes', e); }
   try{ depSetLivraison(false); }catch(e){}
   try{ depSetLivraisonFiche(false); }catch(e){}
