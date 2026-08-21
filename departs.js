@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.16.4';
+var DEP_VERSION = 'v1.16.5';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1484,6 +1484,44 @@ window.depCalculerPaiement = function(c){
   return { total: total, paye: paye, reste: reste, statut: statut };
 }
 
+// v1.16.5 : numéro de facture lisible, lié au départ concerné plutôt qu'à
+// un identifiant technique sans rapport — ex. "D-210826-03" (D=dépôt ou
+// C=collecte, date du départ, position du client dans ce départ). Calculé
+// une seule fois puis figé sur la fiche (c.numeroFacture), pour ne jamais
+// changer ensuite même si d'autres clients rejoignent ce départ après.
+function depNumeroFacture(c, ctx){
+  if(c.numeroFacture) return c.numeroFacture;
+
+  var d = (window.departsData || {})[c.departId];
+  var num;
+  if(!d){
+    // Pas (encore) de départ rattaché : on retombe sur l'ancien schéma,
+    // en attendant qu'un départ soit choisi pour ce client.
+    num = (ctx.depot ? 'D' : 'C') + '-' + ctx.clientId;
+  } else {
+    var ddmmyy = '';
+    if(d.dateDepart){
+      var parts = String(d.dateDepart).split('-'); // YYYY-MM-DD
+      if(parts.length === 3) ddmmyy = parts[2] + parts[1] + parts[0].slice(2);
+    }
+    var clientsCollecte = (typeof tousLesClients === 'function') ? tousLesClients() : [];
+    var rang = clientsCollecte.filter(function(x){ return x.c.departId === c.departId && x.c.numeroFacture; }).length
+      + Object.keys(window.depotClients || {}).filter(function(k){
+          var dc = window.depotClients[k];
+          return dc && dc.departId === c.departId && dc.numeroFacture;
+        }).length
+      + 1;
+    num = (ctx.depot ? 'D' : 'C') + '-' + (ddmmyy || 'XXXXXX') + '-' + (rang < 10 ? '0' + rang : rang);
+  }
+
+  c.numeroFacture = num;
+  if(window.db && window.firebaseReady){
+    if(ctx.depot) db.ref('dct_depot/'+ctx.clientId).update({ numeroFacture: num });
+    else db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ numeroFacture: num });
+  }
+  return num;
+}
+
 window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, viaScan){
   var c = depot
     ? (window.depotClients || {})[clientId]
@@ -1768,7 +1806,12 @@ function depRenderFacturePublique(c, ctx){
   var totalColis = parseFloat(c.prix) || 0;
   var totalLivraison = c.livraisonDakar ? (parseFloat(c.prixLivraison) || 0) : 0;
   var totalGeneral = totalColis + totalLivraison;
-  var numero = (ctx.depot ? 'D' : 'C') + '-' + ctx.clientId;
+  var numero = depNumeroFacture(c, ctx);
+  // v1.16.5 : le premier collaborateur à avoir encaissé ce client (son tout
+  // premier versement enregistré), affiché à la place de l'ancienne ligne
+  // "Référence" qui ferait maintenant doublon avec le Numéro ci-dessus.
+  var versementsTries = Array.isArray(c.versements) ? c.versements.slice().sort(function(a,b){ return (a.le||0)-(b.le||0); }) : [];
+  var encaissePar = versementsTries.length ? (versementsTries[0].par || '') : '';
   var destBlock = c.destinataireNom
     ? ('<div class="fac-partie-nom">'+esc(c.destinataireNom)+'</div>'
        + '<div class="fac-partie-detail">'+esc(c.destinataireTel||'—')
@@ -1794,7 +1837,7 @@ function depRenderFacturePublique(c, ctx){
     +           '<div class="fac-info-titre">FACTURE</div>'
     +           '<div class="fac-info-ligne"><span>Num&eacute;ro</span><strong>'+esc(numero)+'</strong></div>'
     +           '<div class="fac-info-ligne"><span>Date</span><strong>'+esc(dateHeureFr(Date.now()))+'</strong></div>'
-    +           '<div class="fac-info-ligne"><span>R&eacute;f&eacute;rence</span><strong>'+esc(ctx.collecteId || numero)+'</strong></div>'
+    +           (encaissePar ? ('<div class="fac-info-ligne"><span>Encaiss&eacute; par</span><strong>'+esc(encaissePar)+'</strong></div>') : '')
     +           '<div class="fac-info-ligne"><span>Statut</span><strong style="color:'+(st.color||'#555')+';">'+esc(st.label||pay.statut)+'</strong></div>'
     +         '</div>'
     +         '<div class="fac-qr-wrap"><canvas id="dep-pub-qr" width="148" height="148"></canvas></div>'
