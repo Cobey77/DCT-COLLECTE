@@ -183,16 +183,16 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.18.3';
+var DEP_VERSION = 'v1.18.5';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
 
-// Un versement enregistré ne peut être supprimé que dans les 5 minutes
-// (le temps de rectifier une mauvaise manip) — passé ce délai, un
-// versement est considéré comme validé et ne se corrige plus qu'en
-// contactant la direction (voir depSupprimerVersement).
-var DEP_VERSEMENT_DELAI_SUPPR = 5 * 60 * 1000;
+// Un versement enregistré ne peut être supprimé que dans les 30 minutes
+// (le temps de rectifier une mauvaise manip — 30 min depuis le 21/08/2026,
+// 5 min avant) — passé ce délai, un versement est considéré comme validé
+// et ne se corrige plus qu'en contactant la direction (voir depSupprimerVersement).
+var DEP_VERSEMENT_DELAI_SUPPR = 30 * 60 * 1000;
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -1917,30 +1917,26 @@ function depRenderFacturePublique(c, ctx){
     +     '</table></div>'
 
     +     '<div class="fac-bas">'
-    +       '<div class="fac-lettres">Arr&ecirc;t&eacute;e la pr&eacute;sente facture &agrave; la somme de&nbsp;: '+(prixIndefiniPub ? 'prix &agrave; d&eacute;finir sur place' : esc(_depSommeEnLettres(totalGeneral)))+'.</div>'
+    // v1.18.5 : la somme en lettres et le TOTAL mis en avant ne portent
+    // plus que sur le prix des colis (ce dont DCT a besoin) — la livraison
+    // est encaissée à part par Issyaka, dans une caisse différente, et
+    // n'est donc plus mélangée dans ce total-là (retour de Cobey du
+    // 21/08/2026). Elle reste visible, mais en plus petit, en dessous.
+    +       '<div class="fac-lettres">Arr&ecirc;t&eacute;e la pr&eacute;sente facture &agrave; la somme de&nbsp;: '+(prixIndefiniPub ? 'prix &agrave; d&eacute;finir sur place' : esc(_depSommeEnLettres(totalColis)))+'.</div>'
     +       '<div class="fac-totaux">'
     +         '<div class="fac-totaux-ligne"><span>Sous-total colis</span><span>'+esc(totalColisTxt)+'</span></div>'
-    +         (totalLivraison ? '<div class="fac-totaux-ligne"><span>Livraison &agrave; Dakar</span><span>'+totalLivraison+' &euro;</span></div>' : '')
     +         '<div class="fac-totaux-ligne"><span>TVA</span><span>0 &euro;</span></div>'
-    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL</span><span>'+esc(totalGeneralTxt)+'</span></div>'
+    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL</span><span>'+esc(totalColisTxt)+'</span></div>'
     +         '<div class="fac-totaux-ligne"><span>Montant pay&eacute;</span><span>'+pay.paye+' &euro;</span></div>'
     +         '<div class="fac-totaux-ligne"><span>Reste &agrave; payer</span><span>'+pay.reste+' &euro;</span></div>'
+    +         (totalLivraison
+                ? ('<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar (caisse s&eacute;par&eacute;e)</span><span>'+totalLivraison+' &euro;</span></div>'
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Total avec livraison</span><span>'+esc(totalGeneralTxt)+'</span></div>'
+                   + '</div>')
+                : '')
     +       '</div>'
     +     '</div>';
-
-  var versements = Array.isArray(c.versements) ? c.versements.slice().sort(function(a,b){ return (a.le||0) - (b.le||0); }) : [];
-  if(versements.length){
-    var cumule = 0;
-    h += '<div class="fac-hist-titre">HISTORIQUE DES PAIEMENTS</div>'
-      +  '<table class="fac-hist"><thead><tr><th>Date &amp; heure</th><th>Montant</th><th>Mode</th><th>Restant</th><th>Agent</th></tr></thead><tbody>'
-      +  versements.map(function(v){
-           cumule += parseFloat(v.montant) || 0;
-           var restant = Math.max(0, totalColis - cumule);
-           var meth = v.methode === 'virement' ? 'Virement' : (v.methode === 'especes' ? 'Esp&egrave;ces' : '—');
-           return '<tr><td>'+esc(dateHeureFr(v.le))+'</td><td>'+(parseFloat(v.montant)||0)+' &euro;</td><td>'+meth+'</td><td>'+restant+' &euro;</td><td>'+esc(v.par||'—')+'</td></tr>';
-         }).join('')
-      +  '</tbody></table>';
-  }
 
   // Lecture seule stricte pour un visiteur non connecté (lien WhatsApp) :
   // seul "Imprimer / PDF" reste — pas de retour vers l'appli, pas de
@@ -2230,18 +2226,30 @@ function depRenderFacture(c){
   // pour qu'on comprenne d'où vient un montant sans devoir aller jusqu'au
   // Suivi (retour de Cobey du 21/08/2026). Ordre chronologique (le premier
   // versement en premier), comme un relevé qui se construit au fil de l'eau.
+  // v1.18.4 : bouton de suppression remis directement ici (même règle des
+  // 30 min / direction que sur le Suivi) — son absence ici donnait
+  // l'impression que la possibilité de rectifier avait disparu.
   var versementsFacture = Array.isArray(c.versements) ? c.versements.slice() : [];
   if(versementsFacture.length){
     versementsFacture.sort(function(a,b){ return (a.le||0) - (b.le||0); });
     h += '<div style="background:#F9F9F7;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:16px;">'
       + '<div style="font-size:10.5px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">D&eacute;tail des versements</div>';
     versementsFacture.forEach(function(v){
+      var idxOriginal = c.versements.indexOf(v);
       var meth = v.methode === 'virement' ? 'Virement' : (v.methode === 'especes' ? 'Esp&egrave;ces' : '');
       var fcfa = v.montantFCFA ? (' (' + (parseFloat(v.montantFCFA)||0) + ' FCFA)') : '';
-      h += '<div style="font-size:12px;color:var(--text2);line-height:1.6;">'
-        + '&#128176; <strong>' + (parseFloat(v.montant)||0) + ' &euro;</strong>' + fcfa
-        + (meth ? (' &middot; ' + meth) : '') + ' &middot; ' + esc(dateHeureFr(v.le))
-        + (v.par ? (' &middot; ' + esc(v.par)) : '')
+      var supprimable = estDirection() || (Date.now() - (v.le||0)) <= DEP_VERSEMENT_DELAI_SUPPR;
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+        + '<div style="font-size:12px;color:var(--text2);line-height:1.6;">'
+        +   '&#128176; <strong>' + (parseFloat(v.montant)||0) + ' &euro;</strong>' + fcfa
+        +   (meth ? (' &middot; ' + meth) : '') + ' &middot; ' + esc(dateHeureFr(v.le))
+        +   (v.par ? (' &middot; ' + esc(v.par)) : '')
+        + '</div>'
+        + (supprimable
+            ? ('<button type="button" onclick="depSupprimerVersement(' + idxOriginal + ')" '
+               + 'style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;border-radius:8px;width:26px;height:26px;'
+               + 'font-size:12px;cursor:pointer;flex-shrink:0;line-height:1;">&#128465;</button>')
+            : '')
         + '</div>';
     });
     h += '</div>';
