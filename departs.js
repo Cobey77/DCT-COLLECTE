@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.10.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.11.0  ·  20/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -84,6 +84,29 @@
        course), avec en plus une vérification de rattrapage qui
        re-supprime automatiquement si le client réapparaît quand
        même dans les secondes qui suivent.
+   24. Refonte de la validation de collecte (écran Camion/Dispatch) :
+       valider UN client ouvre désormais un écran complet — colis,
+       prix (verrouillé, modifiable via un bouton dédié et tracé),
+       montant reçu avec message de cohérence en temps réel par
+       rapport au prix, mode de paiement (Espèces / Virement), photo
+       du colis (déplacée ici, retirée de l'inscription), coordonnées
+       du destinataire, et choix du départ (container) — ouvert à
+       tous les collaborateurs, obligatoire pour valider. Une fois
+       validée, la facture (avec QR code) est immédiatement
+       utilisable avant même de quitter le client. La logique
+       d'origine (dispatch, camion, fil d'Activité) est appelée
+       telle quelle à la fin, rien n'y a été touché.
+   25. La photo du colis n'est plus prise à l'inscription (s-add) :
+       elle se prend désormais au moment de la validation de la
+       collecte (point 24), une seule fois, quand le colis est
+       réellement sous les yeux du collaborateur.
+   26. Le bouton "Ajouter un versement" de la facture accepte
+       désormais le mode de paiement (Espèces / Virement), et un
+       versement peut être saisi en francs CFA (converti en euros au
+       taux fixe légal 1 € = 655,957 FCFA) pour les paiements
+       effectués à Dakar dans la monnaie locale — l'écran de
+       validation de collecte (point 24), lui, reste toujours en
+       euros, les clients France/Europe payant toujours en euros.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -93,7 +116,10 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.10.0';
+var DEP_VERSION = 'v1.11.0';
+
+// Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
+var TAUX_FCFA_EUR = 655.957;
 
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
@@ -120,12 +146,16 @@ var STATUTS_PAIEMENT = {
 window.departsData = {};        // { id: {nom, dateDepart, ...} }
 var _depEditId   = null;        // départ en cours de modification
 var _depDetailId = null;        // départ affiché en détail
-var _depPhotoTmp = null;        // photo du colis en attente d'enregistrement
 var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depPhotoFiche = null;      // photo en attente sur la fiche client
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
 var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
+var _depVersMethode = '';       // 'especes' | 'virement' — méthode choisie sur le bouton "Ajouter un versement"
+var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bouton "Ajouter un versement"
+
+var _depValiderCtx = null;      // { collecteId, clientId, tk, prixModifie, photo } — écran de validation de collecte
+var _depValiderMethode = '';    // 'especes' | 'virement' — méthode choisie sur l'écran de validation
 
 window.depotClients = {};       // { id: {...} } — clients inscrits directement au dépôt, hors collecte
 var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un client du dépôt
@@ -542,6 +572,58 @@ function injecterEcrans(){
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content" id="dep-fact-content"></div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 8 : validation de la collecte d'un client (camion/dispatch) ---- */
+  + '<div class="screen" id="s-dep-valider">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depValiderAnnuler()">&larr; Annuler</button>'
+  +     '<div class="h-title" id="dv-titre">Valider la collecte</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div class="dep-sec">Colis</div>'
+  +     '<div class="fg"><textarea class="fi" id="dv-colis" rows="3" placeholder="ex: 2 valises + 1 carton..." style="resize:none;"></textarea></div>'
+
+  +     '<div class="dep-sec">Prix (&euro;)</div>'
+  +     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
+  +       '<div id="dv-prix-affiche" style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px;text-align:center;font-size:20px;font-weight:800;">0 &euro;</div>'
+  +       '<input class="fi" id="dv-prix-input" type="number" min="0" style="display:none;flex:1;font-size:20px;font-weight:700;text-align:center;padding:13px;margin:0;" oninput="depValiderPrixChange()">'
+  +       '<button type="button" class="dep-cli-btn" id="dv-prix-btn" onclick="depValiderModifierPrix()">&#9999;&#65039; Modifier</button>'
+  +     '</div>'
+
+  +     '<div class="dep-sec">Montant re&ccedil;u (&euro;)</div>'
+  +     '<div class="fg"><input class="fi" id="dv-montant" type="number" min="0" step="1" placeholder="0" style="font-size:20px;font-weight:700;text-align:center;padding:14px;" oninput="depValiderMajCoherence()"></div>'
+  +     '<div id="dv-coherence" style="display:none;border-radius:8px;padding:9px 12px;font-size:12.5px;font-weight:700;margin-bottom:10px;"></div>'
+  +     '<div id="dv-methode-bloc" style="display:none;gap:8px;margin-bottom:14px;">'
+  +       '<button type="button" class="dep-st" id="dv-meth-esp" onclick="depValiderMethode(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
+  +       '<button type="button" class="dep-st" id="dv-meth-vir" onclick="depValiderMethode(\'virement\')" style="flex:1;">Virement</button>'
+  +     '</div>'
+
+  +     '<div class="dep-sec">Photo du colis</div>'
+  +     '<div class="dep-photo-box" id="dv-photo-box" onclick="depOuvrirPhotoValider()">'
+  +       '<div id="dv-photo-vide"><div style="font-size:28px;">&#128247;</div>'
+  +       '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
+  +       '<img id="dv-photo-apercu" style="display:none;">'
+  +     '</div>'
+  +     '<input type="file" id="dv-photo-input" accept="image/*" style="display:none;" onchange="depPhotoChoisieValider(this)">'
+  +     '<div id="dv-photo-actions" style="display:none;margin-bottom:12px;">'
+  +       '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhotoValider()">&#128465; Retirer la photo</button>'
+  +     '</div>'
+
+  +     '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
+  +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dv-dest-nom" placeholder="Awa Ndiaye"></div>'
+  +     '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label><input class="fi" id="dv-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
+
+  +     '<div class="dep-sec">D&eacute;part (container)</div>'
+  +     '<div class="fg"><select class="fi" id="dv-depart"></select></div>'
+  +     '<div id="dv-depart-msg" style="display:none;" class="dep-alert"></div>'
+
+  +     '<div style="margin-top:18px;">'
+  +       '<button class="btn btn-green" id="dv-btn-valider" onclick="depValiderConfirmer()">&#9989; Valider la collecte</button>'
+  +       '<button class="btn btn-gray" onclick="depValiderAnnuler()">&#10005; Annuler</button>'
+  +     '</div>'
+  +   '</div>'
   + '</div>';
 
   while(w.firstChild) parent.appendChild(w.firstChild);
@@ -653,16 +735,7 @@ function injecterChampsClient(){
     +     '&#8505;&#65039; La livraison est factur&eacute;e au client mais reste <b>hors comptabilit&eacute; DCT</b>.</div>'
     + '</div>'
 
-    + '<div class="dep-sec">Photo et note</div>'
-    + '<div class="dep-photo-box" id="f-photo-box" onclick="depOuvrirPhoto()">'
-    +   '<div id="f-photo-vide"><div style="font-size:28px;">&#128247;</div>'
-    +   '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
-    +   '<img id="f-photo-apercu" style="display:none;">'
-    + '</div>'
-    + '<input type="file" id="f-photo-input" accept="image/*" style="display:none;" onchange="depPhotoChoisie(this)">'
-    + '<div id="f-photo-actions" style="display:none;margin-bottom:12px;">'
-    +   '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhoto()">&#128465; Retirer la photo</button>'
-    + '</div>'
+    + '<div class="dep-sec">Note</div>'
     + '<div class="fg"><label class="fl">Note '
     +   '<span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
     +   '<textarea class="fi" id="f-note" rows="2" placeholder="Remarque sur le colis, le client..." style="resize:none;"></textarea></div>';
@@ -1116,6 +1189,37 @@ function dateHeureFr(ts){
   return jj+'/'+mm+'/'+d.getFullYear()+' '+hh+':'+mi;
 }
 
+window.depVersDevise = function(d){
+  _depVersDevise = d;
+  var be = $('dep-vers-dev-eur'), bf = $('dep-vers-dev-fcfa');
+  if(be) be.className = 'dep-st' + (d === 'eur' ? ' on' : '');
+  if(bf) bf.className = 'dep-st' + (d === 'fcfa' ? ' on' : '');
+  var lab = $('dep-fact-vers-lab');
+  if(lab) lab.textContent = d === 'fcfa' ? 'Montant (FCFA)' : 'Montant (€)';
+  depVersMajFcfa();
+};
+
+window.depVersMethode = function(m){
+  _depVersMethode = m;
+  var be = $('dep-vers-meth-esp'), bv = $('dep-vers-meth-vir');
+  if(be) be.className = 'dep-st' + (m === 'especes' ? ' on' : '');
+  if(bv) bv.className = 'dep-st' + (m === 'virement' ? ' on' : '');
+};
+
+// Aperçu en temps réel de l'équivalent euro, au taux fixe légal — pas
+// un appel réseau à un service de taux flottant.
+window.depVersMajFcfa = function(){
+  var hint = $('dep-vers-fcfa-hint');
+  if(!hint) return;
+  if(_depVersDevise !== 'fcfa'){ hint.style.display = 'none'; return; }
+  var input = $('dep-fact-vers-montant');
+  var montantFcfa = parseFloat(input && input.value) || 0;
+  if(montantFcfa <= 0){ hint.style.display = 'none'; return; }
+  var eur = Math.round((montantFcfa / TAUX_FCFA_EUR) * 100) / 100;
+  hint.style.display = 'block';
+  hint.textContent = '≈ ' + eur + ' € (taux fixe 1 € = ' + TAUX_FCFA_EUR + ' FCFA)';
+};
+
 window.depAjouterVersement = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
@@ -1127,12 +1231,22 @@ window.depAjouterVersement = function(){
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
   var input = $('dep-fact-vers-montant');
-  var montant = parseFloat(input && input.value) || 0;
-  if(montant <= 0){ toast('⚠️ Indiquez un montant supérieur à 0.'); return; }
+  var saisie = parseFloat(input && input.value) || 0;
+  if(saisie <= 0){ toast('⚠️ Indiquez un montant supérieur à 0.'); return; }
+  if(!_depVersMethode){ toast('⚠️ Choisissez le mode de paiement.'); return; }
+
+  // Un versement saisi en FCFA (paiement à Dakar dans la monnaie locale)
+  // est converti en euros au taux fixe légal, l'équivalent FCFA d'origine
+  // restant visible dans l'historique.
+  var devise = _depVersDevise;
+  var montant = devise === 'fcfa' ? Math.round((saisie / TAUX_FCFA_EUR) * 100) / 100 : saisie;
 
   var u = window.currentUser || {};
+  var v = { montant: montant, le: Date.now(), par: u.name || u.id || '', methode: _depVersMethode };
+  if(devise === 'fcfa'){ v.montantFCFA = saisie; v.tauxFCFA = TAUX_FCFA_EUR; }
+
   var versements = Array.isArray(c.versements) ? c.versements : [];
-  versements.push({ montant: montant, le: Date.now(), par: u.name || u.id || '' });
+  versements.push(v);
   c.versements = versements;
 
   if(ctx.depot){
@@ -1141,10 +1255,10 @@ window.depAjouterVersement = function(){
     try{ sauvegarder(); }catch(e){}
   }
 
-  depActivite('&#128176;', 'a enregistr&eacute; un versement de <strong>'+montant+' &euro;</strong> pour <strong>'+esc(c.name||'')+'</strong>');
+  depActivite('&#128176;', 'a enregistr&eacute; un versement de <strong>'+montant+' &euro;</strong>'
+    + (devise === 'fcfa' ? ' (' + saisie + ' FCFA)' : '') + ' pour <strong>'+esc(c.name||'')+'</strong>');
 
   toast('✅ Versement enregistré');
-  if(input) input.value = '';
   depRenderFacture(c);
 };
 
@@ -1218,8 +1332,11 @@ function depRenderFacture(c){
     h += '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucun versement enregistr&eacute; pour l\'instant.</div>';
   } else {
     versements.forEach(function(v){
+      var sousLignes = '';
+      if(v.montantFCFA) sousLignes += '<div style="font-size:10.5px;color:var(--text3);">' + (parseFloat(v.montantFCFA)||0) + ' FCFA</div>';
+      if(v.methode) sousLignes += '<div style="font-size:10.5px;color:var(--text3);">' + (v.methode === 'virement' ? 'Virement' : 'Esp&egrave;ces') + '</div>';
       h += '<div class="dep-fc-champ" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-        + '<div style="font-size:15px;font-weight:800;color:#006b2d;">' + (parseFloat(v.montant)||0) + ' &euro;</div>'
+        + '<div><div style="font-size:15px;font-weight:800;color:#006b2d;">' + (parseFloat(v.montant)||0) + ' &euro;</div>' + sousLignes + '</div>'
         + '<div style="font-size:11px;color:var(--text3);text-align:right;">' + esc(dateHeureFr(v.le))
         +   (v.par ? '<br>'+esc(v.par) : '') + '</div>'
         + '</div>';
@@ -1227,10 +1344,22 @@ function depRenderFacture(c){
   }
 
   // Ajout d'un versement — ouvert à tous les collaborateurs connectés.
+  // Devise et méthode repartent à zéro à chaque affichage de la facture.
+  _depVersDevise = 'eur';
+  _depVersMethode = '';
   h += '<div class="dep-sec">Ajouter un versement</div>'
-    + '<div class="fg"><label class="fl">Montant (&euro;)</label>'
+    + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
+    +   '<button type="button" class="dep-st on" id="dep-vers-dev-eur" onclick="depVersDevise(\'eur\')" style="flex:1;">&euro; Euros</button>'
+    +   '<button type="button" class="dep-st" id="dep-vers-dev-fcfa" onclick="depVersDevise(\'fcfa\')" style="flex:1;">FCFA</button>'
+    + '</div>'
+    + '<div class="fg"><label class="fl" id="dep-fact-vers-lab">Montant (&euro;)</label>'
     +   '<input class="fi" id="dep-fact-vers-montant" type="number" min="0" step="1" placeholder="0" '
-    +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;"></div>'
+    +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;" oninput="depVersMajFcfa()"></div>'
+    + '<div id="dep-vers-fcfa-hint" style="display:none;font-size:11.5px;color:var(--text3);margin:-6px 0 10px;text-align:center;"></div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
+    +   '<button type="button" class="dep-st" id="dep-vers-meth-esp" onclick="depVersMethode(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
+    +   '<button type="button" class="dep-st" id="dep-vers-meth-vir" onclick="depVersMethode(\'virement\')" style="flex:1;">Virement</button>'
+    + '</div>'
     + '<button class="btn btn-green" onclick="depAjouterVersement()">&#9989; Enregistrer le versement</button>';
 
   // QR code — lien direct vers cette facture précise. La librairie est
@@ -2156,14 +2285,179 @@ window.depSetLivraison = function(oui){
   window._depLivraison = oui;
 };
 
-/* ---- Photo du colis : même compression que les photos France ---- */
+/* ---- Photo du colis : déplacée à la validation de la collecte
+   (voir §14bis, depOuvrirPhotoValider et consorts) — plus prise à
+   l'inscription depuis la v1.11.0. ---- */
 
-window.depOuvrirPhoto = function(){
-  var i = $('f-photo-input');
+function reinitialiserNouveauxChamps(){
+  ['f-dest-nom','f-dest-tel','f-liv-adresse','f-liv-prix','f-note'].forEach(function(id){
+    var e = $(id); if(e) e.value = '';
+  });
+  depSetLivraison(false);
+  depRemplirSelect();
+}
+
+/* ─────────────────────────────────────────────
+   12bis. TRAÇABILITÉ DES MODIFICATIONS DE FACTURE
+   (partagée entre la fiche client — direction — et l'écran de
+   validation de collecte — tous les collaborateurs) : compare une
+   fiche avant/après et pousse une ligne dans hist[] + le fil
+   d'Activité si quelque chose a changé.
+   ───────────────────────────────────────────── */
+
+function _depTracerModifsFacture(fiche, avant, verbe){
+  var uH = window.currentUser || {};
+  var change = [];
+  if((parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)) change.push('montant');
+  if((fiche.colis||'') !== (avant.colis||'')) change.push('colis');
+  if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')) change.push('destinataire');
+  if(!!fiche.livraisonDakar !== !!avant.livraisonDakar || (fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)) change.push('livraison');
+  if((fiche.note||'') !== (avant.note||'')) change.push('note');
+  if(change.length){
+    var histFact = fiche.hist || [];
+    histFact.push({ q: uH.name || uH.id || '', a: (verbe || 'a modifié la facture') + ' — ' + change.join(', '), ts: Date.now() });
+    fiche.hist = histFact;
+    depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(change.join(', ')));
+  }
+  return change;
+}
+
+/* ─────────────────────────────────────────────
+   14bis. VALIDATION DE LA COLLECTE D'UN CLIENT (écran camion/dispatch)
+   Remplace la simple modale de confirmation d'origine (askValider /
+   modal-valider) par un écran complet : colis, prix (verrouillé),
+   montant reçu + méthode de paiement, photo du colis, destinataire,
+   départ (container) — obligatoire, ouvert à tous les collaborateurs.
+   Une fois validé, on délègue à confirmValider() d'origine, telle
+   quelle, pour tout le reste (dispatch, camion, fil d'Activité).
+   ───────────────────────────────────────────── */
+
+window.depOuvrirValidation = function(id, tk, name, prix){
+  var fiche = (typeof getClients === 'function') ? getClients()[id] : null;
+  if(!fiche){ toast('⚠️ Client introuvable.'); return; }
+
+  _depValiderCtx = { collecteId: window.currentCollecteId, clientId: id, tk: tk, prixModifie: null, photo: null };
+  _depValiderMethode = '';
+
+  var titre = $('dv-titre'); if(titre) titre.textContent = 'Valider — ' + (fiche.name || name || '');
+
+  var colisEl = $('dv-colis'); if(colisEl) colisEl.value = fiche.colis || '';
+
+  var pay = depCalculerPaiement(fiche);
+  var pAff = $('dv-prix-affiche'); if(pAff){ pAff.textContent = pay.total + ' €'; pAff.style.display = 'block'; }
+  var pInp = $('dv-prix-input'); if(pInp){ pInp.value = pay.total; pInp.style.display = 'none'; }
+  var pBtn = $('dv-prix-btn'); if(pBtn) pBtn.style.display = 'inline-block';
+
+  var mInp = $('dv-montant'); if(mInp) mInp.value = '';
+  var coh = $('dv-coherence'); if(coh) coh.style.display = 'none';
+  var mb  = $('dv-methode-bloc'); if(mb) mb.style.display = 'none';
+  depValiderMethode('');
+
+  window.depRetirerPhotoValider();
+
+  var dn = $('dv-dest-nom'); if(dn) dn.value = fiche.destinataireNom || '';
+  var dt = $('dv-dest-tel'); if(dt) dt.value = fiche.destinataireTel || '';
+
+  depValiderRemplirDepart(fiche.departId || '');
+
+  goTo('s-dep-valider');
+};
+
+window.depValiderAnnuler = function(){
+  _depValiderCtx = null;
+  goTo('s-camion');
+};
+
+window.depValiderModifierPrix = function(){
+  var disp = $('dv-prix-affiche'), inp = $('dv-prix-input'), btn = $('dv-prix-btn');
+  if(disp) disp.style.display = 'none';
+  if(btn) btn.style.display = 'none';
+  if(inp){ inp.style.display = 'block'; inp.focus(); }
+};
+
+window.depValiderPrixChange = function(){
+  var inp = $('dv-prix-input');
+  var v = parseFloat(inp && inp.value);
+  if(_depValiderCtx) _depValiderCtx.prixModifie = isNaN(v) ? 0 : v;
+  depValiderMajCoherence();
+};
+
+function depValiderRemplirDepart(departIdActuel){
+  var sel = $('dv-depart'), msg = $('dv-depart-msg'), btn = $('dv-btn-valider');
+  if(!sel) return;
+  var opts = (typeof departsDisponibles === 'function') ? departsDisponibles() : [];
+
+  if(!opts.length){
+    sel.innerHTML = '<option value="">Aucun d&eacute;part ouvert</option>';
+    sel.disabled = true;
+    if(msg){
+      msg.style.display = 'block';
+      msg.innerHTML = '&#128274; Aucun d&eacute;part ouvert. Contactez Issyaka avant de valider cette collecte.';
+    }
+    if(btn) btn.disabled = true;
+    return;
+  }
+
+  sel.disabled = false;
+  if(btn) btn.disabled = false;
+  if(msg) msg.style.display = 'none';
+
+  sel.innerHTML = '<option value="">— Choisir le d&eacute;part —</option>'
+    + opts.map(function(d){ return '<option value="'+d._id+'">'+esc(d.nom)+' — part le '+dateFr(d.dateDepart)+'</option>'; }).join('');
+
+  if(departIdActuel && opts.some(function(d){ return d._id === departIdActuel; })){
+    sel.value = departIdActuel;
+  } else if(opts.length === 1){
+    sel.value = opts[0]._id;
+  }
+}
+
+window.depValiderMethode = function(m){
+  _depValiderMethode = m;
+  var be = $('dv-meth-esp'), bv = $('dv-meth-vir');
+  if(be) be.className = 'dep-st' + (m === 'especes' ? ' on' : '');
+  if(bv) bv.className = 'dep-st' + (m === 'virement' ? ' on' : '');
+};
+
+window.depValiderMajCoherence = function(){
+  var ctx = _depValiderCtx; if(!ctx) return;
+  var fiche = (typeof getClients === 'function') ? getClients()[ctx.clientId] : null;
+  if(!fiche) return;
+
+  var pay = depCalculerPaiement(fiche);
+  var prixCourant = (ctx.prixModifie !== null && ctx.prixModifie !== undefined) ? ctx.prixModifie : pay.total;
+  var montant = parseFloat((($('dv-montant')||{}).value)) || 0;
+
+  var mb = $('dv-methode-bloc');
+  if(mb) mb.style.display = montant > 0 ? 'flex' : 'none';
+
+  var msg = $('dv-coherence');
+  if(!msg) return;
+  if(montant <= 0){ msg.style.display = 'none'; return; }
+
+  var resteApres = prixCourant - (pay.paye + montant);
+  msg.style.display = 'block';
+  if(resteApres > 0){
+    msg.style.background = '#fff3cd'; msg.style.color = '#856404';
+    msg.textContent = '🕓 Reste à payer après ce versement : ' + resteApres + ' €';
+  } else if(resteApres === 0){
+    msg.style.background = '#d4f0e0'; msg.style.color = '#006b2d';
+    msg.textContent = '✅ Payé intégralement';
+  } else {
+    msg.style.background = '#FDEDED'; msg.style.color = '#992020';
+    msg.textContent = '⚠️ Le montant dépasse le prix de ' + Math.abs(resteApres) + ' €';
+  }
+};
+
+/* ---- Photo du colis, à la validation : même compression que les
+   autres photos du module. ---- */
+
+window.depOuvrirPhotoValider = function(){
+  var i = $('dv-photo-input');
   if(i) i.click();
 };
 
-window.depPhotoChoisie = function(input){
+window.depPhotoChoisieValider = function(input){
   var f = input && input.files && input.files[0];
   input.value = '';
   if(!f) return;
@@ -2171,8 +2465,8 @@ window.depPhotoChoisie = function(input){
   try{
     _compresserPhoto(f, function(data){
       if(!data){ toast('❌ Photo illisible.'); return; }
-      _depPhotoTmp = data;
-      var img = $('f-photo-apercu'), vide = $('f-photo-vide'), act = $('f-photo-actions');
+      if(_depValiderCtx) _depValiderCtx.photo = data;
+      var img = $('dv-photo-apercu'), vide = $('dv-photo-vide'), act = $('dv-photo-actions');
       if(img){ img.src = data; img.style.display = 'block'; }
       if(vide) vide.style.display = 'none';
       if(act) act.style.display = 'block';
@@ -2181,22 +2475,82 @@ window.depPhotoChoisie = function(input){
   }catch(e){ toast('❌ Photo illisible.'); }
 };
 
-window.depRetirerPhoto = function(){
-  _depPhotoTmp = null;
-  var img = $('f-photo-apercu'), vide = $('f-photo-vide'), act = $('f-photo-actions');
+window.depRetirerPhotoValider = function(){
+  if(_depValiderCtx) _depValiderCtx.photo = null;
+  var img = $('dv-photo-apercu'), vide = $('dv-photo-vide'), act = $('dv-photo-actions');
   if(img){ img.src = ''; img.style.display = 'none'; }
   if(vide) vide.style.display = 'block';
   if(act) act.style.display = 'none';
 };
 
-function reinitialiserNouveauxChamps(){
-  ['f-dest-nom','f-dest-tel','f-liv-adresse','f-liv-prix','f-note'].forEach(function(id){
-    var e = $(id); if(e) e.value = '';
-  });
-  depSetLivraison(false);
-  depRetirerPhoto();
-  depRemplirSelect();
-}
+window.depValiderConfirmer = function(){
+  var ctx = _depValiderCtx;
+  if(!ctx){ toast('⚠️ Rien à valider.'); return; }
+
+  var fiche = ((window.clientsParCollecte||{})[ctx.collecteId]||{})[ctx.clientId];
+  if(!fiche){ toast('⚠️ Client introuvable.'); return; }
+
+  var selDepart = $('dv-depart');
+  var departId = selDepart ? selDepart.value : '';
+  if(!departId){ toast('⚠️ Choisissez un départ avant de valider.'); return; }
+
+  var montant = parseFloat((($('dv-montant')||{}).value)) || 0;
+  var methode = _depValiderMethode;
+  if(montant > 0 && !methode){ toast('⚠️ Choisissez le mode de paiement.'); return; }
+
+  var avant = {};
+  try{ avant = JSON.parse(JSON.stringify(fiche)); }catch(e){}
+
+  var colisEl = $('dv-colis');
+  if(colisEl) fiche.colis = colisEl.value.trim();
+
+  if(ctx.prixModifie !== null && ctx.prixModifie !== undefined){
+    fiche.prix = ctx.prixModifie;
+  }
+
+  fiche.destinataireNom = (($('dv-dest-nom')||{}).value || '').trim();
+  fiche.destinataireTel = (($('dv-dest-tel')||{}).value || '').trim();
+
+  var u = window.currentUser || {};
+  if(departId !== (avant.departId || '')){
+    var histD = fiche.historiqueDepart || [];
+    histD.push({ de: avant.departId || '', vers: departId, par: u.id || '', le: Date.now() });
+    fiche.historiqueDepart = histD;
+  }
+  fiche.departId = departId;
+
+  if(montant > 0){
+    var versements = Array.isArray(fiche.versements) ? fiche.versements : [];
+    versements.push({ montant: montant, le: Date.now(), par: u.name || u.id || '', methode: methode });
+    fiche.versements = versements;
+  }
+
+  if(ctx.photo) fiche.aPhotoColis = true;
+
+  // À partir d'ici, plus aucune modification de la fiche : tout ce qui
+  // suit ne fait qu'écrire sur Firebase (Activité, photo, sauvegarde),
+  // ce qui peut redéclencher la synchronisation temps réel et détacher
+  // cette référence locale — sans risque puisque tout est déjà posé.
+  _depTracerModifsFacture(fiche, avant, 'a modifié la facture — validation de la collecte');
+
+  if(ctx.photo && window.db && window.firebaseReady){
+    db.ref('dct_photos_colis/'+ctx.clientId).set({
+      d: ctx.photo, ts: Date.now(), q: (u.name||''), uid: (u.id||'')
+    });
+  }
+
+  try{ sauvegarder(); }catch(e){}
+
+  // On délègue à la logique d'origine, inchangée, pour le dispatch/
+  // camion/Activité : elle lit ces deux globales.
+  curValiderId = ctx.clientId;
+  curValiderTk = ctx.tk;
+  try{ confirmValider(); }catch(e){ console.error('departs: confirmValider original', e); }
+
+  _depValiderCtx = null;
+  toast('✅ Collecte validée');
+  goTo('s-camion');
+};
 
 /* ─────────────────────────────────────────────
    13. LES GREFFES SUR LE CODE EXISTANT
@@ -2337,7 +2691,6 @@ function greffer(){
         livraisonAdresse : window._depLivraison ? (($('f-liv-adresse')||{}).value || '').trim() : '',
         prixLivraison    : window._depLivraison ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0
       };
-      var photo = _depPhotoTmp;
       var venantDuCarre = _depAjoutClientCarre;
       _depAjoutClientCarre = false;
 
@@ -2349,18 +2702,10 @@ function greffer(){
         if(neuf){
           var fiche = clientsParCollecte[colId][neuf];
           Object.keys(extras).forEach(function(k){ fiche[k] = extras[k]; });
-          if(photo){
-            fiche.aPhotoColis = true;
-            if(window.db && window.firebaseReady){
-              var u = window.currentUser || {};
-              db.ref('dct_photos_colis/'+neuf).set({
-                d: photo, ts: Date.now(), q: (u.name||''), uid: (u.id||'')
-              });
-            }
-          }
+          // La photo du colis n'est plus prise ici : elle se prend au moment
+          // de la validation de la collecte (voir depOuvrirPhotoValider).
           sauvegarder();
         }
-        _depPhotoTmp = null;
       }catch(e){}
 
       // Ajouté depuis le carré Client : on revient sur le carnet, pas sur la collecte
@@ -2437,31 +2782,25 @@ function greffer(){
             fiche.historiqueDepart = hist;
           }
           fiche.departId = nouveauDepart;
+          // 4. La photo — seul le drapeau est posé ici ; l'écriture
+          // Firebase elle-même est repoussée après le point 3bis (voir
+          // plus bas) pour ne pas détacher "fiche" de clientsParCollecte
+          // avant que toutes les modifications y soient posées.
+          if(photo === '') fiche.aPhotoColis = false;
+          else if(photo) fiche.aPhotoColis = true;
           // 3bis. Traçabilité des modifications de facture (demande de Cobey,
           // 20/08/2026) : même mécanisme que la fiche France & Europe
           // (hist[] : {q:auteur, a:action, ts:horodatage}), ouvert à tous
           // les collaborateurs — plus de verrou "seul l'auteur peut modifier".
-          (function(){
-            var uH = window.currentUser || {};
-            var change = [];
-            if((parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)) change.push('montant');
-            if((fiche.colis||'') !== (avant.colis||'')) change.push('colis');
-            if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')) change.push('destinataire');
-            if(!!fiche.livraisonDakar !== !!avant.livraisonDakar || (fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)) change.push('livraison');
-            if((fiche.note||'') !== (avant.note||'')) change.push('note');
-            if(change.length){
-              var histFact = fiche.hist || [];
-              histFact.push({ q: uH.name || uH.id || '', a: 'a modifié la facture — '+change.join(', '), ts: Date.now() });
-              fiche.hist = histFact;
-              depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(change.join(', ')));
-            }
-          })();
-          // 4. La photo
+          // Appelée en dernier parmi les modifications (v1.11.0) :
+          // depActivite() écrit sur Firebase, ce qui peut redéclencher la
+          // synchro temps réel et détacher cette référence locale — tout
+          // doit déjà être posé avant.
+          _depTracerModifsFacture(fiche, avant);
+
           if(photo === ''){
-            fiche.aPhotoColis = false;
             if(window.db && window.firebaseReady) db.ref('dct_photos_colis/'+id).remove();
           } else if(photo){
-            fiche.aPhotoColis = true;
             if(window.db && window.firebaseReady){
               var u2 = window.currentUser || {};
               db.ref('dct_photos_colis/'+id).set({
@@ -2478,8 +2817,9 @@ function greffer(){
   }
 
   /* --- F. Le récapitulatif de confirmation montre destinataire /
-     livraison / photo (le départ n'est plus choisi à la création,
-     il n'y a donc plus rien à afficher à ce sujet ici) --- */
+     livraison (le départ n'est plus choisi à la création, et la photo
+     se prend désormais à la validation de la collecte — il n'y a donc
+     plus rien à afficher à leur sujet ici) --- */
   if(typeof window.ouvrirConfirmClient === 'function' && !window.ouvrirConfirmClient._depPatch){
     var origConfirmUI = window.ouvrirConfirmClient;
     window.ouvrirConfirmClient = function(){
@@ -2489,12 +2829,11 @@ function greffer(){
         var dest = (($('f-dest-nom')||{}).value || '').trim();
         var liv  = !!window._depLivraison;
         var pliv = liv ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0;
-        if(recap && (dest || liv || _depPhotoTmp)){
+        if(recap && (dest || liv)){
           var sup = '<div style="margin-top:8px;padding-top:8px;border-top:1.5px dashed #ddd;">'
             + (dest ? '<div style="font-size:12.5px;color:#555;">&#127968; Destinataire : '+esc(dest)+'</div>' : '')
             + (liv  ? '<div style="font-size:12.5px;color:#555;margin-top:3px;">&#128666; Livraison Dakar'
                       + (pliv ? ' : '+pliv+' &euro;' : ' (prix &agrave; d&eacute;finir)') + '</div>' : '')
-            + (_depPhotoTmp ? '<div style="font-size:12.5px;color:#555;margin-top:3px;">&#128247; 1 photo</div>' : '')
             + '</div>';
           recap.innerHTML += sup;
         }
@@ -2599,6 +2938,18 @@ function greffer(){
       showToastNew('✅ Contact supprimé'+(removed?' de '+removed+' collecte(s)':'')+'.');
     };
     window.confirmerSupprimerContact._depPatch = true;
+  }
+
+  /* --- I. Valider la collecte d'un client (écran camion/dispatch) :
+     l'ancienne simple modale de confirmation (modal-valider) laisse
+     place à l'écran complet s-dep-valider (voir §14bis). La logique
+     d'origine, confirmValider(), reste appelée telle quelle à la fin
+     du nouveau parcours — rien n'y est modifié. --- */
+  if(typeof window.askValider === 'function' && !window.askValider._depPatch){
+    window.askValider = function(id, tk, name, prix){
+      depOuvrirValidation(id, tk, name, prix);
+    };
+    window.askValider._depPatch = true;
   }
 }
 
