@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.18.8';
+var DEP_VERSION = 'v1.19.0';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -666,8 +666,33 @@ function injecterEcrans(){
   +         '<div class="dep-case-tit" style="color:#1a237e;">FRANCE &amp; EUROPE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-fr">—</div>'
   +       '</div>'
+  // v1.19.0 : nouveau carré ARCHIVAGE, ouvert à tous — consultation en
+  // lecture seule des départs clôturés et des collectes terminées, dans un
+  // seul endroit (demande de Cobey du 21/08/2026).
+  +       '<div class="dep-case" style="border-color:#8B5E34;" onclick="depOuvrirEspaceArchive()">'
+  +         '<div class="dep-case-ico">&#128194;</div>'
+  +         '<div class="dep-case-tit" style="color:#8B5E34;">ARCHIVAGE</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-arch">—</div>'
+  +       '</div>'
   +     '</div>'
   +     '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:22px;">Module départs '+DEP_VERSION+'</div>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 1bis (v1.19.0) : ARCHIVAGE — consultation en lecture seule
+     des départs clôturés et des collectes terminées, regroupés au même
+     endroit, ouvert à tous. ---- */
+  + '<div class="screen" id="s-archive">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
+  +     '<div class="h-title">Archivage</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div class="dep-sec" style="border-top:none;padding-top:0;">D&eacute;parts cl&ocirc;tur&eacute;s</div>'
+  +     '<div id="dep-archive-departs"></div>'
+  +     '<div class="dep-sec">Collectes termin&eacute;es</div>'
+  +     '<div id="dep-archive-collectes"></div>'
   +   '</div>'
   + '</div>'
 
@@ -813,6 +838,20 @@ function injecterEcrans(){
   +       '<div class="dep-fc-val" id="dep-fc-ville">—</div></div>'
   +     '<button class="btn btn-green" style="margin-top:10px;" onclick="depOuvrirActionsContact()">&#8942; Actions</button>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 6bis (v1.19.0) : historique d'envoi d'un contact — tous ses
+     envois passés/en cours (collecte et dépôt confondus), avec accès au
+     départ et à la facture de chacun. Rend fonctionnels les deux boutons
+     "À venir" du menu Actions du contact (Historique d'envoi / Factures et
+     Imprimer facture). ---- */
+  + '<div class="screen" id="s-dep-historique-contact">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-client-fiche\')">&larr; Retour</button>'
+  +     '<div class="h-title">Historique d&rsquo;envoi</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content" id="dep-histo-contact-content"></div>'
   + '</div>'
 
   /* ---- ÉCRAN 7 : facture d'un client (lecture seule) ---- */
@@ -1034,12 +1073,14 @@ function injecterEcrans(){
     + '</div>'
     + '<button type="button" class="dep-menu-item" onclick="depModifierContactActuel()">'
     +   '<span class="dep-menu-ico">&#9999;&#65039;</span><span class="dep-menu-txt">Modifier</span></button>'
-    + '<button type="button" class="dep-menu-item dep-menu-avenir" onclick="depActionAVenir(\'Historique d&#39;envoi / Factures\')">'
-    +   '<span class="dep-menu-ico">&#129534;</span><span class="dep-menu-txt">Historique d&rsquo;envoi / Factures'
-    +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
-    + '<button type="button" class="dep-menu-item dep-menu-avenir" onclick="depActionAVenir(\'Impression de facture avec QR code\')">'
-    +   '<span class="dep-menu-ico">&#128424;&#65039;</span><span class="dep-menu-txt">Imprimer facture (QR code)'
-    +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
+    // v1.19.0 : ces deux actions étaient marquées "À venir" — elles ouvrent
+    // maintenant toutes les deux le même écran (l'historique de tous les
+    // envois de ce contact), puisqu'il faut de toute façon choisir lequel
+    // avant de pouvoir voir son container ou imprimer sa facture.
+    + '<button type="button" class="dep-menu-item" onclick="depOuvrirHistoriqueContact()">'
+    +   '<span class="dep-menu-ico">&#129534;</span><span class="dep-menu-txt">Historique d&rsquo;envoi / Factures</span></button>'
+    + '<button type="button" class="dep-menu-item" onclick="depOuvrirHistoriqueContact()">'
+    +   '<span class="dep-menu-ico">&#128424;&#65039;</span><span class="dep-menu-txt">Imprimer facture (QR code)</span></button>'
     + '<button type="button" class="dep-menu-item dep-menu-avenir" onclick="depActionAVenir(\'Bordereau d&#39;envoi\')">'
     +   '<span class="dep-menu-ico">&#128203;</span><span class="dep-menu-txt">Bordereau d&rsquo;envoi'
     +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
@@ -1213,6 +1254,15 @@ window.depRenderEspaces = function(){
     var cfr = (typeof compteursFrance === 'function') ? compteursFrance() : {attente:0,chartres:0};
     scfr.innerHTML = '<b style="color:#1a237e;">'+cfr.attente+'</b> en attente<br>'+cfr.chartres+' &agrave; Chartres';
   }
+
+  // Case ARCHIVAGE (v1.19.0)
+  var scarch = $('dep-case-sub-arch');
+  if(scarch){
+    var nbDepC = tousLesDeparts().filter(function(d){ return d.statut === 'cloture'; }).length;
+    var nbColT = (window.collectes || []).filter(function(c){ return c && c.statut === 'terminee'; }).length;
+    scarch.innerHTML = '<b style="color:#8B5E34;">'+nbDepC+'</b> d&eacute;part'+(nbDepC>1?'s':'')+' clôtur&eacute;'+(nbDepC>1?'s':'')
+      + '<br>'+nbColT+' collecte'+(nbColT>1?'s':'')+' archiv&eacute;e'+(nbColT>1?'s':'');
+  }
 };
 
 window.depOuvrirEspaceClient = function(){
@@ -1223,6 +1273,71 @@ window.depOuvrirEspaceClient = function(){
 window.depOuvrirEspaceDeparts = function(){
   goTo('s-departs');
   depRenderListe();
+};
+
+// v1.19.0 : carré ARCHIVAGE — consultation en lecture seule des départs
+// clôturés et des collectes terminées, regroupés au même endroit.
+window.depOuvrirEspaceArchive = function(){
+  goTo('s-archive');
+  depRenderArchive();
+};
+
+window.depRenderArchive = function(){
+  var boxD = $('dep-archive-departs');
+  if(boxD){
+    var departsClotures = tousLesDeparts().filter(function(d){ return d.statut === 'cloture'; });
+    if(!departsClotures.length){
+      boxD.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucun d&eacute;part cl&ocirc;tur&eacute; pour l\'instant.</div>';
+    } else {
+      var hD = '';
+      departsClotures.forEach(function(d){
+        var cp = compteursDepart(d._id);
+        hD += '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="depDetail(\''+d._id+'\')">'
+          +   '<div class="dep-card-top">'
+          +     '<div class="dep-nom">'+esc(d.nom||'Sans nom')+'</div>'
+          +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Cl&ocirc;tur&eacute;</div>'
+          +   '</div>'
+          +   '<div class="dep-meta">'
+          +     '<span>&#128197; <b>'+dateFr(d.dateDepart)+'</b></span>'
+          +     '<span>&#128100; <b>'+cp.clients+'</b> client'+(cp.clients>1?'s':'')+'</span>'
+          +     '<span>&#128176; <b>'+cp.euros+'</b> &euro;</span>'
+          +   '</div>'
+          + '</div>';
+      });
+      boxD.innerHTML = hD;
+    }
+  }
+
+  var boxC = $('dep-archive-collectes');
+  if(boxC){
+    var cols = (window.collectes || []).filter(function(c){ return c && c.statut === 'terminee'; });
+    cols = cols.slice().sort(function(a,b){
+      var da = (typeof parseDate === 'function') ? parseDate(a.date) : 0;
+      var db = (typeof parseDate === 'function') ? parseDate(b.date) : 0;
+      return db - da;
+    });
+    if(!cols.length){
+      boxC.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune collecte termin&eacute;e pour l\'instant.</div>';
+    } else {
+      var hC = '';
+      cols.forEach(function(c){
+        var cls = (window.clientsParCollecte||{})[c.id] || {};
+        var nb = Object.keys(cls).length;
+        var total = Object.values(cls).reduce(function(s, cl){ return s + (parseFloat(cl && cl.prix)||0); }, 0);
+        hC += '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="ouvrirCollecte(\''+c.id+'\')">'
+          +   '<div class="dep-card-top">'
+          +     '<div class="dep-nom">'+esc(c.date||'Collecte')+'</div>'
+          +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Termin&eacute;e</div>'
+          +   '</div>'
+          +   '<div class="dep-meta">'
+          +     '<span>&#128100; <b>'+nb+'</b> client'+(nb>1?'s':'')+'</span>'
+          +     '<span>&#128176; <b>'+total+'</b> &euro;</span>'
+          +   '</div>'
+          + '</div>';
+      });
+      boxC.innerHTML = hC;
+    }
+  }
 };
 
 window.depOuvrirEspaceCollecte = function(){
@@ -3138,6 +3253,84 @@ window.depModifierContactActuel = function(){
 window.depActionAVenir = function(label){
   closeModal('modal-dep-client-actions');
   if(typeof toast === 'function') toast('🚧 ' + label + ' — bientôt disponible.');
+};
+
+// v1.19.0 : tous les envois passés d'un contact (numéro de téléphone),
+// collecte et dépôt confondus — un même contact peut avoir fait plusieurs
+// envois à des dates différentes, donc plusieurs "clients" différents dans
+// les données, tous rattachés au même numéro. Trié du plus récent au plus
+// ancien.
+function _depTousEnvoisContact(contactKey){
+  var resultats = [];
+  var contact = (window.dctContacts||{})[contactKey];
+  var telRef = contact ? (contact.tel||'').replace(/\s/g,'') : '';
+
+  Object.keys(window.clientsParCollecte||{}).forEach(function(collecteId){
+    var cls = window.clientsParCollecte[collecteId] || {};
+    Object.keys(cls).forEach(function(clientId){
+      var c = cls[clientId];
+      if(!c) return;
+      var k = c.tel ? c.tel.replace(/\s/g,'') : (c.prenom+'_'+c.nom).toLowerCase();
+      if(k === contactKey || (telRef && k === telRef)){
+        resultats.push({ c: c, collecteId: collecteId, clientId: clientId, depot: false });
+      }
+    });
+  });
+
+  Object.keys(window.depotClients||{}).forEach(function(id){
+    var c = window.depotClients[id];
+    if(!c) return;
+    var k = c.tel ? c.tel.replace(/\s/g,'') : (c.prenom+'_'+c.nom).toLowerCase();
+    if(k === contactKey || (telRef && k === telRef)){
+      resultats.push({ c: c, collecteId: '', clientId: id, depot: true });
+    }
+  });
+
+  resultats.sort(function(a,b){ return (b.c.creeLe||0) - (a.c.creeLe||0); });
+  return resultats;
+}
+
+// v1.19.0 : rend fonctionnels les deux boutons "À venir" du menu Actions
+// d'un contact — un seul écran sert les deux intentions (voir le
+// container / imprimer la facture), puisqu'il faut de toute façon choisir
+// LEQUEL des envois du contact avant de pouvoir faire l'un ou l'autre.
+window.depOuvrirHistoriqueContact = function(){
+  closeModal('modal-dep-client-actions');
+  var key = _depFicheContactKey;
+  if(!key){ toast('⚠️ Contact introuvable.'); return; }
+  var envois = _depTousEnvoisContact(key);
+  var box = $('dep-histo-contact-content');
+  if(!box) return;
+
+  if(!envois.length){
+    box.innerHTML = '<div class="dep-vide" style="padding:28px 16px;">Aucun envoi enregistr&eacute; pour ce contact.</div>';
+  } else {
+    var h = '';
+    envois.forEach(function(e){
+      var c = e.c;
+      var d = c.departId ? ((window.departsData||{})[c.departId]) : null;
+      var st = d ? (STATUTS_DEPART[d.statut] || STATUTS_DEPART.preparation) : null;
+      var pay = depCalculerPaiement(c);
+      h += '<div class="dep-card" style="border-left-color:'+(st ? st.dot : '#ccc')+';">'
+        +   '<div class="dep-card-top">'
+        +     '<div class="dep-nom">'+(d ? esc(d.nom||'D&eacute;part') : 'Pas encore rattach&eacute; &agrave; un d&eacute;part')+'</div>'
+        +     (st ? ('<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';">'+st.label+'</div>') : '')
+        +   '</div>'
+        +   '<div class="dep-meta">'
+        +     '<span>&#128230; '+esc(c.colis||'—')+'</span>'
+        +     '<span>&#128176; <b>'+(c.prixADefinir ? '&agrave; d&eacute;finir' : (pay.total+' &euro;'))+'</b></span>'
+        +   '</div>'
+        +   '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'
+        +     (d ? ('<button type="button" class="dep-cli-btn" onclick="depDetail(\''+d._id+'\')">&#128230; Voir le d&eacute;part</button>') : '')
+        +     '<button type="button" class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
+        +       'onclick="depOuvrirFacture(\''+(e.collecteId||'')+'\',\''+e.clientId+'\','+(e.depot?'true':'false')+')">&#129534; Facture</button>'
+        +   '</div>'
+        + '</div>';
+    });
+    box.innerHTML = h;
+  }
+
+  goTo('s-dep-historique-contact');
 };
 
 /* ---- Export CSV du carnet de contacts ---- */
