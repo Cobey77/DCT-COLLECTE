@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.14.0  ·  21/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.15.0  ·  21/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -141,6 +141,14 @@
        direct) ouvre désormais directement l'appareil photo, comme le
        module France & Europe, au lieu de proposer aussi la galerie du
        téléphone.
+   33. Correctif critique : sur téléphone, la facture publique
+       (`#s-facture-publique`) n'avait pas de zone de défilement — le
+       contenu au-delà de la hauteur de l'écran était invisible et
+       inaccessible (impossible de voir la fin de la facture ni
+       d'atteindre le bouton Imprimer/Télécharger), constaté par Cobey
+       en conditions réelles. Corrigé (défilement propre à cet écran).
+       Ajout aussi d'un format A4 explicite à l'impression
+       (`@page{size:A4}`), qui manquait.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -150,7 +158,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.14.0';
+var DEP_VERSION = 'v1.15.0';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -617,7 +625,13 @@ function injecterEcrans(){
      qui l'amènera normalement sur #s-facture une fois connecté. ---- */
   + '<div class="screen" id="s-facture-publique">'
   +   '<style>'
-  +     '#s-facture-publique{background:#f2f2f2;}'
+  // v1.15.0 : sur téléphone, cet écran n'avait pas de zone de défilement
+  // propre (contrairement aux autres écrans, qui passent par .content) —
+  // le contenu au-delà de la hauteur visible était tout simplement
+  // invisible et inaccessible (html/body ont overflow:hidden, voir
+  // index.html), donc ni le bas de la facture ni le bouton Imprimer
+  // n'étaient atteignables (constaté par Cobey, capture à l'appui).
+  +     '#s-facture-publique{background:#f2f2f2;overflow-y:auto;-webkit-overflow-scrolling:touch;}'
   +     '#s-facture-publique .pub-wrap{max-width:480px;margin:0 auto;padding:26px 16px 40px;}'
   +     '#s-facture-publique .pub-card{background:#fff;border-radius:14px;padding:26px 20px;box-shadow:0 2px 14px rgba(0,0,0,.08);}'
   +     '#s-facture-publique .pub-logo{display:block;margin:0 auto 8px;width:84px;height:auto;}'
@@ -635,7 +649,14 @@ function injecterEcrans(){
   +     '#s-facture-publique .pub-lien-collab{display:block;text-align:center;margin-top:16px;font-size:12px;color:#999;text-decoration:underline;background:none;border:none;cursor:pointer;width:100%;font-family:var(--font);}'
   +     '#s-facture-publique .pub-qr-wrap{text-align:center;margin-top:20px;}'
   +     '@media print{'
-  +       '#s-facture-publique{background:#fff;}'
+  // Format A4 explicite (sinon le navigateur imprime avec la taille par
+  // défaut de son imprimante/PDF virtuel, pas forcément A4), et on
+  // repasse tout en "hauteur naturelle" : sans ça, le défilement ajouté
+  // ci-dessus ferait imprimer uniquement la portion visible à l'écran
+  // au moment du clic, pas la facture entière.
+  +       '@page{size:A4;margin:15mm;}'
+  +       'html,body{height:auto !important;overflow:visible !important;}'
+  +       '#s-facture-publique{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
   +       '#s-facture-publique .no-print{display:none !important;}'
   +       '#s-facture-publique .pub-card{box-shadow:none;padding:0;}'
   +       '#s-facture-publique .pub-wrap{padding:0;max-width:100%;}'
