@@ -279,6 +279,7 @@ if(_depFactureDeepLink){
     _depOverlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#e8e8e8;display:flex;align-items:center;justify-content:center;color:#999;font-family:sans-serif;font-size:14px;';
     _depOverlay.textContent = 'Chargement de la facture…';
     document.body.appendChild(_depOverlay);
+    document.body.style.visibility = 'visible'; // lève le masquage posé dans index.html
   }catch(e){}
   (function _depAttendreLienFacture(tentative){
     var dl = _depFactureDeepLink;
