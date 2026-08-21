@@ -231,6 +231,12 @@ var _depDepotEditId = null;     // id du client dépôt en cours de modification
 window._depDepotPhotos = [];    // photos en attente pour le formulaire dépôt (v1.16.0 : jusqu'à PHOTO_MAX)
 var _depAjoutClientCarre = false; // true : le prochain saveClientConfirme() vient du carré Client
 
+// true seulement après une vraie connexion (posé dans la greffe sur
+// _finalisLoginCore) — contrairement à window.currentUser, qui est
+// initialisé par défaut à COLLABS[0] dans index.html et donc toujours
+// "vrai" même sans connexion.
+var _depConnecte = false;
+
 // Lien de facture partagé par WhatsApp (voir depPartagerWhatsapp) :
 // ?facture=C|colId|clientId (collecte) ou ?facture=D||clientId (dépôt
 // direct). v1.16.1 : ce lien est volontairement consultable SANS connexion
@@ -254,18 +260,38 @@ try{
   }
 }catch(e){}
 
-// Affichage immédiat du lien de facture, sans connexion : on attend juste
-// que les données Firebase (chargées en arrière-plan dès le lancement de
-// l'appli, connexion ou pas) contiennent le client visé, puis on affiche
-// la facture en lecture seule. Après ~6s sans résultat, on affiche quand
-// même l'écran (il montrera "facture introuvable").
+// Affichage immédiat du lien de facture, sans connexion, SANS montrer
+// l'accueil/connexion de l'appli au passage : on masque #s-login tout de
+// suite (il est présent dans le HTML dès le départ) et on affiche un
+// écran de chargement neutre par-dessus tout, le temps que les données
+// Firebase (chargées en arrière-plan dès le lancement, connexion ou pas)
+// contiennent le client visé et que les écrans de departs.js soient
+// injectés. Après ~6s sans résultat, on affiche quand même l'écran (il
+// montrera "facture introuvable").
 if(_depFactureDeepLink){
+  try{
+    var _sLoginPrecoce = document.getElementById('s-login');
+    if(_sLoginPrecoce) _sLoginPrecoce.classList.remove('active');
+  }catch(e){}
+  try{
+    var _depOverlay = document.createElement('div');
+    _depOverlay.id = 'dep-facture-overlay';
+    _depOverlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:#e8e8e8;display:flex;align-items:center;justify-content:center;color:#999;font-family:sans-serif;font-size:14px;';
+    _depOverlay.textContent = 'Chargement de la facture…';
+    document.body.appendChild(_depOverlay);
+  }catch(e){}
   (function _depAttendreLienFacture(tentative){
     var dl = _depFactureDeepLink;
+    var ecranPret = document.getElementById('s-facture-publique');
     var cible = dl.depot
       ? (window.depotClients || {})[dl.clientId]
       : (((window.clientsParCollecte || {})[dl.collecteId]) || {})[dl.clientId];
-    if(cible || tentative >= 20){ depAfficherFacturePublique(dl); return; }
+    if(ecranPret && (cible || tentative >= 20)){
+      var ov = document.getElementById('dep-facture-overlay');
+      if(ov && ov.parentNode) ov.parentNode.removeChild(ov);
+      depAfficherFacturePublique(dl);
+      return;
+    }
     setTimeout(function(){ _depAttendreLienFacture(tentative + 1); }, 300);
   })(0);
 }
@@ -728,10 +754,16 @@ function injecterEcrans(){
   // ci-dessus ferait imprimer uniquement la portion visible à l'écran
   // au moment du clic, pas la facture entière.
   +       '@page{size:A4;margin:12mm;}'
-  +       'html,body{height:auto !important;overflow:visible !important;}'
+  // .app (le cadre "téléphone" de l'appli, voir index.html) a une hauteur
+  // fixe (100dvh) et overflow:hidden : sans lever ça aussi, seule la
+  // portion visible à l'écran au moment du clic partait à l'impression
+  // (facture coupée en plein milieu). Idem pour .fac-doc, qui avait lui
+  // aussi overflow:hidden.
+  +       'html,body,.app{height:auto !important;overflow:visible !important;}'
+  +       '.app{max-width:100% !important;}'
   +       '#s-facture-publique{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
   +       '#s-facture-publique .no-print{display:none !important;}'
-  +       '#s-facture-publique .fac-doc{box-shadow:none;border-radius:0;}'
+  +       '#s-facture-publique .fac-doc{overflow:visible !important;box-shadow:none;border-radius:0;}'
   +       '#s-facture-publique .pub-wrap{padding:0;max-width:100%;}'
   +       '#s-facture-publique .fac-parties{grid-template-columns:1fr 1fr !important;}'
   +     '}'
@@ -1544,7 +1576,7 @@ function depRenderFacturePublique(c, ctx){
   // Lecture seule stricte pour un visiteur non connecté (lien WhatsApp) :
   // seul "Imprimer / PDF" reste — pas de retour vers l'appli, pas de
   // renvoi WhatsApp depuis cette page-là.
-  var connecte = !!window.currentUser;
+  var connecte = _depConnecte;
   h += '<div class="fac-actions no-print">'
     +    '<button type="button" class="fac-btn fac-btn-print" onclick="window.print()">&#128424;&#65039; Imprimer / PDF</button>'
     +    (connecte ? '<button type="button" class="fac-btn fac-btn-whatsapp" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>' : '')
@@ -1570,15 +1602,8 @@ window.depPartagerWhatsapp = function(){
     ? (window.depotClients || {})[ctx.clientId]
     : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
-  var pay = depCalculerPaiement(c);
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
-  var msg = 'Facture Dakar City Transport\n'
-    + 'Client : ' + nom + '\n'
-    + 'Colis : ' + (c.colis || '—') + '\n'
-    + 'Montant total : ' + pay.total + ' €\n'
-    + 'Payé : ' + pay.paye + ' €  ·  Reste à payer : ' + pay.reste + ' €\n\n'
-    + 'Voir la facture : ' + depLienFacture(ctx) + '\n\n'
-    + 'Merci de votre confiance — Dakar City Transport.';
+  var msg = 'Salut ' + nom + ', accédez à votre facture sur ce lien : ' + depLienFacture(ctx);
   window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
 };
 
@@ -2949,6 +2974,7 @@ function greffer(){
   if(typeof window._finalisLoginCore === 'function' && !window._finalisLoginCore._depPatch){
     var origLogin = window._finalisLoginCore;
     window._finalisLoginCore = function(collab){
+      _depConnecte = true;
       try{ appliquerProfils(); }catch(e){}
       try{ origLogin.apply(this, arguments); }
       catch(e){ console.error('departs: _finalisLoginCore original', e); }
