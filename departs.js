@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.18.5';
+var DEP_VERSION = 'v1.18.6';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -2426,8 +2426,11 @@ function depRenderSuivi(c){
   } else {
     evts.forEach(function(x){
       var theme = DEP_SUIVI_THEMES[x.type] || DEP_SUIVI_THEMES.modif;
-      var supprimable = x.type === 'versement' && x.idx !== undefined
-        && (estDirection() || (Date.now() - (x.le||0)) <= DEP_VERSEMENT_DELAI_SUPPR);
+      // v1.18.6 : plus de suppression de versement depuis le Suivi, même
+      // pour la direction — retour de Cobey du 21/08/2026. Le Suivi est
+      // désormais un historique en lecture seule ; la correction (encore
+      // possible dans les 30 min, ou sans limite pour la direction) reste
+      // uniquement sur la facture (voir depRenderFacture).
       h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;'
         + 'border-left:4px solid '+theme.color+';background:'+theme.bg+';border-radius:8px;'
         + 'margin-bottom:8px;padding:10px 12px;">'
@@ -2437,11 +2440,6 @@ function depRenderSuivi(c){
         +     esc(dateHeureFr(x.ts)) + ' &mdash; <b style="color:'+theme.color+';">' + esc(x.q||'—') + '</b><br>' + x.a
         +   '</div>'
         + '</div>'
-        + (supprimable
-            ? ('<button type="button" onclick="depSupprimerVersement(' + x.idx + ')" '
-               + 'style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;border-radius:8px;width:30px;height:30px;'
-               + 'font-size:13px;cursor:pointer;flex-shrink:0;">&#128465;</button>')
-            : '')
         + '</div>';
     });
   }
