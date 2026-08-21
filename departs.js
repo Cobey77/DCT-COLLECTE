@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.18.6';
+var DEP_VERSION = 'v1.18.7';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1931,7 +1931,7 @@ function depRenderFacturePublique(c, ctx){
     +         '<div class="fac-totaux-ligne"><span>Reste &agrave; payer</span><span>'+pay.reste+' &euro;</span></div>'
     +         (totalLivraison
                 ? ('<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
-                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar (caisse s&eacute;par&eacute;e)</span><span>'+totalLivraison+' &euro;</span></div>'
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar</span><span>'+totalLivraison+' &euro;</span></div>'
                    + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Total avec livraison</span><span>'+esc(totalGeneralTxt)+'</span></div>'
                    + '</div>')
                 : '')
