@@ -1544,10 +1544,55 @@ function depRenderFacturePublique(c, ctx){
 // Résumé texte de la facture, envoyé par WhatsApp — v1.16.0 : le lien
 // facture n'est plus inclus (il est désormais réservé aux employés DCT,
 // un client qui le recevrait tomberait sur l'écran de connexion et ne
-// verrait rien), on envoie donc uniquement les informations utiles au
-// client, à charge pour le collaborateur de choisir le contact dans
-// WhatsApp (pas de numéro dans le lien : les numéros enregistrés côté
-// DCT ne sont pas forcément au format international attendu par WhatsApp).
+// verrait rien) ; en revanche depuis la v1.16.1 on joint le vrai PDF de la
+// facture (capture de la mise en page CARGO 360 → jsPDF) via le partage
+// natif du téléphone, qui sait attacher un fichier à WhatsApp — un simple
+// lien wa.me/api.whatsapp.com ne le permet pas.
+var _depPdfLibEnCours = false;
+function _depChargerLibPDF(cb){
+  if(window.html2canvas && window.jspdf){ cb(); return; }
+  if(_depPdfLibEnCours){ setTimeout(function(){ _depChargerLibPDF(cb); }, 200); return; }
+  _depPdfLibEnCours = true;
+  var src = [];
+  if(!window.html2canvas) src.push('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+  if(!window.jspdf) src.push('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+  var restant = src.length;
+  src.forEach(function(u){
+    var s = document.createElement('script');
+    s.src = u;
+    s.onload = function(){ if(--restant<=0){ _depPdfLibEnCours=false; cb(); } };
+    s.onerror = function(){ _depPdfLibEnCours=false; console.error('departs: échec chargement librairie PDF', u); cb(); };
+    document.head.appendChild(s);
+  });
+}
+
+// Capture le document facture (.fac-doc) déjà rendu dans #s-facture-publique
+// et le transforme en PDF A4 (découpé sur plusieurs pages si besoin).
+function _depGenererFacturePDF(callback){
+  _depChargerLibPDF(function(){
+    var noeud = document.querySelector('#s-facture-publique .fac-doc');
+    if(!noeud || !window.html2canvas || !window.jspdf){ callback(null); return; }
+    window.html2canvas(noeud, { scale: 2, useCORS: true, backgroundColor: '#ffffff' }).then(function(canvas){
+      try{
+        var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+        var pageW = pdf.internal.pageSize.getWidth(), pageH = pdf.internal.pageSize.getHeight();
+        var imgW = pageW, ratioPxParMm = canvas.width / imgW;
+        var pageHPx = pageH * ratioPxParMm, pos = 0, premiere = true;
+        while(pos < canvas.height){
+          var hPx = Math.min(pageHPx, canvas.height - pos);
+          var tranche = document.createElement('canvas');
+          tranche.width = canvas.width; tranche.height = hPx;
+          tranche.getContext('2d').drawImage(canvas, 0, pos, canvas.width, hPx, 0, 0, canvas.width, hPx);
+          if(!premiere) pdf.addPage();
+          pdf.addImage(tranche.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, imgW, hPx / ratioPxParMm);
+          pos += hPx; premiere = false;
+        }
+        callback(pdf.output('blob'));
+      }catch(e){ console.error('departs: génération PDF facture', e); callback(null); }
+    }).catch(function(e){ console.error('departs: capture facture', e); callback(null); });
+  });
+}
+
 window.depPartagerWhatsapp = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
@@ -1555,15 +1600,32 @@ window.depPartagerWhatsapp = function(){
     ? (window.depotClients || {})[ctx.clientId]
     : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
-  var pay = depCalculerPaiement(c);
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
-  var msg = 'Facture Dakar City Transport\n'
-    + 'Client : ' + nom + '\n'
-    + 'Colis : ' + (c.colis || '—') + '\n'
-    + 'Montant total : ' + pay.total + ' €\n'
-    + 'Payé : ' + pay.paye + ' €  ·  Reste à payer : ' + pay.reste + ' €\n\n'
-    + 'Merci de votre confiance — Dakar City Transport.';
-  window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+  var msg = 'Facture Dakar City Transport — ' + nom;
+
+  function envoyer(){
+    toast('⏳ Préparation du PDF…');
+    _depGenererFacturePDF(function(blob){
+      if(!blob){ toast('⚠️ Impossible de générer le PDF (connexion internet ?)'); return; }
+      var fichier = new File([blob], 'Facture_' + nom.replace(/\s+/g,'_') + '.pdf', { type: 'application/pdf' });
+      if(navigator.canShare && navigator.canShare({ files: [fichier] })){
+        navigator.share({ files: [fichier], title: msg, text: msg }).catch(function(){});
+      } else {
+        // Repli (ordinateur / navigateur sans partage de fichier) : le PDF
+        // est téléchargé, à joindre manuellement dans WhatsApp Web.
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url; a.download = fichier.name;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+        window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+        toast('📄 PDF téléchargé — joins-le dans WhatsApp.');
+      }
+    });
+  }
+
+  if(document.querySelector('#s-facture-publique .fac-doc')){ envoyer(); }
+  else { depAfficherFacturePublique(ctx); setTimeout(envoyer, 350); }
 };
 
 // "1755701520000" → "20/08/2026 14:32"
