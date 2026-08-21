@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.16.3';
+var DEP_VERSION = 'v1.16.4';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1470,11 +1470,16 @@ window.depDetail = function(id){
 // Le statut de paiement n'est jamais choisi à la main : toujours
 // recalculé à partir des versements (vide pour l'instant, viendra
 // dans une prochaine étape).
+// v1.16.4 : arrondi à 2 décimales — sans ça, l'addition de plusieurs
+// versements (surtout convertis depuis des FCFA) peut laisser des restes
+// binaires du type 24.760000000000005 affichés tels quels à l'écran.
+function depArrondi2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
+
 window.depCalculerPaiement = function(c){
   var total = parseFloat(c.prix) || 0;
   var versements = Array.isArray(c.versements) ? c.versements : [];
-  var paye = versements.reduce(function(s, v){ return s + (parseFloat(v && v.montant) || 0); }, 0);
-  var reste = Math.max(0, total - paye);
+  var paye = depArrondi2(versements.reduce(function(s, v){ return s + (parseFloat(v && v.montant) || 0); }, 0));
+  var reste = depArrondi2(Math.max(0, total - paye));
   var statut = paye <= 0 ? 'non_paye' : (reste > 0 ? 'partiel' : 'paye');
   return { total: total, paye: paye, reste: reste, statut: statut };
 }
@@ -1952,9 +1957,18 @@ window.depAjouterVersement = function(){
   versements.push(v);
   c.versements = versements;
 
+  // v1.16.4 : écriture Firebase immédiate et ciblée, comme pour les
+  // clients dépôt — sans ça, un client collecte passait uniquement par
+  // sauvegarder(), qui regroupe tout et n'écrit que 800ms plus tard ; entre
+  // les deux, la resynchronisation permanente avec Firebase pouvait
+  // réécraser ce versement avant même qu'il soit vraiment enregistré.
   if(ctx.depot){
     db.ref('dct_depot/'+ctx.clientId).update({ versements: versements });
   } else {
+    if(window.db && window.firebaseReady){
+      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versements: versements })
+        .catch(function(e){ console.error('departs: échec écriture versement', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
+    }
     try{ sauvegarder(); }catch(e){}
   }
 
@@ -1988,6 +2002,10 @@ window.depSupprimerVersement = function(idx){
   if(ctx.depot){
     if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update({ versements: c.versements });
   } else {
+    if(window.db && window.firebaseReady){
+      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versements: c.versements })
+        .catch(function(e){ console.error('departs: échec suppression versement', e); toast('❌ Échec de la suppression, réessayez.'); });
+    }
     try{ sauvegarder(); }catch(e){}
   }
 
@@ -3217,7 +3235,7 @@ window.depValiderMajCoherence = function(){
   if(!msg) return;
   if(montant <= 0){ msg.style.display = 'none'; return; }
 
-  var resteApres = prixCourant - (pay.paye + montant);
+  var resteApres = depArrondi2(prixCourant - (pay.paye + montant));
   msg.style.display = 'block';
   if(resteApres > 0){
     msg.style.background = '#fff3cd'; msg.style.color = '#856404';
