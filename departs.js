@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.7';
+var DEP_VERSION = 'v1.19.8';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -346,6 +346,10 @@ var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bout
 // (Année > Mois > Semaine > liste). null = niveau non choisi.
 var _depArchiveEtat = { type: null, annee: null, mois: null, semaine: null };
 var DEP_MOIS_NOMS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
+
+// v1.19.8 : sous-carré actuellement ouvert dans RÉGLAGES ('equipe',
+// 'partenaires', 'acces', 'donnees', 'message') — null = grille de choix.
+var _depReglagesTab = null;
 
 // v1.17.0 : prix "à définir sur place" — bascules des formulaires
 // d'inscription (collecte et dépôt), remises à zéro à chaque ouverture.
@@ -557,6 +561,11 @@ function injecterStyles(){
     + '.dep-case-ico{font-size:34px;line-height:1;margin-bottom:10px;}'
     + '.dep-case-tit{font-size:14px;font-weight:800;letter-spacing:0.03em;margin-bottom:8px;}'
     + '.dep-case-sub{font-size:11.5px;color:var(--text3);font-weight:600;line-height:1.5;}'
+    // v1.19.8 : la molette ⚙️ de l'écran Collecte est retirée — l'accès à
+    // l'administration passe désormais uniquement par le carré RÉGLAGES
+    // (voir depOuvrirEspaceReglages), masqué ici quel que soit ce que le
+    // code natif fait de son display.
+    + '#btn-admin-panel{display:none !important;}'
     + '.dep-card{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);'
     +   'padding:13px 14px;margin-bottom:11px;cursor:pointer;border-left-width:4px;}'
     + '.dep-card-top{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:7px;}'
@@ -678,6 +687,14 @@ function injecterEcrans(){
   +         '<div class="dep-case-ico">&#128194;</div>'
   +         '<div class="dep-case-tit" style="color:#8B5E34;">ARCHIVAGE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-arch">—</div>'
+  +       '</div>'
+  // v1.19.8 : nouveau carré RÉGLAGES, réservé à la direction — reprend ce
+  // qui était derrière la molette ⚙️ de l'écran Collecte (Équipe,
+  // Partenaire, Accès, Données, Message), désormais retirée de là-bas.
+  +       '<div class="dep-case" id="dep-case-reglages" style="border-color:#455A64;" onclick="depOuvrirEspaceReglages()">'
+  +         '<div class="dep-case-ico">&#9881;&#65039;</div>'
+  +         '<div class="dep-case-tit" style="color:#455A64;">R&Eacute;GLAGES</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-regl">—</div>'
   +       '</div>'
   +     '</div>'
   +     '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:22px;">Module départs '+DEP_VERSION+'</div>'
@@ -1277,6 +1294,21 @@ window.depRenderEspaces = function(){
     scarch.innerHTML = '<b style="color:#8B5E34;">'+nbDepC+'</b> d&eacute;part'+(nbDepC>1?'s':'')+' clôtur&eacute;'+(nbDepC>1?'s':'')
       + '<br>'+nbColT+' collecte'+(nbColT>1?'s':'')+' archiv&eacute;e'+(nbColT>1?'s':'');
   }
+
+  // Case RÉGLAGES (v1.19.8) — réservée à la direction, remplace la molette
+  // de l'écran Collecte. Reprend le badge d'alertes non lues qui vivait
+  // sur cette molette, pour ne pas perdre cette information.
+  var crg = $('dep-case-reglages');
+  if(crg) crg.style.display = estDirection() ? '' : 'none';
+  if(estDirection()){
+    var srg = $('dep-case-sub-regl');
+    if(srg){
+      var nbAl = (typeof nbAlertesNouvelles === 'function') ? nbAlertesNouvelles() : 0;
+      srg.innerHTML = nbAl > 0
+        ? '<b style="color:#c0392b;">&#9888;&#65039; '+nbAl+'</b> alerte'+(nbAl>1?'s':'')+' non lue'+(nbAl>1?'s':'')
+        : '&Eacute;quipe, acc&egrave;s, donn&eacute;es&hellip;';
+    }
+  }
 };
 
 window.depOuvrirEspaceClient = function(){
@@ -1288,6 +1320,90 @@ window.depOuvrirEspaceDeparts = function(){
   goTo('s-departs');
   depRenderListe();
 };
+
+// v1.19.8 : carré RÉGLAGES — reprend ce qui était derrière la molette ⚙️
+// de l'écran Collecte (désormais masquée en CSS, voir #btn-admin-panel),
+// sous forme de sous-carrés cliquables plutôt que d'onglets, pour rester
+// cohérent avec le reste du module (Archivage, Historique...).
+var DEP_REGLAGES_ITEMS = [
+  { tab:'equipe',      icone:'&#128101;', titre:'&Eacute;QUIPE',   couleur:'#009A44' },
+  { tab:'partenaires', icone:'&#128666;', titre:'PARTENAIRE',      couleur:'#1a237e' },
+  { tab:'acces',       icone:'&#128272;', titre:'ACC&Egrave;S',    couleur:'#c0392b' },
+  { tab:'donnees',     icone:'&#128190;', titre:'DONN&Eacute;ES',  couleur:'#455A64' },
+  { tab:'message',     icone:'&#128226;', titre:'MESSAGE',         couleur:'#7c3aed' }
+];
+
+window.depOuvrirEspaceReglages = function(){
+  if(typeof renderAdminPanel === 'function') renderAdminPanel();
+  goTo('s-admin');
+  _depReglagesPreparerEcran();
+  _depReglagesAfficherGrille();
+};
+
+function _depReglagesPreparerEcran(){
+  var contenu = document.querySelector('#s-admin .content');
+  if(contenu && !$('dep-reglages-grille')){
+    var grille = document.createElement('div');
+    grille.id = 'dep-reglages-grille';
+    grille.className = 'dep-cases';
+    var h = '';
+    DEP_REGLAGES_ITEMS.forEach(function(it){
+      h += '<div class="dep-case" style="border-color:'+it.couleur+';" onclick="_depReglagesOuvrirItem(\''+it.tab+'\')">'
+        +   '<div class="dep-case-ico">'+it.icone+'</div>'
+        +   '<div class="dep-case-tit" style="color:'+it.couleur+';">'+it.titre+'</div>'
+        +   '<div class="dep-case-sub" id="dep-regl-sub-'+it.tab+'">—</div>'
+        + '</div>';
+    });
+    grille.innerHTML = h;
+    contenu.insertBefore(grille, contenu.firstChild);
+  }
+  // La barre d'onglets native (Équipe/Partenaire/Accès/Données/Message)
+  // devient inutile — nos sous-carrés la remplacent.
+  var barre = $('admin-tab-equipe') && $('admin-tab-equipe').parentElement;
+  if(barre) barre.style.display = 'none';
+
+  // Badge d'alertes non lues sur le sous-carré Accès — reprend celui qui
+  // vivait sur la molette (voir majPastilleAlertes native), pour ne pas
+  // perdre cette information.
+  var subAcces = $('dep-regl-sub-acces');
+  if(subAcces){
+    var nbAl = (typeof nbAlertesNouvelles === 'function') ? nbAlertesNouvelles() : 0;
+    subAcces.innerHTML = nbAl > 0
+      ? '<b style="color:#c0392b;">&#9888;&#65039; '+nbAl+'</b> alerte'+(nbAl>1?'s':'')+' non lue'+(nbAl>1?'s':'')
+      : 'Codes, s&eacute;curit&eacute;';
+  }
+}
+
+function _depReglagesMajBoutonRetour(){
+  var btn = document.querySelector('#s-admin .btn-back');
+  if(!btn) return;
+  if(_depReglagesTab){
+    btn.textContent = '← Réglages';
+    btn.onclick = function(){ _depReglagesAfficherGrille(); };
+  } else {
+    btn.textContent = '← Espaces';
+    btn.onclick = function(){ goTo('s-espaces'); depRenderEspaces(); };
+  }
+}
+
+window._depReglagesOuvrirItem = function(tab){
+  _depReglagesTab = tab;
+  var grille = $('dep-reglages-grille');
+  if(grille) grille.style.display = 'none';
+  showAdminTab(tab);
+  _depReglagesMajBoutonRetour();
+};
+
+function _depReglagesAfficherGrille(){
+  _depReglagesTab = null;
+  ['equipe','partenaires','acces','donnees','message'].forEach(function(t){
+    var sec = $('admin-section-'+t);
+    if(sec) sec.style.display = 'none';
+  });
+  var grille = $('dep-reglages-grille');
+  if(grille) grille.style.display = '';
+  _depReglagesMajBoutonRetour();
+}
 
 // v1.19.0 : carré ARCHIVAGE — consultation en lecture seule des départs
 // clôturés et des collectes terminées, regroupés au même endroit.
