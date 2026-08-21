@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.3';
+var DEP_VERSION = 'v1.19.4';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1841,7 +1841,7 @@ function depNumeroFacture(c, ctx){
   return num;
 }
 
-window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, viaScan){
+window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, viaScan, viaHistorique){
   var c = depot
     ? (window.depotClients || {})[clientId]
     : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
@@ -1863,6 +1863,12 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
     } else if(retourCamion){
       btnRetour.textContent = '← Camion';
       btnRetour.onclick = function(){ goTo('s-camion'); };
+    } else if(viaHistorique){
+      // v1.19.4 : ouverte depuis l'historique d'envoi d'un contact (carré
+      // CLIENT) — le retour doit rester dans ce carré, pas sauter sur un
+      // départ (qui n'a pas forcément été ouvert avant).
+      btnRetour.textContent = '← Retour';
+      btnRetour.onclick = function(){ goTo('s-dep-historique-contact'); };
     } else {
       btnRetour.textContent = '← Départ';
       btnRetour.onclick = function(){ depDetail(_depDetailIdPublic()); };
@@ -3483,7 +3489,7 @@ window.depOuvrirHistoriqueContact = function(){
         +   '<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">'
         +     (d ? ('<button type="button" class="dep-cli-btn" onclick="depDetail(\''+d._id+'\')">&#128230; Voir le d&eacute;part</button>') : '')
         +     '<button type="button" class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
-        +       'onclick="depOuvrirFacture(\''+(e.collecteId||'')+'\',\''+e.clientId+'\','+(e.depot?'true':'false')+')">&#129534; Facture</button>'
+        +       'onclick="depOuvrirFacture(\''+(e.collecteId||'')+'\',\''+e.clientId+'\','+(e.depot?'true':'false')+',false,false,true)">&#129534; Facture</button>'
         +   '</div>'
         + '</div>';
     });
