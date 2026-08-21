@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.0';
+var DEP_VERSION = 'v1.19.2';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -341,6 +341,11 @@ var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — d
 var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
 var _depVersMethode = '';       // 'especes' | 'virement' — méthode choisie sur le bouton "Ajouter un versement"
 var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bouton "Ajouter un versement"
+
+// v1.19.2 : navigation en dossiers cliquables de l'écran ARCHIVAGE
+// (Année > Mois > Semaine > liste). null = niveau non choisi.
+var _depArchiveEtat = { type: null, annee: null, mois: null, semaine: null };
+var DEP_MOIS_NOMS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'];
 
 // v1.17.0 : prix "à définir sur place" — bascules des formulaires
 // d'inscription (collecte et dépôt), remises à zéro à chaque ouverture.
@@ -679,20 +684,17 @@ function injecterEcrans(){
   +   '</div>'
   + '</div>'
 
-  /* ---- ÉCRAN 1bis (v1.19.0) : ARCHIVAGE — consultation en lecture seule
-     des départs clôturés et des collectes terminées, regroupés au même
-     endroit, ouvert à tous. ---- */
+  /* ---- ÉCRAN 1bis (v1.19.0, navigation en dossiers depuis v1.19.2) :
+     ARCHIVAGE — consultation en lecture seule des départs clôturés et des
+     collectes terminées, classés Année > Mois > Semaine, ouvert à tous. ---- */
   + '<div class="screen" id="s-archive">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
-  +     '<div class="h-title">Archivage</div>'
+  +     '<button class="btn-back" onclick="depArchiveRetour()">&larr; Retour</button>'
+  +     '<div class="h-title" id="dep-archive-titre">Archivage</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
-  +     '<div class="dep-sec" style="border-top:none;padding-top:0;">D&eacute;parts cl&ocirc;tur&eacute;s</div>'
-  +     '<div id="dep-archive-departs"></div>'
-  +     '<div class="dep-sec">Collectes termin&eacute;es</div>'
-  +     '<div id="dep-archive-collectes"></div>'
+  +     '<div id="dep-archive-content"></div>'
   +   '</div>'
   + '</div>'
 
@@ -1277,67 +1279,227 @@ window.depOuvrirEspaceDeparts = function(){
 
 // v1.19.0 : carré ARCHIVAGE — consultation en lecture seule des départs
 // clôturés et des collectes terminées, regroupés au même endroit.
+// v1.19.2 : navigation en dossiers cliquables Année > Mois > Semaine.
 window.depOuvrirEspaceArchive = function(){
+  _depArchiveEtat = { type: null, annee: null, mois: null, semaine: null };
   goTo('s-archive');
   depRenderArchive();
 };
 
+// --- helpers de navigation par dossiers ---
+
+function _depArchiveItemsBruts(type){
+  if(type === 'departs'){
+    return tousLesDeparts().filter(function(d){ return d.statut === 'cloture'; }).map(function(d){
+      return { date: new Date(d.dateDepart), item: d };
+    });
+  }
+  if(type === 'collectes'){
+    return (window.collectes || []).filter(function(c){ return c && c.statut === 'terminee'; }).map(function(c){
+      var dt = (typeof parseDate === 'function') ? parseDate(c.date) : new Date(NaN);
+      return { date: dt, item: c };
+    });
+  }
+  return [];
+}
+
+function _depSemaineInfo(date){
+  var d = new Date(date.getTime());
+  var jour = d.getDay(); // 0=dimanche ... 6=samedi
+  var decalage = (jour === 0) ? -6 : (1 - jour); // ramène au lundi de la semaine
+  var lundi = new Date(d.getFullYear(), d.getMonth(), d.getDate() + decalage);
+  var dimanche = new Date(lundi.getFullYear(), lundi.getMonth(), lundi.getDate() + 6);
+  function pad(n){ return (n < 10 ? '0' : '') + n; }
+  var key = lundi.getFullYear() + '-' + pad(lundi.getMonth() + 1) + '-' + pad(lundi.getDate());
+  var label = 'Semaine du ' + pad(lundi.getDate()) + '/' + pad(lundi.getMonth() + 1)
+            + ' au ' + pad(dimanche.getDate()) + '/' + pad(dimanche.getMonth() + 1);
+  return { debut: lundi, fin: dimanche, label: label, key: key };
+}
+
+function _depArchiveGrouper(items){
+  var annees = {};
+  items.forEach(function(o){
+    if(!o.date || isNaN(o.date.getTime())) return;
+    var a = o.date.getFullYear();
+    var m = o.date.getMonth();
+    var sem = _depSemaineInfo(o.date);
+    annees[a] = annees[a] || {};
+    annees[a][m] = annees[a][m] || {};
+    annees[a][m][sem.key] = annees[a][m][sem.key] || { info: sem, items: [] };
+    annees[a][m][sem.key].items.push(o.item);
+  });
+  return annees;
+}
+
+function _depArchiveCarteDossier(icone, titre, sousTitre, onclick){
+  return '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="'+onclick+'">'
+    +   '<div class="dep-card-top">'
+    +     '<div class="dep-nom">'+icone+' '+esc(titre)+'</div>'
+    +   '</div>'
+    +   '<div class="dep-meta"><span>'+esc(sousTitre)+'</span></div>'
+    + '</div>';
+}
+
+function _depArchiveCarteDepart(d){
+  var cp = compteursDepart(d._id);
+  return '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="depDetail(\''+d._id+'\')">'
+    +   '<div class="dep-card-top">'
+    +     '<div class="dep-nom">'+esc(d.nom||'Sans nom')+'</div>'
+    +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Cl&ocirc;tur&eacute;</div>'
+    +   '</div>'
+    +   '<div class="dep-meta">'
+    +     '<span>&#128197; <b>'+dateFr(d.dateDepart)+'</b></span>'
+    +     '<span>&#128100; <b>'+cp.clients+'</b> client'+(cp.clients>1?'s':'')+'</span>'
+    +     '<span>&#128176; <b>'+cp.euros+'</b> &euro;</span>'
+    +   '</div>'
+    + '</div>';
+}
+
+function _depArchiveCarteCollecte(c){
+  var cls = (window.clientsParCollecte||{})[c.id] || {};
+  var nb = Object.keys(cls).length;
+  var total = Object.values(cls).reduce(function(s, cl){ return s + (parseFloat(cl && cl.prix)||0); }, 0);
+  return '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="ouvrirCollecte(\''+c.id+'\')">'
+    +   '<div class="dep-card-top">'
+    +     '<div class="dep-nom">'+esc(c.date||'Collecte')+'</div>'
+    +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Termin&eacute;e</div>'
+    +   '</div>'
+    +   '<div class="dep-meta">'
+    +     '<span>&#128100; <b>'+nb+'</b> client'+(nb>1?'s':'')+'</span>'
+    +     '<span>&#128176; <b>'+total+'</b> &euro;</span>'
+    +   '</div>'
+    + '</div>';
+}
+
+window.depArchiveOuvrir = function(type){
+  _depArchiveEtat = { type: type, annee: null, mois: null, semaine: null };
+  depRenderArchive();
+};
+window.depArchiveOuvrirAnnee = function(annee){
+  _depArchiveEtat.annee = annee;
+  _depArchiveEtat.mois = null;
+  _depArchiveEtat.semaine = null;
+  depRenderArchive();
+};
+window.depArchiveOuvrirMois = function(mois){
+  _depArchiveEtat.mois = mois;
+  _depArchiveEtat.semaine = null;
+  depRenderArchive();
+};
+window.depArchiveOuvrirSemaine = function(semaineKey){
+  _depArchiveEtat.semaine = semaineKey;
+  depRenderArchive();
+};
+window.depArchiveRetour = function(){
+  if(_depArchiveEtat.semaine !== null){
+    _depArchiveEtat.semaine = null;
+  } else if(_depArchiveEtat.mois !== null){
+    _depArchiveEtat.mois = null;
+  } else if(_depArchiveEtat.annee !== null){
+    _depArchiveEtat.annee = null;
+  } else if(_depArchiveEtat.type !== null){
+    _depArchiveEtat.type = null;
+  } else {
+    goTo('s-espaces');
+    depRenderEspaces();
+    return;
+  }
+  depRenderArchive();
+};
+
 window.depRenderArchive = function(){
-  var boxD = $('dep-archive-departs');
-  if(boxD){
+  var box = $('dep-archive-content');
+  var titreEl = $('dep-archive-titre');
+  if(!box) return;
+
+  var etat = _depArchiveEtat;
+  var html = '';
+
+  if(!etat.type){
+    // Niveau 0 : choix de la catégorie
+    if(titreEl) titreEl.textContent = 'Archivage';
     var departsClotures = tousLesDeparts().filter(function(d){ return d.statut === 'cloture'; });
-    if(!departsClotures.length){
-      boxD.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucun d&eacute;part cl&ocirc;tur&eacute; pour l\'instant.</div>';
-    } else {
-      var hD = '';
-      departsClotures.forEach(function(d){
-        var cp = compteursDepart(d._id);
-        hD += '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="depDetail(\''+d._id+'\')">'
-          +   '<div class="dep-card-top">'
-          +     '<div class="dep-nom">'+esc(d.nom||'Sans nom')+'</div>'
-          +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Cl&ocirc;tur&eacute;</div>'
-          +   '</div>'
-          +   '<div class="dep-meta">'
-          +     '<span>&#128197; <b>'+dateFr(d.dateDepart)+'</b></span>'
-          +     '<span>&#128100; <b>'+cp.clients+'</b> client'+(cp.clients>1?'s':'')+'</span>'
-          +     '<span>&#128176; <b>'+cp.euros+'</b> &euro;</span>'
-          +   '</div>'
-          + '</div>';
-      });
-      boxD.innerHTML = hD;
-    }
+    var colsTerminees = (window.collectes || []).filter(function(c){ return c && c.statut === 'terminee'; });
+    html += _depArchiveCarteDossier('&#128230;', 'Départs clôturés', departsClotures.length+' départ'+(departsClotures.length>1?'s':''), 'depArchiveOuvrir(\'departs\')');
+    html += _depArchiveCarteDossier('&#128203;', 'Collectes terminées', colsTerminees.length+' collecte'+(colsTerminees.length>1?'s':''), 'depArchiveOuvrir(\'collectes\')');
+    box.innerHTML = html;
+    return;
   }
 
-  var boxC = $('dep-archive-collectes');
-  if(boxC){
-    var cols = (window.collectes || []).filter(function(c){ return c && c.statut === 'terminee'; });
-    cols = cols.slice().sort(function(a,b){
-      var da = (typeof parseDate === 'function') ? parseDate(a.date) : 0;
-      var db = (typeof parseDate === 'function') ? parseDate(b.date) : 0;
-      return db - da;
-    });
-    if(!cols.length){
-      boxC.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune collecte termin&eacute;e pour l\'instant.</div>';
-    } else {
-      var hC = '';
-      cols.forEach(function(c){
-        var cls = (window.clientsParCollecte||{})[c.id] || {};
-        var nb = Object.keys(cls).length;
-        var total = Object.values(cls).reduce(function(s, cl){ return s + (parseFloat(cl && cl.prix)||0); }, 0);
-        hC += '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="ouvrirCollecte(\''+c.id+'\')">'
-          +   '<div class="dep-card-top">'
-          +     '<div class="dep-nom">'+esc(c.date||'Collecte')+'</div>'
-          +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Termin&eacute;e</div>'
-          +   '</div>'
-          +   '<div class="dep-meta">'
-          +     '<span>&#128100; <b>'+nb+'</b> client'+(nb>1?'s':'')+'</span>'
-          +     '<span>&#128176; <b>'+total+'</b> &euro;</span>'
-          +   '</div>'
-          + '</div>';
-      });
-      boxC.innerHTML = hC;
+  var items = _depArchiveItemsBruts(etat.type).filter(function(o){ return o.date && !isNaN(o.date.getTime()); });
+  var groupe = _depArchiveGrouper(items);
+  var nomCategorie = (etat.type === 'departs') ? 'Départs clôturés' : 'Collectes terminées';
+
+  if(!etat.annee){
+    // Niveau 1 : années
+    if(titreEl) titreEl.textContent = nomCategorie;
+    var annees = Object.keys(groupe).sort(function(a,b){ return b-a; });
+    if(!annees.length){
+      box.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune archive pour l\'instant.</div>';
+      return;
     }
+    annees.forEach(function(a){
+      var nb = 0;
+      Object.keys(groupe[a]).forEach(function(m){ Object.keys(groupe[a][m]).forEach(function(s){ nb += groupe[a][m][s].items.length; }); });
+      html += _depArchiveCarteDossier('&#128193;', a, nb+' élément'+(nb>1?'s':''), 'depArchiveOuvrirAnnee('+a+')');
+    });
+    box.innerHTML = html;
+    return;
   }
+
+  var moisGroupe = groupe[etat.annee] || {};
+
+  if(etat.mois === null){
+    // Niveau 2 : mois
+    if(titreEl) titreEl.textContent = nomCategorie+' — '+etat.annee;
+    var moisCles = Object.keys(moisGroupe).sort(function(a,b){ return a-b; });
+    if(!moisCles.length){
+      box.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune archive pour l\'instant.</div>';
+      return;
+    }
+    moisCles.forEach(function(m){
+      var nb = 0;
+      Object.keys(moisGroupe[m]).forEach(function(s){ nb += moisGroupe[m][s].items.length; });
+      html += _depArchiveCarteDossier('&#128193;', DEP_MOIS_NOMS[m], nb+' élément'+(nb>1?'s':''), 'depArchiveOuvrirMois('+m+')');
+    });
+    box.innerHTML = html;
+    return;
+  }
+
+  var semGroupe = moisGroupe[etat.mois] || {};
+
+  if(!etat.semaine){
+    // Niveau 3 : semaines
+    if(titreEl) titreEl.textContent = nomCategorie+' — '+DEP_MOIS_NOMS[etat.mois]+' '+etat.annee;
+    var semCles = Object.keys(semGroupe).sort().reverse();
+    if(!semCles.length){
+      box.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune archive pour l\'instant.</div>';
+      return;
+    }
+    semCles.forEach(function(sk){
+      var g = semGroupe[sk];
+      html += _depArchiveCarteDossier('&#128193;', g.info.label, g.items.length+' élément'+(g.items.length>1?'s':''), 'depArchiveOuvrirSemaine(\''+sk+'\')');
+    });
+    box.innerHTML = html;
+    return;
+  }
+
+  // Niveau 4 : liste des éléments de la semaine choisie
+  var g = semGroupe[etat.semaine];
+  if(titreEl) titreEl.textContent = g ? g.info.label : nomCategorie;
+  if(!g || !g.items.length){
+    box.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune archive pour l\'instant.</div>';
+    return;
+  }
+  var itemsTries = g.items.slice().sort(function(x,y){
+    var dx = (etat.type === 'departs') ? new Date(x.dateDepart) : parseDate(x.date);
+    var dy = (etat.type === 'departs') ? new Date(y.dateDepart) : parseDate(y.date);
+    return dy - dx;
+  });
+  itemsTries.forEach(function(it){
+    html += (etat.type === 'departs') ? _depArchiveCarteDepart(it) : _depArchiveCarteCollecte(it);
+  });
+  box.innerHTML = html;
 };
 
 window.depOuvrirEspaceCollecte = function(){
@@ -4332,6 +4494,25 @@ function greffer(){
       try{ _depAjouterSuiviCamion(k); }catch(e){ console.error('departs: icône suivi (camion)', e); }
     };
     window.renderCamion._depPatch = true;
+  }
+
+  /* --- M. La section "HISTORIQUE" (collectes terminées) sur l'accueil
+     fait maintenant doublon avec le carré ARCHIVAGE (v1.19.0) — on la
+     retire après chaque rendu (retour de Cobey du 21/08/2026). --- */
+  if(typeof window.renderCollectesList === 'function' && !window.renderCollectesList._depPatch){
+    var origRenderCollectesList = window.renderCollectesList;
+    window.renderCollectesList = function(){
+      origRenderCollectesList.apply(this, arguments);
+      try{
+        var hc = document.getElementById('hist-container');
+        if(hc){
+          var prev = hc.previousElementSibling;
+          if(prev) prev.remove();
+          hc.remove();
+        }
+      }catch(e){ console.error('departs: retrait historique accueil', e); }
+    };
+    window.renderCollectesList._depPatch = true;
   }
 }
 
