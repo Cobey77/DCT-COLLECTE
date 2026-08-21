@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.15.0  ·  21/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.16.0  ·  21/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -149,6 +149,31 @@
        en conditions réelles. Corrigé (défilement propre à cet écran).
        Ajout aussi d'un format A4 explicite à l'impression
        (`@page{size:A4}`), qui manquait.
+   34. Jusqu'à 5 photos par colis (au lieu d'une seule), écrans
+       Validation et Dépôt direct — même principe que le module
+       France & Europe (grille de vignettes, suppression individuelle,
+       compteur "n/5").
+   35. Changement d'accès au QR/lien facture (annule et remplace le
+       point 29) : Cobey a précisé que le QR n'est destiné qu'aux
+       employés DCT (y compris les futurs comptes comme celui de
+       Modou) — un client qui le scanne ne doit avoir accès à rien.
+       La "facture publique sans compte" du point 29 est donc
+       retirée : scanner le lien sans être connecté n'affiche plus
+       que l'écran de connexion normal, comme avant le point 29. Une
+       fois connecté, le lien ramène directement sur la facture
+       (comportement du point 22, inchangé).
+   36. La facture "vrai document" (imprimable / PDF) du point 29
+       reste disponible, mais uniquement depuis la facture normale
+       (#s-facture), une fois connecté, via un nouveau bouton
+       "🖨️ Imprimer / PDF" — plus via un lien accessible sans compte.
+       Sa mise en page a été reprise du modèle de facture CARGO 360
+       fourni par Cobey : bandeau vert, en-tête société + QR,
+       Expéditeur/Destinataire, tableau du colis, totaux, somme en
+       toutes lettres ("Arrêtée la présente facture à la somme
+       de..."), historique des paiements, pied de page. Un bouton
+       "💬 Envoyer par WhatsApp" a aussi été ajouté (résumé texte de
+       la facture — sans lien, puisque le lien est désormais réservé
+       aux employés connectés, voir point 35).
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -158,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.15.0';
+var DEP_VERSION = 'v1.16.0';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -203,12 +228,18 @@ var _depValiderMethode = '';    // 'especes' | 'virement' — méthode choisie s
 window.depotClients = {};       // { id: {...} } — clients inscrits directement au dépôt, hors collecte
 var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un client du dépôt
 var _depDepotEditId = null;     // id du client dépôt en cours de modification (null = création)
-var _depDepotPhotoTmp = null;   // photo en attente pour le formulaire dépôt
+window._depDepotPhotos = [];    // photos en attente pour le formulaire dépôt (v1.16.0 : jusqu'à PHOTO_MAX)
 var _depAjoutClientCarre = false; // true : le prochain saveClientConfirme() vient du carré Client
 
-// Lien de facture scanné (QR) avant même la connexion : ?facture=C|colId|clientId
-// (collecte) ou ?facture=D||clientId (dépôt direct). Consommé une seule fois,
-// juste après la connexion, dans la greffe sur _finalisLoginCore.
+// Lien de facture scanné (QR) : ?facture=C|colId|clientId (collecte) ou
+// ?facture=D||clientId (dépôt direct). v1.16.0 : le QR est réservé aux
+// employés DCT — un visiteur qui scanne sans être connecté doit voir
+// l'écran de connexion normal (#s-login, actif par défaut dans le HTML)
+// et rien d'autre ; il n'a accès à aucune donnée de facture tant qu'il
+// ne s'est pas identifié comme collaborateur. Ce lien n'est donc consommé
+// qu'après coup, une fois la connexion faite, dans la greffe sur
+// _finalisLoginCore (plus bas) — il ouvre alors la facture normale
+// (#s-facture), en interne, exactement comme avant la v1.13.0.
 var _depFactureDeepLink = null; // { collecteId, clientId, depot }
 try{
   var _mFactureLien = /[?&]facture=([^&]+)/.exec(location.search);
@@ -559,15 +590,10 @@ function injecterEcrans(){
   +     '</div>'
 
   +     '<div class="dep-sec">Photo et note</div>'
-  +     '<div class="dep-photo-box" id="dp-photo-box" onclick="depOuvrirPhotoDepot()">'
-  +       '<div id="dp-photo-vide"><div style="font-size:28px;">&#128247;</div>'
-  +       '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
-  +       '<img id="dp-photo-apercu" style="display:none;">'
-  +     '</div>'
+  // v1.16.0 : jusqu'à 5 photos (comme France & Europe), pas plus une
+  // seule — voir _depRenderPhotosGrille().
+  +     '<div id="dp-photo-box" style="margin-bottom:12px;"></div>'
   +     '<input type="file" id="dp-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="depPhotoChoisieDepot(this)">'
-  +     '<div id="dp-photo-actions" style="display:none;margin-bottom:12px;">'
-  +       '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhotoDepot()">&#128465; Retirer la photo</button>'
-  +     '</div>'
   +     '<div class="fg"><label class="fl">Note <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
   +       '<textarea class="fi" id="dp-note" rows="2" placeholder="Remarque..." style="resize:none;"></textarea></div>'
 
@@ -617,12 +643,16 @@ function injecterEcrans(){
   +   '<div class="content" id="dep-fact-content"></div>'
   + '</div>'
 
-  /* ---- ÉCRAN 7bis : facture publique (sans compte), affichée pour le lien
-     ?facture=... AVANT toute connexion — lecture seule, mise en page
-     "vrai document" (logo, sections, QR), imprimable en PDF via le
-     navigateur. Un collaborateur qui a besoin de modifier la facture
-     peut toujours passer par "Espace collaborateur" (goTo('s-login')),
-     qui l'amènera normalement sur #s-facture une fois connecté. ---- */
+  /* ---- ÉCRAN 7bis : aperçu imprimable de la facture, façon vrai document
+     (mise en page reprise du modèle CARGO 360 fourni par Cobey :
+     bandeau vert, en-tête société + QR, Expéditeur/Destinataire,
+     tableau du colis, totaux, somme en lettres, historique des
+     paiements, pied de page). v1.16.0 : cet écran n'est PLUS accessible
+     avant connexion (voir "Reste à faire" / changelog) — le QR/lien
+     facture est réservé aux employés DCT, un visiteur qui scanne sans
+     être connecté ne voit plus rien de la facture, uniquement l'écran
+     de connexion. On y accède désormais depuis la facture normale
+     (#s-facture), une fois connecté, via le bouton "Imprimer / PDF". ---- */
   + '<div class="screen" id="s-facture-publique">'
   +   '<style>'
   // v1.15.0 : sur téléphone, cet écran n'avait pas de zone de défilement
@@ -631,35 +661,64 @@ function injecterEcrans(){
   // invisible et inaccessible (html/body ont overflow:hidden, voir
   // index.html), donc ni le bas de la facture ni le bouton Imprimer
   // n'étaient atteignables (constaté par Cobey, capture à l'appui).
-  +     '#s-facture-publique{background:#f2f2f2;overflow-y:auto;-webkit-overflow-scrolling:touch;}'
-  +     '#s-facture-publique .pub-wrap{max-width:480px;margin:0 auto;padding:26px 16px 40px;}'
-  +     '#s-facture-publique .pub-card{background:#fff;border-radius:14px;padding:26px 20px;box-shadow:0 2px 14px rgba(0,0,0,.08);}'
-  +     '#s-facture-publique .pub-logo{display:block;margin:0 auto 8px;width:84px;height:auto;}'
-  +     '#s-facture-publique .pub-titre{text-align:center;font-size:21px;font-weight:800;color:#111;margin:0 0 2px;}'
-  +     '#s-facture-publique .pub-ref{text-align:center;font-size:12px;color:#999;margin-bottom:16px;}'
-  +     '#s-facture-publique .pub-sec-titre{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#999;font-weight:700;margin:18px 0 6px;}'
-  +     '#s-facture-publique .pub-ligne{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #f0f0f0;font-size:14px;color:#333;}'
-  +     '#s-facture-publique .pub-ligne strong{text-align:right;color:#111;}'
-  +     '#s-facture-publique .pub-total{background:#f7faf7;border-radius:10px;padding:16px;text-align:center;margin-top:10px;}'
-  +     '#s-facture-publique .pub-total-chiffre{font-size:28px;font-weight:800;color:#006b2d;}'
-  +     '#s-facture-publique .pub-total-sub{font-size:12px;color:#888;margin-top:6px;}'
-  +     '#s-facture-publique .pub-badge{display:inline-block;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;margin:10px auto 0;}'
-  +     '#s-facture-publique .pub-vers{font-size:13px;padding:7px 0;border-bottom:1px dashed #eee;color:#333;}'
-  +     '#s-facture-publique .pub-btn-print{width:100%;padding:14px;background:#252599;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;margin-top:22px;cursor:pointer;font-family:var(--font);}'
-  +     '#s-facture-publique .pub-lien-collab{display:block;text-align:center;margin-top:16px;font-size:12px;color:#999;text-decoration:underline;background:none;border:none;cursor:pointer;width:100%;font-family:var(--font);}'
-  +     '#s-facture-publique .pub-qr-wrap{text-align:center;margin-top:20px;}'
+  +     '#s-facture-publique{background:#e8e8e8;overflow-y:auto;-webkit-overflow-scrolling:touch;}'
+  +     '#s-facture-publique .pub-wrap{max-width:720px;margin:0 auto;padding:16px 10px 30px;}'
+  +     '#s-facture-publique .fac-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);}'
+  +     '#s-facture-publique .fac-topbar{height:8px;background:#006b2d;}'
+  +     '#s-facture-publique .fac-body{padding:18px 16px;}'
+  +     '#s-facture-publique .fac-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:14px;}'
+  +     '#s-facture-publique .fac-brand{display:flex;gap:10px;align-items:flex-start;}'
+  +     '#s-facture-publique .fac-brand-logo{width:52px;height:52px;border-radius:50%;flex-shrink:0;}'
+  +     '#s-facture-publique .fac-brand-nom{font-size:14px;font-weight:800;color:#006b2d;}'
+  +     '#s-facture-publique .fac-brand-sub{font-size:10.5px;color:#666;line-height:1.5;}'
+  +     '#s-facture-publique .fac-info{display:flex;gap:10px;align-items:flex-start;}'
+  +     '#s-facture-publique .fac-info-box{border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;min-width:150px;}'
+  +     '#s-facture-publique .fac-info-titre{font-size:17px;font-weight:800;color:#111;margin-bottom:6px;}'
+  +     '#s-facture-publique .fac-info-ligne{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#666;padding:1.5px 0;}'
+  +     '#s-facture-publique .fac-info-ligne strong{color:#111;font-weight:700;}'
+  +     '#s-facture-publique .fac-qr-wrap{flex-shrink:0;}'
+  +     '#s-facture-publique .fac-qr-wrap canvas{display:block;width:74px;height:74px;border:1.5px solid var(--border);border-radius:6px;}'
+  +     '#s-facture-publique .fac-sep{border:none;border-top:2px solid #006b2d;margin:10px 0 16px;}'
+  +     '#s-facture-publique .fac-parties{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}'
+  +     '#s-facture-publique .fac-partie-titre{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:4px;}'
+  +     '#s-facture-publique .fac-partie-nom{font-size:13px;font-weight:700;color:#111;}'
+  +     '#s-facture-publique .fac-partie-detail{font-size:11.5px;color:#555;line-height:1.5;}'
+  +     '#s-facture-publique .fac-tbl-wrap{overflow-x:auto;margin-bottom:18px;}'
+  +     '#s-facture-publique table.fac-table{width:100%;border-collapse:collapse;font-size:12px;}'
+  +     '#s-facture-publique table.fac-table th{background:#006b2d;color:#fff;text-align:left;padding:8px 9px;font-size:10.5px;font-weight:700;white-space:nowrap;}'
+  +     '#s-facture-publique table.fac-table td{padding:8px 9px;border-bottom:1px solid #eee;color:#333;}'
+  +     '#s-facture-publique table.fac-table th:last-child,#s-facture-publique table.fac-table td:last-child{text-align:right;}'
+  +     '#s-facture-publique .fac-bas{display:flex;justify-content:space-between;flex-wrap:wrap-reverse;gap:14px;margin-bottom:18px;}'
+  +     '#s-facture-publique .fac-lettres{flex:1;min-width:180px;background:#f7f7f7;border-radius:6px;padding:10px 12px;font-size:11px;color:#555;font-style:italic;align-self:flex-end;}'
+  +     '#s-facture-publique .fac-totaux{min-width:200px;}'
+  +     '#s-facture-publique .fac-totaux-ligne{display:flex;justify-content:space-between;gap:16px;font-size:12.5px;color:#444;padding:5px 4px;}'
+  +     '#s-facture-publique .fac-totaux-total{background:#006b2d;color:#fff;font-weight:800;border-radius:5px;padding:8px 10px;margin:4px 0;}'
+  +     '#s-facture-publique .fac-hist-titre{background:#006b2d;color:#fff;font-size:11px;font-weight:700;letter-spacing:.03em;padding:8px 12px;border-radius:5px 5px 0 0;}'
+  +     '#s-facture-publique table.fac-hist{width:100%;border-collapse:collapse;font-size:11.5px;}'
+  +     '#s-facture-publique table.fac-hist th{text-align:left;padding:7px 9px;font-size:10px;color:#888;font-weight:700;border-bottom:2px solid #eee;white-space:nowrap;}'
+  +     '#s-facture-publique table.fac-hist td{padding:7px 9px;border-bottom:1px solid #f2f2f2;color:#333;white-space:nowrap;}'
+  +     '#s-facture-publique .fac-footer{background:#006b2d;color:#fff;text-align:center;font-size:10.5px;padding:12px;line-height:1.6;}'
+  +     '#s-facture-publique .fac-actions{margin-top:16px;display:flex;flex-direction:column;gap:8px;}'
+  +     '#s-facture-publique .fac-btn{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;}'
+  +     '#s-facture-publique .fac-btn-print{background:#006b2d;color:#fff;}'
+  +     '#s-facture-publique .fac-btn-whatsapp{background:#25D366;color:#fff;}'
+  +     '#s-facture-publique .fac-btn-retour{background:none;color:#666;text-decoration:underline;}'
+  +     '@media (max-width:480px){'
+  +       '#s-facture-publique .fac-parties{grid-template-columns:1fr;}'
+  +     '}'
   +     '@media print{'
   // Format A4 explicite (sinon le navigateur imprime avec la taille par
   // défaut de son imprimante/PDF virtuel, pas forcément A4), et on
   // repasse tout en "hauteur naturelle" : sans ça, le défilement ajouté
   // ci-dessus ferait imprimer uniquement la portion visible à l'écran
   // au moment du clic, pas la facture entière.
-  +       '@page{size:A4;margin:15mm;}'
+  +       '@page{size:A4;margin:12mm;}'
   +       'html,body{height:auto !important;overflow:visible !important;}'
   +       '#s-facture-publique{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
   +       '#s-facture-publique .no-print{display:none !important;}'
-  +       '#s-facture-publique .pub-card{box-shadow:none;padding:0;}'
+  +       '#s-facture-publique .fac-doc{box-shadow:none;border-radius:0;}'
   +       '#s-facture-publique .pub-wrap{padding:0;max-width:100%;}'
+  +       '#s-facture-publique .fac-parties{grid-template-columns:1fr 1fr !important;}'
   +     '}'
   +   '</style>'
   +   '<div class="pub-wrap">'
@@ -669,8 +728,7 @@ function injecterEcrans(){
   +       '<div style="font-weight:700;color:#555;">Facture introuvable</div>'
   +       '<div style="font-size:13px;margin-top:6px;">Ce lien n&rsquo;est plus valide, ou la facture a &eacute;t&eacute; d&eacute;plac&eacute;e.</div>'
   +     '</div>'
-  +     '<div id="pub-contenu" class="pub-card" style="display:none;"></div>'
-  +     '<button type="button" class="no-print pub-lien-collab" onclick="depAllerLoginPublique()">Espace collaborateur &rarr;</button>'
+  +     '<div id="pub-contenu" style="display:none;"></div>'
   +   '</div>'
   + '</div>'
 
@@ -701,15 +759,8 @@ function injecterEcrans(){
   +     '</div>'
 
   +     '<div class="dep-sec">Photo du colis</div>'
-  +     '<div class="dep-photo-box" id="dv-photo-box" onclick="depOuvrirPhotoValider()">'
-  +       '<div id="dv-photo-vide"><div style="font-size:28px;">&#128247;</div>'
-  +       '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
-  +       '<img id="dv-photo-apercu" style="display:none;">'
-  +     '</div>'
+  +     '<div id="dv-photo-box" style="margin-bottom:12px;"></div>'
   +     '<input type="file" id="dv-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="depPhotoChoisieValider(this)">'
-  +     '<div id="dv-photo-actions" style="display:none;margin-bottom:12px;">'
-  +       '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhotoValider()">&#128465; Retirer la photo</button>'
-  +     '</div>'
 
   +     '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
   +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dv-dest-nom" placeholder="Awa Ndiaye"></div>'
@@ -1294,11 +1345,80 @@ function depGenererQR(ctx, canvasId){
 }
 
 /* ─────────────────────────────────────────────
-   10bis-2. FACTURE PUBLIQUE (sans compte) — affichée directement pour
-   le lien ?facture=..., avant toute connexion. Lecture seule, mise en
-   page "vrai document" (logo, sections, QR), imprimable en PDF via le
-   navigateur (window.print()). Voir la greffe sur buildLogin.
+   10bis-2. FACTURE IMPRIMABLE (façon vrai document, mise en page reprise
+   du modèle CARGO 360) — v1.16.0 : n'est plus accessible qu'une fois
+   connecté, depuis le bouton "Imprimer / PDF" de la facture normale
+   (#s-facture, voir depOuvrirFacturePDF). Le QR/lien facture est réservé
+   aux employés DCT (voir _depFactureDeepLink) : un visiteur qui scanne
+   sans compte ne passe plus par ici.
    ───────────────────────────────────────────── */
+
+// Nombres en toutes lettres (français) — pour la ligne "Arrêtée la
+// présente facture à la somme de :". N'accepte que des entiers positifs
+// (les centimes sont gérés séparément par _depSommeEnLettres) ; orthographe
+// traditionnelle (traits d'union), comme sur la plupart des factures.
+var _MEL_UNITES = ['zéro','un','deux','trois','quatre','cinq','six','sept','huit','neuf','dix',
+  'onze','douze','treize','quatorze','quinze','seize','dix-sept','dix-huit','dix-neuf'];
+var _MEL_DIZAINES = ['','','vingt','trente','quarante','cinquante','soixante','soixante-dix','quatre-vingt','quatre-vingt-dix'];
+
+function _depDeuxChiffresEnLettres(n){ // 0..99
+  if(n < 20) return _MEL_UNITES[n];
+  var d = Math.floor(n / 10), u = n % 10;
+  if(d === 7 || d === 9){
+    var base = d === 7 ? 'soixante' : 'quatre-vingt';
+    if(d === 7 && u === 1) return base + ' et onze';
+    return base + '-' + _MEL_UNITES[10 + u];
+  }
+  if(u === 0) return _MEL_DIZAINES[d] + (d === 8 ? 's' : '');
+  if(u === 1 && d !== 8) return _MEL_DIZAINES[d] + ' et un';
+  return _MEL_DIZAINES[d] + '-' + _MEL_UNITES[u];
+}
+
+function _depTroisChiffresEnLettres(n){ // 0..999
+  var c = Math.floor(n / 100), r = n % 100;
+  var h = '';
+  if(c > 0){
+    h += (c === 1 ? 'cent' : _MEL_UNITES[c] + ' cent');
+    if(c > 1 && r === 0) h += 's';
+  }
+  if(r > 0) h += (h ? ' ' : '') + _depDeuxChiffresEnLettres(r);
+  return h;
+}
+
+function _depMontantEnLettres(n){
+  n = Math.floor(Math.abs(parseFloat(n)) || 0);
+  if(n === 0) return 'zéro';
+  var parts = [];
+  var milliards = Math.floor(n / 1e9); n %= 1e9;
+  var millions  = Math.floor(n / 1e6); n %= 1e6;
+  var milliers  = Math.floor(n / 1e3); n %= 1e3;
+  var reste     = n;
+  if(milliards > 0) parts.push(_depTroisChiffresEnLettres(milliards) + (milliards > 1 ? ' milliards' : ' milliard'));
+  if(millions  > 0) parts.push(_depTroisChiffresEnLettres(millions)  + (millions  > 1 ? ' millions'  : ' million'));
+  if(milliers  > 0) parts.push(milliers === 1 ? 'mille' : _depTroisChiffresEnLettres(milliers) + ' mille');
+  if(reste     > 0) parts.push(_depTroisChiffresEnLettres(reste));
+  return parts.join(' ').replace(/\s+/g, ' ').trim();
+}
+
+// "250" → "Deux cent cinquante euros" · "250.5" → "Deux cent cinquante
+// euros et cinquante centimes"
+function _depSommeEnLettres(montant){
+  var m = parseFloat(montant) || 0;
+  var entier = Math.floor(m);
+  var centimes = Math.round((m - entier) * 100);
+  var h = _depMontantEnLettres(entier) + ' euro' + (entier > 1 ? 's' : '');
+  if(centimes > 0){
+    h += ' et ' + _depMontantEnLettres(centimes) + ' centime' + (centimes > 1 ? 's' : '');
+  }
+  return h.charAt(0).toUpperCase() + h.slice(1);
+}
+
+// Ouvre l'aperçu imprimable de la facture actuellement affichée
+// (#s-facture doit déjà être ouverte — voir le bouton "Imprimer / PDF").
+window.depOuvrirFacturePDF = function(){
+  if(!_depFactureCtx){ toast('⚠️ Facture introuvable.'); return; }
+  depAfficherFacturePublique(_depFactureCtx);
+};
 
 function depAfficherFacturePublique(ctx){
   goTo('s-facture-publique');
@@ -1315,76 +1435,136 @@ function depAfficherFacturePublique(ctx){
   depRenderFacturePublique(c, ctx);
 }
 
-// Un collaborateur qui ouvre le lien facture (par ex. pour ajouter un
-// versement) passe par ici : _depFactureDeepLink n'est pas touché, donc
-// la greffe existante sur _finalisLoginCore l'amènera directement sur
-// #s-facture (la vraie, éditable) une fois connecté — comportement
-// inchangé depuis la v1.10.0.
-window.depAllerLoginPublique = function(){
-  goTo('s-login');
-};
-
 function depRenderFacturePublique(c, ctx){
   var pay = depCalculerPaiement(c);
   var st = STATUTS_PAIEMENT[pay.statut] || {};
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
   var totalColis = parseFloat(c.prix) || 0;
   var totalLivraison = c.livraisonDakar ? (parseFloat(c.prixLivraison) || 0) : 0;
+  var totalGeneral = totalColis + totalLivraison;
+  var numero = (ctx.depot ? 'D' : 'C') + '-' + ctx.clientId;
+  var destBlock = c.destinataireNom
+    ? ('<div class="fac-partie-nom">'+esc(c.destinataireNom)+'</div>'
+       + '<div class="fac-partie-detail">'+esc(c.destinataireTel||'—')
+       + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(c.livraisonAdresse) : '')
+       + '</div>')
+    : '<div class="fac-partie-nom">—</div>';
 
   var h = ''
-    + '<img class="pub-logo" src="'+DEP_LOGO_B64+'" alt="Dakar City Transport">'
-    + '<div class="pub-titre">Facture</div>'
-    + '<div class="pub-ref">R&eacute;f. '+esc((ctx.depot?'D':'C')+'-'+ctx.clientId)+' &middot; '+dateHeureFr(Date.now())+'</div>'
+    + '<div class="fac-doc">'
+    +   '<div class="fac-topbar"></div>'
+    +   '<div class="fac-body">'
 
-    + '<div class="pub-sec-titre">Client</div>'
-    + '<div class="pub-ligne"><span>Nom</span><strong>'+esc(nom)+'</strong></div>'
-    + '<div class="pub-ligne"><span>T&eacute;l&eacute;phone</span><strong>'+esc(c.tel||'—')+'</strong></div>'
+    +     '<div class="fac-header">'
+    +       '<div class="fac-brand">'
+    +         '<img class="fac-brand-logo" src="'+DEP_LOGO_B64+'" alt="Dakar City Transport">'
+    +         '<div>'
+    +           '<div class="fac-brand-nom">DAKAR CITY TRANSPORT</div>'
+    +           '<div class="fac-brand-sub">Paris<br>T&eacute;l&nbsp;: +33 6 69 18 30 01<br>Email&nbsp;: contact@dakarcitytransport.com<br>Site web&nbsp;: dakarcitytransport.com</div>'
+    +         '</div>'
+    +       '</div>'
+    +       '<div class="fac-info">'
+    +         '<div class="fac-info-box">'
+    +           '<div class="fac-info-titre">FACTURE</div>'
+    +           '<div class="fac-info-ligne"><span>Num&eacute;ro</span><strong>'+esc(numero)+'</strong></div>'
+    +           '<div class="fac-info-ligne"><span>Date</span><strong>'+esc(dateHeureFr(Date.now()))+'</strong></div>'
+    +           '<div class="fac-info-ligne"><span>R&eacute;f&eacute;rence</span><strong>'+esc(ctx.collecteId || numero)+'</strong></div>'
+    +           '<div class="fac-info-ligne"><span>Statut</span><strong style="color:'+(st.color||'#555')+';">'+esc(st.label||pay.statut)+'</strong></div>'
+    +         '</div>'
+    +         '<div class="fac-qr-wrap"><canvas id="dep-pub-qr" width="148" height="148"></canvas></div>'
+    +       '</div>'
+    +     '</div>'
 
-    + '<div class="pub-sec-titre">Colis</div>'
-    + '<div class="pub-ligne"><span>Description</span><strong>'+esc(c.colis||'—')+'</strong></div>';
+    +     '<hr class="fac-sep">'
 
-  if(c.destinataireNom){
-    h += '<div class="pub-sec-titre">Destinataire &agrave; Dakar</div>'
-      +  '<div class="pub-ligne"><span>Nom</span><strong>'+esc(c.destinataireNom)+'</strong></div>'
-      +  (c.destinataireTel ? '<div class="pub-ligne"><span>T&eacute;l&eacute;phone</span><strong>'+esc(c.destinataireTel)+'</strong></div>' : '');
-  }
+    +     '<div class="fac-parties">'
+    +       '<div>'
+    +         '<div class="fac-partie-titre">EXP&Eacute;DITEUR</div>'
+    +         '<div class="fac-partie-nom">'+esc(nom)+'</div>'
+    +         '<div class="fac-partie-detail">'+esc(c.tel||'—')
+    +           (c.adresse ? '<br>'+esc(c.adresse) : '')
+    +           '<br>'+esc(((c.cp||'')+' '+(c.ville||'')).trim() || '—')
+    +         '</div>'
+    +       '</div>'
+    +       '<div>'
+    +         '<div class="fac-partie-titre">DESTINATAIRE</div>'
+    +         destBlock
+    +       '</div>'
+    +     '</div>'
 
-  if(c.livraisonDakar){
-    h += '<div class="pub-sec-titre">Livraison &agrave; Dakar</div>'
-      +  '<div class="pub-ligne"><span>Adresse</span><strong>'+esc(c.livraisonAdresse||'—')+'</strong></div>'
-      +  '<div class="pub-ligne"><span>Prix livraison</span><strong>'+totalLivraison+' &euro;</strong></div>';
-  }
+    +     '<div class="fac-tbl-wrap"><table class="fac-table">'
+    +       '<thead><tr><th>N&deg;</th><th>Description</th><th>Qt&eacute;</th><th>Unit&eacute;</th><th>Prix unitaire</th><th>Montant</th></tr></thead>'
+    +       '<tbody>'
+    +         '<tr><td>1</td><td>'+esc(c.colis||'Colis')+'</td><td>1</td><td>colis</td><td>'+totalColis+' &euro;</td><td>'+totalColis+' &euro;</td></tr>'
+    +         (c.livraisonDakar ? ('<tr><td>2</td><td>Livraison &agrave; Dakar'+(c.livraisonAdresse ? (' &mdash; '+esc(c.livraisonAdresse)) : '')+'</td><td>1</td><td>service</td><td>'+totalLivraison+' &euro;</td><td>'+totalLivraison+' &euro;</td></tr>') : '')
+    +       '</tbody>'
+    +     '</table></div>'
 
-  h += '<div class="pub-total">'
-    +    '<div class="pub-total-chiffre">'+totalColis+' &euro;</div>'
-    +    '<div class="pub-total-sub">Total colis'
-    +      (totalLivraison ? ' &middot; '+(totalColis+totalLivraison)+' &euro; avec livraison' : '')
-    +    '</div>'
-    +    '<div class="pub-badge" style="background:'+(st.bg||'#eee')+';color:'+(st.color||'#555')+';">'+(st.label||pay.statut)+'</div>'
-    +  '</div>';
+    +     '<div class="fac-bas">'
+    +       '<div class="fac-lettres">Arr&ecirc;t&eacute;e la pr&eacute;sente facture &agrave; la somme de&nbsp;: '+esc(_depSommeEnLettres(totalGeneral))+'.</div>'
+    +       '<div class="fac-totaux">'
+    +         '<div class="fac-totaux-ligne"><span>Sous-total colis</span><span>'+totalColis+' &euro;</span></div>'
+    +         (totalLivraison ? '<div class="fac-totaux-ligne"><span>Livraison &agrave; Dakar</span><span>'+totalLivraison+' &euro;</span></div>' : '')
+    +         '<div class="fac-totaux-ligne"><span>TVA</span><span>0 &euro;</span></div>'
+    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL</span><span>'+totalGeneral+' &euro;</span></div>'
+    +         '<div class="fac-totaux-ligne"><span>Montant pay&eacute;</span><span>'+pay.paye+' &euro;</span></div>'
+    +         '<div class="fac-totaux-ligne"><span>Reste &agrave; payer</span><span>'+pay.reste+' &euro;</span></div>'
+    +       '</div>'
+    +     '</div>';
 
-  var versements = Array.isArray(c.versements) ? c.versements.slice() : [];
+  var versements = Array.isArray(c.versements) ? c.versements.slice().sort(function(a,b){ return (a.le||0) - (b.le||0); }) : [];
   if(versements.length){
-    versements.sort(function(a,b){ return (b.le||0) - (a.le||0); });
-    h += '<div class="pub-sec-titre">Historique des paiements</div>'
+    var cumule = 0;
+    h += '<div class="fac-hist-titre">HISTORIQUE DES PAIEMENTS</div>'
+      +  '<table class="fac-hist"><thead><tr><th>Date &amp; heure</th><th>Montant</th><th>Mode</th><th>Restant</th><th>Agent</th></tr></thead><tbody>'
       +  versements.map(function(v){
+           cumule += parseFloat(v.montant) || 0;
+           var restant = Math.max(0, totalColis - cumule);
            var meth = v.methode === 'virement' ? 'Virement' : (v.methode === 'especes' ? 'Esp&egrave;ces' : '—');
-           return '<div class="pub-vers">'+(parseFloat(v.montant)||0)+' &euro; &middot; '+meth+' &middot; '+dateHeureFr(v.le)+'</div>';
+           return '<tr><td>'+esc(dateHeureFr(v.le))+'</td><td>'+(parseFloat(v.montant)||0)+' &euro;</td><td>'+meth+'</td><td>'+restant+' &euro;</td><td>'+esc(v.par||'—')+'</td></tr>';
          }).join('')
-      +  '<div class="pub-ligne" style="margin-top:8px;"><span>Reste &agrave; payer</span><strong>'+pay.reste+' &euro;</strong></div>';
+      +  '</tbody></table>';
   }
 
-  if(c.note){
-    h += '<div class="pub-sec-titre">Note</div><div class="pub-ligne"><span>&nbsp;</span><strong>'+esc(c.note)+'</strong></div>';
-  }
+  h += '<div class="fac-actions no-print">'
+    +    '<button type="button" class="fac-btn fac-btn-print" onclick="window.print()">&#128424;&#65039; Imprimer / PDF</button>'
+    +    '<button type="button" class="fac-btn fac-btn-whatsapp" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
+    +    '<button type="button" class="fac-btn fac-btn-retour" onclick="goTo(\'s-facture\')">&larr; Retour</button>'
+    +  '</div>'
 
-  h += '<div class="pub-qr-wrap"><canvas id="dep-pub-qr" width="176" height="176"></canvas></div>'
-    +  '<button type="button" class="no-print pub-btn-print" onclick="window.print()">&#128424;&#65039; T&eacute;l&eacute;charger / Imprimer</button>';
+    +  '</div>' // fac-body
+    +  '<div class="fac-footer">DAKAR CITY TRANSPORT &middot; Paris &middot; T&eacute;l&nbsp;: +33 6 69 18 30 01<br>Email&nbsp;: contact@dakarcitytransport.com &middot; Site web&nbsp;: dakarcitytransport.com</div>'
+    +  '</div>'; // fac-doc
 
   var box = $('pub-contenu');
   if(box) box.innerHTML = h;
-  try{ depGenererQR(ctx, 'dep-pub-qr'); }catch(e){ console.error('departs: QR facture publique', e); }
+  try{ depGenererQR(ctx, 'dep-pub-qr'); }catch(e){ console.error('departs: QR facture', e); }
 }
+
+// Résumé texte de la facture, envoyé par WhatsApp — v1.16.0 : le lien
+// facture n'est plus inclus (il est désormais réservé aux employés DCT,
+// un client qui le recevrait tomberait sur l'écran de connexion et ne
+// verrait rien), on envoie donc uniquement les informations utiles au
+// client, à charge pour le collaborateur de choisir le contact dans
+// WhatsApp (pas de numéro dans le lien : les numéros enregistrés côté
+// DCT ne sont pas forcément au format international attendu par WhatsApp).
+window.depPartagerWhatsapp = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  var pay = depCalculerPaiement(c);
+  var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+  var msg = 'Facture Dakar City Transport\n'
+    + 'Client : ' + nom + '\n'
+    + 'Colis : ' + (c.colis || '—') + '\n'
+    + 'Montant total : ' + pay.total + ' €\n'
+    + 'Payé : ' + pay.paye + ' €  ·  Reste à payer : ' + pay.reste + ' €\n\n'
+    + 'Merci de votre confiance — Dakar City Transport.';
+  window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+};
 
 // "1755701520000" → "20/08/2026 14:32"
 function dateHeureFr(ts){
@@ -1570,16 +1750,26 @@ function depRenderFacture(c){
     + '</div>'
     + '<button class="btn btn-green" onclick="depAjouterVersement()">&#9989; Enregistrer le versement</button>';
 
-  // QR code — lien direct vers cette facture précise. La librairie est
-  // chargée à la demande (voir depGenererQR) : le canvas reste vide un
-  // court instant le temps du chargement, puis se remplit.
-  h += '<div class="dep-sec">QR code</div>'
-    + '<div style="text-align:center;padding:6px 0 10px;">'
-    +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
-    +   '<div style="font-size:10.5px;color:var(--text3);margin-top:8px;">&Agrave; scanner pour retrouver directement cette facture</div>'
+  // v1.16.0 : la facture "vrai document" (mise en page CARGO 360,
+  // imprimable / PDF, partageable par WhatsApp) est désormais accessible
+  // ici, une fois connecté — plus via un lien public (voir "petit
+  // changement" de Cobey : le QR est réservé aux employés DCT).
+  h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
+    +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
+    +   '<button class="btn" style="background:#25D366;color:#fff;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
     + '</div>';
 
-  h += '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:16px;">Envoi WhatsApp &mdash; &agrave; venir.</div>';
+  // QR code — lien direct vers cette facture précise, réservé aux
+  // employés DCT (il faut être connecté pour qu'il fonctionne : un
+  // visiteur qui le scanne sans compte ne voit que l'écran de
+  // connexion, jamais la facture). La librairie est chargée à la
+  // demande (voir depGenererQR) : le canvas reste vide un court instant
+  // le temps du chargement, puis se remplit.
+  h += '<div class="dep-sec">QR code (r&eacute;serv&eacute; aux employ&eacute;s DCT)</div>'
+    + '<div style="text-align:center;padding:6px 0 10px;">'
+    +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
+    +   '<div style="font-size:10.5px;color:var(--text3);margin-top:8px;">&Agrave; scanner, une fois connect&eacute;, pour retrouver directement cette facture</div>'
+    + '</div>';
 
   var box = $('dep-fact-content');
   if(box) box.innerHTML = h;
@@ -1618,7 +1808,7 @@ window.depOuvrirDepotForm = function(departId, clientId){
   if(!estDirection()){ toast('🔒 Réservé à la direction.'); return; }
   _depDepotDepart = departId;
   _depDepotEditId = clientId || null;
-  _depDepotPhotoTmp = null;
+  window._depDepotPhotos = [];
 
   var titre = $('dp-form-titre');
   if(titre) titre.textContent = clientId ? 'Modifier ce client' : 'Client au dépôt';
@@ -1652,11 +1842,15 @@ window.depOuvrirDepotForm = function(departId, clientId){
   }
 
   depSetLivraisonDepot(c.livraisonDakar === true);
-  _afficherPhotoDepot(null);
+  _depRenderPhotosGrille('dp');
   if(clientId && c.aPhotoColis && window.db && window.firebaseReady){
     db.ref('dct_photos_colis/'+clientId).once('value', function(snap){
-      var v = snap.val();
-      if(v && v.d && _depDepotEditId === clientId) _afficherPhotoDepot(v.d);
+      if(_depDepotEditId !== clientId) return;   // formulaire déjà refermé/rouvert ailleurs entre-temps
+      var v = snap.val() || {};
+      var arr = Object.keys(v).map(function(k){ return v[k]; }).filter(function(p){ return p && p.d; });
+      arr.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+      window._depDepotPhotos = arr;
+      _depRenderPhotosGrille('dp');
     });
   }
 
@@ -1675,18 +1869,54 @@ window.depOuvrirDepotForm = function(departId, clientId){
   goTo('s-depot-form');
 };
 
-function _afficherPhotoDepot(data){
-  var img = $('dp-photo-apercu'), vide = $('dp-photo-vide'), act = $('dp-photo-actions');
-  if(data){
-    if(img){ img.src = data; img.style.display = 'block'; }
-    if(vide) vide.style.display = 'none';
-    if(act) act.style.display = 'block';
-  } else {
-    if(img){ img.src = ''; img.style.display = 'none'; }
-    if(vide) vide.style.display = 'block';
-    if(act) act.style.display = 'none';
-  }
+/* v1.16.0 : jusqu'à PHOTO_MAX photos par colis (comme France & Europe,
+   qui définit déjà cette constante à 5, réutilisée ici — voir
+   index.html), au lieu d'une seule. Tant que le formulaire (validation
+   ou dépôt direct) n'est pas enregistré, les photos restent en mémoire
+   (tableau) : rien n'est écrit sur Firebase avant le clic final, donc
+   supprimer une photo ici ne fait que retirer du tableau local, pas
+   d'appel réseau. Fonctions partagées par les deux écrans (préfixe
+   'dv' = validation, 'dp' = dépôt direct) pour éviter la duplication. */
+function _depPhotosCourantes(prefixe){
+  if(prefixe === 'dv') return (_depValiderCtx && _depValiderCtx.photos) || [];
+  return window._depDepotPhotos || [];
 }
+
+function _depRenderPhotosGrille(prefixe){
+  var box = $(prefixe + '-photo-box');
+  if(!box) return;
+  var photos = _depPhotosCourantes(prefixe);
+  var plein = photos.length >= PHOTO_MAX;
+  var h = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
+  photos.forEach(function(p, idx){
+    h += '<div style="position:relative;border-radius:10px;overflow:hidden;border:1.5px solid var(--border);background:#fff;">'
+      +    '<img src="' + p.d + '" style="width:100%;height:80px;object-fit:cover;display:block;">'
+      +    '<button type="button" onclick="event.stopPropagation();_depSupprimerPhoto(\'' + prefixe + '\',' + idx + ')" '
+      +      'style="position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;font-size:12px;line-height:22px;padding:0;cursor:pointer;">&#10005;</button>'
+      +  '</div>';
+  });
+  if(!plein){
+    h += '<button type="button" onclick="_depAjouterPhoto(\'' + prefixe + '\')" '
+      +   'style="border:1.5px dashed var(--border);border-radius:10px;background:#fafafa;height:80px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;cursor:pointer;font-family:var(--font);color:var(--text3);">'
+      +   '<span style="font-size:20px;">&#128247;</span><span style="font-size:10px;font-weight:600;">Ajouter</span></button>';
+  }
+  h += '</div>'
+    +  '<div style="font-size:11px;color:#999;margin-top:6px;">' + photos.length + '/' + PHOTO_MAX + ' photo' + (photos.length !== 1 ? 's' : '') + '</div>';
+  box.innerHTML = h;
+}
+
+window._depAjouterPhoto = function(prefixe){
+  var photos = _depPhotosCourantes(prefixe);
+  if(photos.length >= PHOTO_MAX){ toast('⚠️ ' + PHOTO_MAX + ' photos maximum.'); return; }
+  var i = $(prefixe + '-photo-input');
+  if(i) i.click();
+};
+
+window._depSupprimerPhoto = function(prefixe, idx){
+  var photos = _depPhotosCourantes(prefixe);
+  photos.splice(idx, 1);
+  _depRenderPhotosGrille(prefixe);
+};
 
 window.depSetLivraisonDepot = function(oui){
   var bOui = $('dp-liv-oui'), bNon = $('dp-liv-non'), bloc = $('dp-liv-bloc');
@@ -1696,29 +1926,23 @@ window.depSetLivraisonDepot = function(oui){
   window._depLivraisonDepot = oui;
 };
 
-window.depOuvrirPhotoDepot = function(){
-  var i = $('dp-photo-input');
-  if(i) i.click();
-};
+window.depOuvrirPhotoDepot = function(){ window._depAjouterPhoto('dp'); };
 
 window.depPhotoChoisieDepot = function(input){
   var f = input && input.files && input.files[0];
   input.value = '';
   if(!f) return;
+  if(window._depDepotPhotos.length >= PHOTO_MAX){ toast('⚠️ ' + PHOTO_MAX + ' photos maximum.'); return; }
   toast('⏳ Préparation de la photo…');
   try{
     _compresserPhoto(f, function(data){
       if(!data){ toast('❌ Photo illisible.'); return; }
-      _depDepotPhotoTmp = data;
-      _afficherPhotoDepot(data);
-      toast('📷 Photo prête — enregistrez la fiche');
+      var u = window.currentUser || {};
+      window._depDepotPhotos.push({ d: data, ts: Date.now(), q: (u.name||''), uid: (u.id||'') });
+      _depRenderPhotosGrille('dp');
+      toast('📷 Photo ajoutée — enregistrez la fiche');
     });
   }catch(e){ toast('❌ Photo illisible.'); }
-};
-
-window.depRetirerPhotoDepot = function(){
-  _depDepotPhotoTmp = '';   // chaîne vide = suppression demandée
-  _afficherPhotoDepot(null);
 };
 
 window.depEnregistrerDepot = function(){
@@ -1768,10 +1992,13 @@ window.depEnregistrerDepot = function(){
     creeLe: (existant && existant.creeLe) || Date.now()
   };
 
-  var photo = _depDepotPhotoTmp;
-  if(photo){ fiche.aPhotoColis = true; }
-  else if(photo === ''){ fiche.aPhotoColis = false; }
-  else { fiche.aPhotoColis = (existant && existant.aPhotoColis) || false; }
+  // v1.16.0 : jusqu'à PHOTO_MAX photos (tableau _depDepotPhotos, chargé
+  // et modifiable dès l'ouverture du formulaire, voir depOuvrirDepotForm)
+  // — ce qui est affiché dans la grille au moment d'enregistrer EST ce
+  // qui sera sauvegardé, en remplacement complet du nœud (contrairement
+  // à l'ancien système à 3 états qui distinguait "pas touché").
+  var photosDepot = window._depDepotPhotos || [];
+  fiche.aPhotoColis = photosDepot.length > 0;
 
   // Traçabilité des modifications de facture — uniquement en édition (pas à
   // la création), même mécanisme que pour les clients de collecte. .set()
@@ -1796,9 +2023,11 @@ window.depEnregistrerDepot = function(){
   }
 
   db.ref('dct_depot/'+id).set(fiche);
-  if(photo){
-    db.ref('dct_photos_colis/'+id).set({ d: photo, ts: Date.now(), q: (u.name||''), uid: (u.id||'') });
-  } else if(photo === ''){
+  if(photosDepot.length){
+    var mapPhotosDepot = {};
+    photosDepot.forEach(function(p, i){ mapPhotosDepot['p'+i] = p; });
+    db.ref('dct_photos_colis/'+id).set(mapPhotosDepot);
+  } else {
     db.ref('dct_photos_colis/'+id).remove();
   }
 
@@ -1815,7 +2044,7 @@ window.depEnregistrerDepot = function(){
     + '<strong>'+esc(fiche.name)+'</strong> directement au d&eacute;p&ocirc;t — '+prix+' &euro;');
 
   toast('✅ ' + fiche.name + ' enregistré');
-  _depDepotPhotoTmp = null;
+  window._depDepotPhotos = [];
   _depDepotEditId = null;
   depDetail(departId);
 };
@@ -2456,7 +2685,7 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   var fiche = (typeof getClients === 'function') ? getClients()[id] : null;
   if(!fiche){ toast('⚠️ Client introuvable.'); return; }
 
-  _depValiderCtx = { collecteId: window.currentCollecteId, clientId: id, tk: tk, prixModifie: null, photo: null };
+  _depValiderCtx = { collecteId: window.currentCollecteId, clientId: id, tk: tk, prixModifie: null, photos: [] };
   _depValiderMethode = '';
 
   var titre = $('dv-titre'); if(titre) titre.textContent = 'Valider — ' + (fiche.name || name || '');
@@ -2572,35 +2801,33 @@ window.depValiderMajCoherence = function(){
 /* ---- Photo du colis, à la validation : même compression que les
    autres photos du module. ---- */
 
-window.depOuvrirPhotoValider = function(){
-  var i = $('dv-photo-input');
-  if(i) i.click();
-};
+window.depOuvrirPhotoValider = function(){ window._depAjouterPhoto('dv'); };
 
 window.depPhotoChoisieValider = function(input){
   var f = input && input.files && input.files[0];
   input.value = '';
   if(!f) return;
+  var ctx = _depValiderCtx; if(!ctx) return;
+  if(!ctx.photos) ctx.photos = [];
+  if(ctx.photos.length >= PHOTO_MAX){ toast('⚠️ ' + PHOTO_MAX + ' photos maximum.'); return; }
   toast('⏳ Préparation de la photo…');
   try{
     _compresserPhoto(f, function(data){
       if(!data){ toast('❌ Photo illisible.'); return; }
-      if(_depValiderCtx) _depValiderCtx.photo = data;
-      var img = $('dv-photo-apercu'), vide = $('dv-photo-vide'), act = $('dv-photo-actions');
-      if(img){ img.src = data; img.style.display = 'block'; }
-      if(vide) vide.style.display = 'none';
-      if(act) act.style.display = 'block';
-      toast('📷 Photo prête');
+      var u = window.currentUser || {};
+      ctx.photos.push({ d: data, ts: Date.now(), q: (u.name||''), uid: (u.id||'') });
+      _depRenderPhotosGrille('dv');
+      toast('📷 Photo ajoutée');
     });
   }catch(e){ toast('❌ Photo illisible.'); }
 };
 
+// Réinitialise la grille photo à l'ouverture de l'écran de validation
+// (voir depOuvrirValidation) — toujours vide au départ, la photo se
+// prend au moment du ramassage, jamais reprise d'une fois précédente.
 window.depRetirerPhotoValider = function(){
-  if(_depValiderCtx) _depValiderCtx.photo = null;
-  var img = $('dv-photo-apercu'), vide = $('dv-photo-vide'), act = $('dv-photo-actions');
-  if(img){ img.src = ''; img.style.display = 'none'; }
-  if(vide) vide.style.display = 'block';
-  if(act) act.style.display = 'none';
+  if(_depValiderCtx) _depValiderCtx.photos = [];
+  _depRenderPhotosGrille('dv');
 };
 
 window.depValiderConfirmer = function(){
@@ -2645,7 +2872,8 @@ window.depValiderConfirmer = function(){
     fiche.versements = versements;
   }
 
-  if(ctx.photo) fiche.aPhotoColis = true;
+  var photosCtx = ctx.photos || [];
+  if(photosCtx.length) fiche.aPhotoColis = true;
 
   // À partir d'ici, plus aucune modification de la fiche : tout ce qui
   // suit ne fait qu'écrire sur Firebase (Activité, photo, sauvegarde),
@@ -2653,10 +2881,10 @@ window.depValiderConfirmer = function(){
   // cette référence locale — sans risque puisque tout est déjà posé.
   _depTracerModifsFacture(fiche, avant, 'a modifié la facture — validation de la collecte');
 
-  if(ctx.photo && window.db && window.firebaseReady){
-    db.ref('dct_photos_colis/'+ctx.clientId).set({
-      d: ctx.photo, ts: Date.now(), q: (u.name||''), uid: (u.id||'')
-    });
+  if(photosCtx.length && window.db && window.firebaseReady){
+    var mapPhotosCtx = {};
+    photosCtx.forEach(function(p, i){ mapPhotosCtx['p'+i] = p; });
+    db.ref('dct_photos_colis/'+ctx.clientId).set(mapPhotosCtx);
   }
 
   try{ sauvegarder(); }catch(e){}
@@ -3079,30 +3307,6 @@ function greffer(){
       }catch(e){ console.error('departs: bouton facture menu plus', e); }
     };
     window.ouvrirModalPlus._depPatch = true;
-  }
-
-  /* --- K. Lien facture (?facture=...) ouvert par quelqu'un qui n'est
-     PAS connecté : plutôt que d'exposer l'écran de connexion interne
-     (constaté par Cobey en scannant le QR de test), on affiche
-     directement la facture publique, en lecture seule. buildLogin()
-     est appelée par l'appli une fois les données Firebase chargées
-     (voir ecouterChangements/index.html) — c'est le même signal
-     "données prêtes" que l'app utilise elle-même pour afficher le
-     choix des collaborateurs, donc pas de risque de course avec
-     _depFactureDeepLink (lu une seule fois, au chargement du script).
-     _depFactureDeepLink n'est PAS effacé ici : un collaborateur qui
-     clique "Espace collaborateur" puis se connecte est ensuite amené
-     sur la vraie facture éditable, exactement comme avant (v1.10.0). --- */
-  if(typeof window.buildLogin === 'function' && !window.buildLogin._depPatch){
-    var origBuildLogin = window.buildLogin;
-    window.buildLogin = function(garder){
-      if(_depFactureDeepLink){
-        try{ depAfficherFacturePublique(_depFactureDeepLink); return; }
-        catch(e){ console.error('departs: facture publique', e); }
-      }
-      return origBuildLogin.apply(this, arguments);
-    };
-    window.buildLogin._depPatch = true;
   }
 
   /* --- L. Un client déjà validé sur l'écran camion n'a plus de menu
