@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.13.0  ·  21/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.14.0  ·  21/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -128,6 +128,19 @@
        et un lien discret "Espace collaborateur" pour qui a besoin de
        la vraie facture éditable — le comportement post-connexion
        (point 22) n'a pas changé.
+   30. Après validation d'une collecte (point 24), le collaborateur
+       tombe désormais directement sur la facture du client (au lieu
+       de revenir à l'écran du camion) — pour confirmer la validation
+       et l'envoyer au client dans la foulée. Le bouton retour de la
+       facture s'adapte selon d'où on vient ("← Camion" ou "← Départ").
+   31. Un client déjà validé sur l'écran camion n'avait plus aucun
+       moyen de rouvrir sa facture (le menu "⋯" disparaît une fois
+       "✅ Collecté" affiché) — un petit bouton "🧾" a été ajouté à
+       côté du bouton d'annulation, sur la carte d'un client validé.
+   32. Photo du colis : la case photo (écrans Validation et Dépôt
+       direct) ouvre désormais directement l'appareil photo, comme le
+       module France & Europe, au lieu de proposer aussi la galerie du
+       téléphone.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -137,7 +150,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.13.0';
+var DEP_VERSION = 'v1.14.0';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -543,7 +556,7 @@ function injecterEcrans(){
   +       '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
   +       '<img id="dp-photo-apercu" style="display:none;">'
   +     '</div>'
-  +     '<input type="file" id="dp-photo-input" accept="image/*" style="display:none;" onchange="depPhotoChoisieDepot(this)">'
+  +     '<input type="file" id="dp-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="depPhotoChoisieDepot(this)">'
   +     '<div id="dp-photo-actions" style="display:none;margin-bottom:12px;">'
   +       '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhotoDepot()">&#128465; Retirer la photo</button>'
   +     '</div>'
@@ -672,7 +685,7 @@ function injecterEcrans(){
   +       '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
   +       '<img id="dv-photo-apercu" style="display:none;">'
   +     '</div>'
-  +     '<input type="file" id="dv-photo-input" accept="image/*" style="display:none;" onchange="depPhotoChoisieValider(this)">'
+  +     '<input type="file" id="dv-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="depPhotoChoisieValider(this)">'
   +     '<div id="dv-photo-actions" style="display:none;margin-bottom:12px;">'
   +       '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhotoValider()">&#128465; Retirer la photo</button>'
   +     '</div>'
@@ -1195,12 +1208,27 @@ window.depCalculerPaiement = function(c){
   return { total: total, paye: paye, reste: reste, statut: statut };
 }
 
-window.depOuvrirFacture = function(collecteId, clientId, depot){
+window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion){
   var c = depot
     ? (window.depotClients || {})[clientId]
     : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
   if(!c){ toast('⚠️ Facture introuvable.'); return; }
   _depFactureCtx = { collecteId: collecteId || '', clientId: clientId, depot: !!depot };
+  // v1.14.0 : le bouton retour s'adapte selon la provenance — depuis
+  // l'écran Départs (direction), "← Départ" ramène au détail du départ
+  // comme avant ; depuis le camion (validation ou menu "⋯", ouvert à
+  // tous), "← Camion" ramène directement à l'écran du camion, sinon
+  // depDetail(_depDetailId) échoue silencieusement (aucun départ ouvert).
+  var btnRetour = $('dep-fact-retour');
+  if(btnRetour){
+    if(retourCamion){
+      btnRetour.textContent = '← Camion';
+      btnRetour.onclick = function(){ goTo('s-camion'); };
+    } else {
+      btnRetour.textContent = '← Départ';
+      btnRetour.onclick = function(){ depDetail(_depDetailIdPublic()); };
+    }
+  }
   depRenderFacture(c);
   goTo('s-facture');
 };
@@ -2618,9 +2646,17 @@ window.depValiderConfirmer = function(){
   curValiderTk = ctx.tk;
   try{ confirmValider(); }catch(e){ console.error('departs: confirmValider original', e); }
 
-  _depValiderCtx = null;
   toast('✅ Collecte validée');
-  goTo('s-camion');
+  // v1.14.0 : on atterrit directement sur la facture du client (au lieu
+  // de l'écran camion) — pour la confirmer et l'envoyer au client tout
+  // de suite, sans repasser par le menu "⋯". "← Camion" en cas de retour.
+  try{
+    depOuvrirFacture(ctx.collecteId, ctx.clientId, false, true);
+  }catch(e){
+    console.error('departs: ouverture facture après validation', e);
+    goTo('s-camion');
+  }
+  _depValiderCtx = null;
 };
 
 /* ─────────────────────────────────────────────
@@ -3014,7 +3050,7 @@ function greffer(){
             btn.textContent = '🧾 Facture';
             btn.onclick = function(){
               closeModal('modal-plus');
-              depOuvrirFacture(window.currentCollecteId || '', window._plusClientId || '', false);
+              depOuvrirFacture(window.currentCollecteId || '', window._plusClientId || '', false, true);
             };
             grille.insertBefore(btn, grille.firstChild);
           }
@@ -3046,6 +3082,61 @@ function greffer(){
       return origBuildLogin.apply(this, arguments);
     };
     window.buildLogin._depPatch = true;
+  }
+
+  /* --- L. Un client déjà validé sur l'écran camion n'a plus de menu
+     "⋯" (juste "✅ Collecté" + "↩️"), donc plus aucun accès à sa
+     facture depuis là (constaté par Cobey le 21/08/2026). On ajoute un
+     petit bouton "🧾" sur la carte, après chaque rendu du camion. --- */
+  if(typeof window.renderCamion === 'function' && !window.renderCamion._depPatch){
+    var origRenderCamion = window.renderCamion;
+    window.renderCamion = function(k){
+      origRenderCamion.apply(this, arguments);
+      try{ _depAjouterFactureCamionValide(k); }catch(e){ console.error('departs: bouton facture (client validé)', e); }
+    };
+    window.renderCamion._depPatch = true;
+  }
+}
+
+// v1.14.0 : ajoute un bouton "🧾" sur la carte de chaque client déjà
+// validé, sur l'écran camion (voir greffe L). renderCamion() original
+// (index.html) ne garde, une fois validé, que "✅ Collecté" + "↩️" —
+// on ne peut pas insérer notre bouton depuis l'intérieur de cette
+// fonction sans la dupliquer entièrement, donc on la laisse tourner
+// telle quelle et on complète son résultat après coup. Pour retrouver
+// quelle carte appartient à quel client (elles n'ont pas d'id dans le
+// DOM), on recalcule le même tri que l'original — à resynchroniser si
+// ce tri change un jour dans index.html.
+function _depAjouterFactureCamionValide(k){
+  var trks = getTrucks(), tk = trks[k];
+  if(!tk) return;
+  var validated = tk.validated || [];
+  if(!validated.length) return;
+  var hours = tk.hours || {};
+  var sorted = (tk.clients || []).slice().sort(function(a,b){
+    var ha = hours[a], hb = hours[b];
+    if(ha && hb) return ha.localeCompare(hb);
+    if(ha) return -1;
+    if(hb) return 1;
+    return tk.clients.indexOf(a) - tk.clients.indexOf(b);
+  });
+  var cartes = document.querySelectorAll('#camion-route .route-card.done');
+  var idxCarte = 0;
+  for(var i = 0; i < sorted.length; i++){
+    if(validated.indexOf(sorted[i]) < 0) continue;
+    var carte = cartes[idxCarte]; idxCarte++;
+    if(!carte) continue;
+    var act = carte.querySelector('.route-actions');
+    if(!act || act.querySelector('.dep-fact-camion')) continue;
+    (function(cid){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'route-action-btn dep-fact-camion';
+      b.style.cssText = 'background:#EAF7EE;color:#006b2d;border:2px solid #006b2d;border-radius:10px;padding:12px;font-size:16px;font-weight:800;cursor:pointer;font-family:var(--font);flex-shrink:0;';
+      b.textContent = '🧾';
+      b.onclick = function(e){ if(e) e.stopPropagation(); depOuvrirFacture(window.currentCollecteId || '', cid, false, true); };
+      act.appendChild(b);
+    })(sorted[i]);
   }
 }
 
