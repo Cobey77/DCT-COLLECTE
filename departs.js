@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.2';
+var DEP_VERSION = 'v1.19.3';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -844,9 +844,8 @@ function injecterEcrans(){
 
   /* ---- ÉCRAN 6bis (v1.19.0) : historique d'envoi d'un contact — tous ses
      envois passés/en cours (collecte et dépôt confondus), avec accès au
-     départ et à la facture de chacun. Rend fonctionnels les deux boutons
-     "À venir" du menu Actions du contact (Historique d'envoi / Factures et
-     Imprimer facture). ---- */
+     départ et à la facture de chacun. Point d'entrée unique du menu
+     Actions du contact (bouton "Historique d'envoi / Factures"). ---- */
   + '<div class="screen" id="s-dep-historique-contact">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-client-fiche\')">&larr; Retour</button>'
@@ -1075,14 +1074,13 @@ function injecterEcrans(){
     + '</div>'
     + '<button type="button" class="dep-menu-item" onclick="depModifierContactActuel()">'
     +   '<span class="dep-menu-ico">&#9999;&#65039;</span><span class="dep-menu-txt">Modifier</span></button>'
-    // v1.19.0 : ces deux actions étaient marquées "À venir" — elles ouvrent
-    // maintenant toutes les deux le même écran (l'historique de tous les
-    // envois de ce contact), puisqu'il faut de toute façon choisir lequel
-    // avant de pouvoir voir son container ou imprimer sa facture.
+    // v1.19.2 : point d'entrée unique — l'ancien bouton "Imprimer facture
+    // (QR code)" faisait doublon avec celui-ci (les deux ouvraient déjà le
+    // même écran), il est supprimé. Cet écran liste tous les envois du
+    // contact (en cours ET passés) ; chaque envoi a ensuite son propre
+    // bouton "Voir le départ" et "Facture".
     + '<button type="button" class="dep-menu-item" onclick="depOuvrirHistoriqueContact()">'
     +   '<span class="dep-menu-ico">&#129534;</span><span class="dep-menu-txt">Historique d&rsquo;envoi / Factures</span></button>'
-    + '<button type="button" class="dep-menu-item" onclick="depOuvrirHistoriqueContact()">'
-    +   '<span class="dep-menu-ico">&#128424;&#65039;</span><span class="dep-menu-txt">Imprimer facture (QR code)</span></button>'
     + '<button type="button" class="dep-menu-item dep-menu-avenir" onclick="depActionAVenir(\'Bordereau d&#39;envoi\')">'
     +   '<span class="dep-menu-ico">&#128203;</span><span class="dep-menu-txt">Bordereau d&rsquo;envoi'
     +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
