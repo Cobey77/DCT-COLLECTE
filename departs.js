@@ -1459,7 +1459,7 @@ function _depChargerJsQR(cb){
   if(_depJsQrEnCours){ setTimeout(function(){ _depChargerJsQR(cb); }, 200); return; }
   _depJsQrEnCours = true;
   var s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js';
+  s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js';
   s.onload = function(){ _depJsQrEnCours = false; cb(); };
   s.onerror = function(){ _depJsQrEnCours = false; console.error('departs: échec chargement jsQR (connexion internet ?)'); cb(); };
   document.head.appendChild(s);
