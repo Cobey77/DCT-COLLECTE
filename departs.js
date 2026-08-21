@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.18.7';
+var DEP_VERSION = 'v1.18.8';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -792,7 +792,7 @@ function injecterEcrans(){
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-clients\');try{renderContacts();}catch(e){}">&larr; Clients</button>'
   +     '<div class="h-title" id="dep-fc-nom">Client</div>'
-  +     '<button class="btn-back" onclick="depOuvrirActionsContact()">Actions</button>'
+  +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
   +     '<div style="text-align:center;margin-bottom:18px;">'
