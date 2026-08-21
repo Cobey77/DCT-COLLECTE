@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.11.0  ·  20/08/2026
+   DCT-COLLECTE — MODULE DÉPARTS  ·  v1.13.0  ·  21/08/2026
    ───────────────────────────────────────────────────────────────────
    Ce fichier s'ajoute à côté de index.html, à la racine du repo.
    Il ne modifie aucune ligne de index.html : il vient se greffer
@@ -107,6 +107,27 @@
        effectués à Dakar dans la monnaie locale — l'écran de
        validation de collecte (point 24), lui, reste toujours en
        euros, les clients France/Europe payant toujours en euros.
+   27. Correctif d'accès : le bouton "🧾 Facture" n'était accessible
+       que depuis l'écran Départs, réservé à la direction — un
+       collaborateur normal n'avait donc aucun moyen d'ouvrir la
+       facture d'un client (constaté par Cobey en testant l'appli).
+       Le menu "⋯" du camion (écran Dispatch, ouvert à tous) propose
+       désormais aussi "🧾 Facture", pour le client concerné.
+   28. Nettoyage de la fiche client (dispatch) : le sélecteur "Départ"
+       et la case photo, devenus redondants depuis la refonte de la
+       validation (point 24 — départ et photo ne se posent plus
+       qu'à ce moment-là), ont été retirés de cet écran. La fiche
+       garde destinataire, livraison et note.
+   29. Facture publique, sans compte : le lien "?facture=..." (QR,
+       point 22) affiche désormais directement une vraie page facture
+       (logo, sections, historique de paiement, QR) AVANT toute
+       connexion — plus d'écran de connexion interne exposé à un
+       client externe. Lecture seule (aucune modification possible
+       sans se connecter), avec un bouton "Imprimer / Télécharger"
+       qui passe par l'impression du navigateur (Enregistrer en PDF),
+       et un lien discret "Espace collaborateur" pour qui a besoin de
+       la vraie facture éditable — le comportement post-connexion
+       (point 22) n'a pas changé.
    ═══════════════════════════════════════════════════════════════════ */
 
 (function(){
@@ -116,7 +137,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.11.0';
+var DEP_VERSION = 'v1.13.0';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -143,12 +164,13 @@ var STATUTS_PAIEMENT = {
   paye     : {label:'Payé',                bg:'#D4F0E0', color:'#006b2d', dot:'#009A44'}
 };
 
+var DEP_LOGO_B64 = 'data:image/jpeg;base64,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';  // logo DCT, embarqué pour la facture publique (v1.13.0)
+
 window.departsData = {};        // { id: {nom, dateDepart, ...} }
 var _depEditId   = null;        // départ en cours de modification
 var _depDetailId = null;        // départ affiché en détail
 var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
-var _depPhotoFiche = null;      // photo en attente sur la fiche client
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
 var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
 var _depVersMethode = '';       // 'especes' | 'virement' — méthode choisie sur le bouton "Ajouter un versement"
@@ -572,6 +594,50 @@ function injecterEcrans(){
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content" id="dep-fact-content"></div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 7bis : facture publique (sans compte), affichée pour le lien
+     ?facture=... AVANT toute connexion — lecture seule, mise en page
+     "vrai document" (logo, sections, QR), imprimable en PDF via le
+     navigateur. Un collaborateur qui a besoin de modifier la facture
+     peut toujours passer par "Espace collaborateur" (goTo('s-login')),
+     qui l'amènera normalement sur #s-facture une fois connecté. ---- */
+  + '<div class="screen" id="s-facture-publique">'
+  +   '<style>'
+  +     '#s-facture-publique{background:#f2f2f2;}'
+  +     '#s-facture-publique .pub-wrap{max-width:480px;margin:0 auto;padding:26px 16px 40px;}'
+  +     '#s-facture-publique .pub-card{background:#fff;border-radius:14px;padding:26px 20px;box-shadow:0 2px 14px rgba(0,0,0,.08);}'
+  +     '#s-facture-publique .pub-logo{display:block;margin:0 auto 8px;width:84px;height:auto;}'
+  +     '#s-facture-publique .pub-titre{text-align:center;font-size:21px;font-weight:800;color:#111;margin:0 0 2px;}'
+  +     '#s-facture-publique .pub-ref{text-align:center;font-size:12px;color:#999;margin-bottom:16px;}'
+  +     '#s-facture-publique .pub-sec-titre{font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:#999;font-weight:700;margin:18px 0 6px;}'
+  +     '#s-facture-publique .pub-ligne{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #f0f0f0;font-size:14px;color:#333;}'
+  +     '#s-facture-publique .pub-ligne strong{text-align:right;color:#111;}'
+  +     '#s-facture-publique .pub-total{background:#f7faf7;border-radius:10px;padding:16px;text-align:center;margin-top:10px;}'
+  +     '#s-facture-publique .pub-total-chiffre{font-size:28px;font-weight:800;color:#006b2d;}'
+  +     '#s-facture-publique .pub-total-sub{font-size:12px;color:#888;margin-top:6px;}'
+  +     '#s-facture-publique .pub-badge{display:inline-block;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700;margin:10px auto 0;}'
+  +     '#s-facture-publique .pub-vers{font-size:13px;padding:7px 0;border-bottom:1px dashed #eee;color:#333;}'
+  +     '#s-facture-publique .pub-btn-print{width:100%;padding:14px;background:#252599;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;margin-top:22px;cursor:pointer;font-family:var(--font);}'
+  +     '#s-facture-publique .pub-lien-collab{display:block;text-align:center;margin-top:16px;font-size:12px;color:#999;text-decoration:underline;background:none;border:none;cursor:pointer;width:100%;font-family:var(--font);}'
+  +     '#s-facture-publique .pub-qr-wrap{text-align:center;margin-top:20px;}'
+  +     '@media print{'
+  +       '#s-facture-publique{background:#fff;}'
+  +       '#s-facture-publique .no-print{display:none !important;}'
+  +       '#s-facture-publique .pub-card{box-shadow:none;padding:0;}'
+  +       '#s-facture-publique .pub-wrap{padding:0;max-width:100%;}'
+  +     '}'
+  +   '</style>'
+  +   '<div class="pub-wrap">'
+  +     '<div id="pub-chargement" style="text-align:center;padding:70px 0;color:#999;">Chargement de la facture&hellip;</div>'
+  +     '<div id="pub-erreur" style="display:none;text-align:center;padding:70px 20px;color:#999;">'
+  +       '<div style="font-size:38px;margin-bottom:10px;">&#128269;</div>'
+  +       '<div style="font-weight:700;color:#555;">Facture introuvable</div>'
+  +       '<div style="font-size:13px;margin-top:6px;">Ce lien n&rsquo;est plus valide, ou la facture a &eacute;t&eacute; d&eacute;plac&eacute;e.</div>'
+  +     '</div>'
+  +     '<div id="pub-contenu" class="pub-card" style="display:none;"></div>'
+  +     '<button type="button" class="no-print pub-lien-collab" onclick="depAllerLoginPublique()">Espace collaborateur &rarr;</button>'
+  +   '</div>'
   + '</div>'
 
   /* ---- ÉCRAN 8 : validation de la collecte d'un client (camion/dispatch) ---- */
@@ -1166,16 +1232,109 @@ function _depChargerQR(cb){
 // Génère le QR dans le canvas de la page facture, une fois la librairie
 // disponible. Revérifie que le canvas existe encore (l'utilisateur a pu
 // changer d'écran pendant le chargement de la librairie).
-function depGenererQR(ctx){
+function depGenererQR(ctx, canvasId){
   if(!ctx) return;
   var lien = depLienFacture(ctx);
   _depChargerQR(function(){
     try{
-      var canvas = $('dep-fact-qr');
+      var canvas = $(canvasId || 'dep-fact-qr');
       if(!canvas) return;
       new QRious({ element: canvas, value: lien, size: 176, background: '#fff', foreground: '#222' });
     }catch(e){ console.error('departs: génération QR', e); }
   });
+}
+
+/* ─────────────────────────────────────────────
+   10bis-2. FACTURE PUBLIQUE (sans compte) — affichée directement pour
+   le lien ?facture=..., avant toute connexion. Lecture seule, mise en
+   page "vrai document" (logo, sections, QR), imprimable en PDF via le
+   navigateur (window.print()). Voir la greffe sur buildLogin.
+   ───────────────────────────────────────────── */
+
+function depAfficherFacturePublique(ctx){
+  goTo('s-facture-publique');
+  var chargement = $('pub-chargement'), erreur = $('pub-erreur'), contenu = $('pub-contenu');
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(chargement) chargement.style.display = 'none';
+  if(!c){
+    if(erreur) erreur.style.display = 'block';
+    return;
+  }
+  if(contenu) contenu.style.display = 'block';
+  depRenderFacturePublique(c, ctx);
+}
+
+// Un collaborateur qui ouvre le lien facture (par ex. pour ajouter un
+// versement) passe par ici : _depFactureDeepLink n'est pas touché, donc
+// la greffe existante sur _finalisLoginCore l'amènera directement sur
+// #s-facture (la vraie, éditable) une fois connecté — comportement
+// inchangé depuis la v1.10.0.
+window.depAllerLoginPublique = function(){
+  goTo('s-login');
+};
+
+function depRenderFacturePublique(c, ctx){
+  var pay = depCalculerPaiement(c);
+  var st = STATUTS_PAIEMENT[pay.statut] || {};
+  var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+  var totalColis = parseFloat(c.prix) || 0;
+  var totalLivraison = c.livraisonDakar ? (parseFloat(c.prixLivraison) || 0) : 0;
+
+  var h = ''
+    + '<img class="pub-logo" src="'+DEP_LOGO_B64+'" alt="Dakar City Transport">'
+    + '<div class="pub-titre">Facture</div>'
+    + '<div class="pub-ref">R&eacute;f. '+esc((ctx.depot?'D':'C')+'-'+ctx.clientId)+' &middot; '+dateHeureFr(Date.now())+'</div>'
+
+    + '<div class="pub-sec-titre">Client</div>'
+    + '<div class="pub-ligne"><span>Nom</span><strong>'+esc(nom)+'</strong></div>'
+    + '<div class="pub-ligne"><span>T&eacute;l&eacute;phone</span><strong>'+esc(c.tel||'—')+'</strong></div>'
+
+    + '<div class="pub-sec-titre">Colis</div>'
+    + '<div class="pub-ligne"><span>Description</span><strong>'+esc(c.colis||'—')+'</strong></div>';
+
+  if(c.destinataireNom){
+    h += '<div class="pub-sec-titre">Destinataire &agrave; Dakar</div>'
+      +  '<div class="pub-ligne"><span>Nom</span><strong>'+esc(c.destinataireNom)+'</strong></div>'
+      +  (c.destinataireTel ? '<div class="pub-ligne"><span>T&eacute;l&eacute;phone</span><strong>'+esc(c.destinataireTel)+'</strong></div>' : '');
+  }
+
+  if(c.livraisonDakar){
+    h += '<div class="pub-sec-titre">Livraison &agrave; Dakar</div>'
+      +  '<div class="pub-ligne"><span>Adresse</span><strong>'+esc(c.livraisonAdresse||'—')+'</strong></div>'
+      +  '<div class="pub-ligne"><span>Prix livraison</span><strong>'+totalLivraison+' &euro;</strong></div>';
+  }
+
+  h += '<div class="pub-total">'
+    +    '<div class="pub-total-chiffre">'+totalColis+' &euro;</div>'
+    +    '<div class="pub-total-sub">Total colis'
+    +      (totalLivraison ? ' &middot; '+(totalColis+totalLivraison)+' &euro; avec livraison' : '')
+    +    '</div>'
+    +    '<div class="pub-badge" style="background:'+(st.bg||'#eee')+';color:'+(st.color||'#555')+';">'+(st.label||pay.statut)+'</div>'
+    +  '</div>';
+
+  var versements = Array.isArray(c.versements) ? c.versements.slice() : [];
+  if(versements.length){
+    versements.sort(function(a,b){ return (b.le||0) - (a.le||0); });
+    h += '<div class="pub-sec-titre">Historique des paiements</div>'
+      +  versements.map(function(v){
+           var meth = v.methode === 'virement' ? 'Virement' : (v.methode === 'especes' ? 'Esp&egrave;ces' : '—');
+           return '<div class="pub-vers">'+(parseFloat(v.montant)||0)+' &euro; &middot; '+meth+' &middot; '+dateHeureFr(v.le)+'</div>';
+         }).join('')
+      +  '<div class="pub-ligne" style="margin-top:8px;"><span>Reste &agrave; payer</span><strong>'+pay.reste+' &euro;</strong></div>';
+  }
+
+  if(c.note){
+    h += '<div class="pub-sec-titre">Note</div><div class="pub-ligne"><span>&nbsp;</span><strong>'+esc(c.note)+'</strong></div>';
+  }
+
+  h += '<div class="pub-qr-wrap"><canvas id="dep-pub-qr" width="176" height="176"></canvas></div>'
+    +  '<button type="button" class="no-print pub-btn-print" onclick="window.print()">&#128424;&#65039; T&eacute;l&eacute;charger / Imprimer</button>';
+
+  var box = $('pub-contenu');
+  if(box) box.innerHTML = h;
+  try{ depGenererQR(ctx, 'dep-pub-qr'); }catch(e){ console.error('departs: QR facture publique', e); }
 }
 
 // "1755701520000" → "20/08/2026 14:32"
@@ -2082,19 +2241,16 @@ window.depImporterClients = function(input){
 
 function injecterChampsFiche(){
   var ecran = $('s-client');
-  if(!ecran || $('e-depart')) return;
+  if(!ecran || $('e-note')) return;
   var content = ecran.querySelector('.content');
   if(!content) return;
   var actions = $('client-actions');
 
   var bloc = document.createElement('div');
   bloc.innerHTML = ''
-    + '<div class="dep-sec">D&eacute;part</div>'
-    + '<div class="fg">'
-    +   '<select class="fi" id="e-depart" style="border-color:#252599;border-width:2px;font-weight:700;"></select>'
-    +   '<div id="e-depart-note" style="font-size:11.5px;color:var(--text3);margin-top:5px;"></div>'
-    + '</div>'
-
+    // Le départ (v1.11.0) : plus de sélecteur ici — il se choisit
+    // désormais uniquement au moment de la validation de la collecte
+    // (voir depOuvrirValidation). Le dupliquer ici prêtait à confusion.
     + '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
     + '<div class="fg"><label class="fl">Nom du destinataire</label>'
     +   '<input class="fi" id="e-dest-nom" placeholder="Awa Ndiaye"></div>'
@@ -2116,50 +2272,14 @@ function injecterChampsFiche(){
     +     '&#8505;&#65039; La livraison est factur&eacute;e au client mais reste <b>hors comptabilit&eacute; DCT</b>.</div>'
     + '</div>'
 
-    + '<div class="dep-sec">Photo et note</div>'
-    + '<div class="dep-photo-box" id="e-photo-box" onclick="depOuvrirPhotoFiche()">'
-    +   '<div id="e-photo-vide"><div style="font-size:28px;">&#128247;</div>'
-    +   '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-top:6px;">Prendre une photo du colis</div></div>'
-    +   '<img id="e-photo-apercu" style="display:none;">'
-    + '</div>'
-    + '<input type="file" id="e-photo-input" accept="image/*" style="display:none;" onchange="depPhotoChoisieFiche(this)">'
-    + '<div id="e-photo-actions" style="display:none;margin-bottom:12px;">'
-    +   '<button type="button" class="dep-cli-btn" style="width:100%;" onclick="depRetirerPhotoFiche()">&#128465; Retirer la photo</button>'
-    + '</div>'
+    // La photo (v1.11.0) : plus de case ici non plus — elle se prend
+    // désormais uniquement au moment de la validation de la collecte.
+    + '<div class="dep-sec">Note</div>'
     + '<div class="fg"><label class="fl">Note</label>'
     +   '<textarea class="fi" id="e-note" rows="2" placeholder="Remarque sur le colis, le client..." style="resize:none;"></textarea></div>';
 
   if(actions) content.insertBefore(bloc, actions);
   else content.appendChild(bloc);
-}
-
-// Le menu déroulant de la fiche : tous les départs, pas seulement les ouverts,
-// car le client peut être rattaché à un départ déjà parti.
-function remplirSelectFiche(departId){
-  var sel = $('e-depart');
-  if(!sel) return;
-  var note = $('e-depart-note');
-  var direction = estDirection();
-
-  var liste = tousLesDeparts();
-  var h = '<option value="">— Aucun départ —</option>';
-  liste.forEach(function(d){
-    var st = STATUTS_DEPART[d.statut] || STATUTS_DEPART.preparation;
-    h += '<option value="'+d._id+'">'+esc(d.nom)+' — '+dateFr(d.dateDepart)+' · '+st.label+'</option>';
-  });
-  sel.innerHTML = h;
-  sel.value = departId || '';
-
-  // Seule la direction peut changer le départ d'un client
-  sel.disabled = !direction;
-  sel.style.background = direction ? '' : '#f5f5f5';
-  sel.style.color = direction ? '' : '#666';
-  if(note){
-    if(!departId) note.innerHTML = direction
-      ? '⚠️ Ce client n\'est rattaché à aucun départ.'
-      : '⚠️ Aucun départ. Seul Issyaka peut le définir.';
-    else note.innerHTML = direction ? '' : '🔒 Seul Issyaka peut changer le départ.';
-  }
 }
 
 window.depSetLivraisonFiche = function(oui){
@@ -2170,50 +2290,12 @@ window.depSetLivraisonFiche = function(oui){
   window._depLivraisonFiche = oui;
 };
 
-window.depOuvrirPhotoFiche = function(){
-  var i = $('e-photo-input');
-  if(i) i.click();
-};
-
-window.depPhotoChoisieFiche = function(input){
-  var f = input && input.files && input.files[0];
-  input.value = '';
-  if(!f) return;
-  toast('⏳ Préparation de la photo…');
-  try{
-    _compresserPhoto(f, function(data){
-      if(!data){ toast('❌ Photo illisible.'); return; }
-      _depPhotoFiche = data;
-      _afficherPhotoFiche(data);
-      toast('📷 Photo prête — enregistrez la fiche');
-    });
-  }catch(e){ toast('❌ Photo illisible.'); }
-};
-
-function _afficherPhotoFiche(data){
-  var img = $('e-photo-apercu'), vide = $('e-photo-vide'), act = $('e-photo-actions');
-  if(data){
-    if(img){ img.src = data; img.style.display = 'block'; }
-    if(vide) vide.style.display = 'none';
-    if(act) act.style.display = 'block';
-  } else {
-    if(img){ img.src = ''; img.style.display = 'none'; }
-    if(vide) vide.style.display = 'block';
-    if(act) act.style.display = 'none';
-  }
-}
-
-window.depRetirerPhotoFiche = function(){
-  _depPhotoFiche = '';   // chaîne vide = suppression demandée
-  _afficherPhotoFiche(null);
-};
-
-// Remplit nos champs quand la fiche s'ouvre
+// Remplit nos champs quand la fiche s'ouvre. Depuis v1.11.0, ni le
+// départ ni la photo ne se gèrent plus ici (voir injecterChampsFiche) :
+// les deux se posent désormais uniquement à la validation de la collecte.
 function remplirFiche(clientId){
   var colId = window.currentCollecteId;
   var c = ((window.clientsParCollecte||{})[colId] || {})[clientId] || {};
-
-  remplirSelectFiche(c.departId || '');
 
   var e;
   e = $('e-dest-nom');    if(e) e.value = c.destinataireNom || '';
@@ -2223,16 +2305,6 @@ function remplirFiche(clientId){
   e = $('e-note');        if(e) e.value = c.note || '';
   depSetLivraisonFiche(c.livraisonDakar === true);
 
-  // La photo vit dans son propre nœud, comme les photos France
-  _depPhotoFiche = null;
-  _afficherPhotoFiche(null);
-  if(c.aPhotoColis && window.db && window.firebaseReady){
-    db.ref('dct_photos_colis/'+clientId).once('value', function(snap){
-      var v = snap.val();
-      if(v && v.d && window.currentClientId === clientId) _afficherPhotoFiche(v.d);
-    });
-  }
-
   // Verrouillage si la collecte est terminée
   var locked = false;
   try{ locked = isLocked(); }catch(e2){}
@@ -2241,7 +2313,6 @@ function remplirFiche(clientId){
     el.disabled = locked;
     el.style.background = locked ? '#f5f5f5' : '';
   });
-  var pb = $('e-photo-box'); if(pb) pb.style.pointerEvents = locked ? 'none' : '';
 }
 
 /* ─────────────────────────────────────────────
@@ -2734,8 +2805,12 @@ function greffer(){
         clientsParCollecte[colId][id] = newData;
      Il ne recopie que id, bg, color et by. Tout le reste est perdu —
      y compris tel2, qui disparaissait déjà avant ce module, et
-     maintenant departId, destinataire, livraison, note, photo.
-     On mémorise donc la fiche avant, et on recolle ce qui a été effacé. */
+     maintenant departId, destinataire, livraison, note.
+     On mémorise donc la fiche avant, et on recolle ce qui a été effacé.
+     Depuis v1.11.0, ni le départ ni la photo ne se modifient plus
+     depuis cette fiche (voir injecterChampsFiche) : ils sont recollés
+     tels quels par l'étape 1 ci-dessous, comme n'importe quel autre
+     champ que la fonction d'origine aurait effacé sans le vouloir. */
   if(typeof window.saveClientEdit === 'function' && !window.saveClientEdit._depPatch){
     var origEdit = window.saveClientEdit;
     window.saveClientEdit = function(){
@@ -2743,7 +2818,6 @@ function greffer(){
       var avant = {};
       try{ avant = JSON.parse(JSON.stringify(((window.clientsParCollecte||{})[colId]||{})[id] || {})); }catch(e){}
 
-      var direction = estDirection();
       var extras = {
         destinataireNom  : (($('e-dest-nom')||{}).value || '').trim(),
         destinataireTel  : (($('e-dest-tel')||{}).value || '').trim(),
@@ -2753,15 +2827,6 @@ function greffer(){
         prixLivraison    : window._depLivraisonFiche ? (parseFloat(($('e-liv-prix')||{}).value) || 0) : 0
       };
 
-      // Le départ ne bouge que si c'est la direction qui enregistre
-      var nouveauDepart = avant.departId || '';
-      if(direction){
-        var sel = $('e-depart');
-        if(sel) nouveauDepart = sel.value || '';
-      }
-
-      var photo = _depPhotoFiche;   // null = inchangée, '' = à supprimer, sinon = nouvelle
-
       try{ origEdit.apply(this, arguments); }
       catch(e){ console.error('departs: saveClientEdit original', e); }
 
@@ -2769,26 +2834,13 @@ function greffer(){
         var fiche = ((window.clientsParCollecte||{})[colId]||{})[id];
         if(fiche){
           // 1. On recolle tout ce que la fonction d'origine a effacé
+          // (dont departId et aPhotoColis, plus modifiés ici depuis v1.11.0)
           Object.keys(avant).forEach(function(k){
             if(fiche[k] === undefined) fiche[k] = avant[k];
           });
           // 2. Nos champs
           Object.keys(extras).forEach(function(k){ fiche[k] = extras[k]; });
-          // 3. Le départ, avec traçabilité si changement
-          if(nouveauDepart !== (avant.departId || '')){
-            var u = window.currentUser || {};
-            var hist = fiche.historiqueDepart || [];
-            hist.push({ de: avant.departId || '', vers: nouveauDepart, par: u.id || '', le: Date.now() });
-            fiche.historiqueDepart = hist;
-          }
-          fiche.departId = nouveauDepart;
-          // 4. La photo — seul le drapeau est posé ici ; l'écriture
-          // Firebase elle-même est repoussée après le point 3bis (voir
-          // plus bas) pour ne pas détacher "fiche" de clientsParCollecte
-          // avant que toutes les modifications y soient posées.
-          if(photo === '') fiche.aPhotoColis = false;
-          else if(photo) fiche.aPhotoColis = true;
-          // 3bis. Traçabilité des modifications de facture (demande de Cobey,
+          // 3. Traçabilité des modifications de facture (demande de Cobey,
           // 20/08/2026) : même mécanisme que la fiche France & Europe
           // (hist[] : {q:auteur, a:action, ts:horodatage}), ouvert à tous
           // les collaborateurs — plus de verrou "seul l'auteur peut modifier".
@@ -2797,20 +2849,8 @@ function greffer(){
           // synchro temps réel et détacher cette référence locale — tout
           // doit déjà être posé avant.
           _depTracerModifsFacture(fiche, avant);
-
-          if(photo === ''){
-            if(window.db && window.firebaseReady) db.ref('dct_photos_colis/'+id).remove();
-          } else if(photo){
-            if(window.db && window.firebaseReady){
-              var u2 = window.currentUser || {};
-              db.ref('dct_photos_colis/'+id).set({
-                d: photo, ts: Date.now(), q: (u2.name||''), uid: (u2.id||'')
-              });
-            }
-          }
           sauvegarder();
         }
-        _depPhotoFiche = null;
       }catch(e){ console.error('departs: recollage fiche', e); }
     };
     window.saveClientEdit._depPatch = true;
@@ -2950,6 +2990,62 @@ function greffer(){
       depOuvrirValidation(id, tk, name, prix);
     };
     window.askValider._depPatch = true;
+  }
+
+  /* --- J. Menu "⋯" du camion (ouvrirModalPlus) : ajout d'un accès
+     direct à la facture, ouvert à tous les collaborateurs. Avant ça,
+     le bouton "🧾 Facture" n'existait que dans l'écran Départs, réservé
+     à la direction — un collaborateur normal n'avait aucun moyen
+     d'ouvrir la facture d'un client (constaté par Cobey le 20/08/2026). --- */
+  if(typeof window.ouvrirModalPlus === 'function' && !window.ouvrirModalPlus._depPatch){
+    var origModalPlus = window.ouvrirModalPlus;
+    window.ouvrirModalPlus = function(cid, tk, nom){
+      origModalPlus.apply(this, arguments);
+      try{
+        var modal = $('modal-plus');
+        if(modal && !$('dep-plus-facture')){
+          var grille = modal.querySelector('div[style*="grid"]');
+          if(grille){
+            var btn = document.createElement('button');
+            btn.id = 'dep-plus-facture';
+            btn.type = 'button';
+            btn.style.cssText = 'padding:14px;background:#EAF7EE;color:#006b2d;border:2px solid #006b2d;'
+              + 'border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);';
+            btn.textContent = '🧾 Facture';
+            btn.onclick = function(){
+              closeModal('modal-plus');
+              depOuvrirFacture(window.currentCollecteId || '', window._plusClientId || '', false);
+            };
+            grille.insertBefore(btn, grille.firstChild);
+          }
+        }
+      }catch(e){ console.error('departs: bouton facture menu plus', e); }
+    };
+    window.ouvrirModalPlus._depPatch = true;
+  }
+
+  /* --- K. Lien facture (?facture=...) ouvert par quelqu'un qui n'est
+     PAS connecté : plutôt que d'exposer l'écran de connexion interne
+     (constaté par Cobey en scannant le QR de test), on affiche
+     directement la facture publique, en lecture seule. buildLogin()
+     est appelée par l'appli une fois les données Firebase chargées
+     (voir ecouterChangements/index.html) — c'est le même signal
+     "données prêtes" que l'app utilise elle-même pour afficher le
+     choix des collaborateurs, donc pas de risque de course avec
+     _depFactureDeepLink (lu une seule fois, au chargement du script).
+     _depFactureDeepLink n'est PAS effacé ici : un collaborateur qui
+     clique "Espace collaborateur" puis se connecte est ensuite amené
+     sur la vraie facture éditable, exactement comme avant (v1.10.0). --- */
+  if(typeof window.buildLogin === 'function' && !window.buildLogin._depPatch){
+    var origBuildLogin = window.buildLogin;
+    window.buildLogin = function(garder){
+      if(_depFactureDeepLink){
+        try{ depAfficherFacturePublique(_depFactureDeepLink); return; }
+        catch(e){ console.error('departs: facture publique', e); }
+      }
+      return origBuildLogin.apply(this, arguments);
+    };
+    window.buildLogin._depPatch = true;
   }
 }
 
