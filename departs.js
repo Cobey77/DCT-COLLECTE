@@ -1473,7 +1473,7 @@ window.depCalculerPaiement = function(c){
   return { total: total, paye: paye, reste: reste, statut: statut };
 }
 
-window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion){
+window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, viaScan){
   var c = depot
     ? (window.depotClients || {})[clientId]
     : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
@@ -1484,9 +1484,15 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion){
   // comme avant ; depuis le camion (validation ou menu "⋯", ouvert à
   // tous), "← Camion" ramène directement à l'écran du camion, sinon
   // depDetail(_depDetailId) échoue silencieusement (aucun départ ouvert).
+  // v1.16.2 : depuis le scan QR (dep-scan), aucun départ n'a été ouvert
+  // au préalable — "← Départ" échouerait ("Départ introuvable"), donc
+  // "← Espaces" ramène à l'écran de choix d'espace à la place.
   var btnRetour = $('dep-fact-retour');
   if(btnRetour){
-    if(retourCamion){
+    if(viaScan){
+      btnRetour.textContent = '← Espaces';
+      btnRetour.onclick = function(){ goTo('s-espaces'); };
+    } else if(retourCamion){
       btnRetour.textContent = '← Camion';
       btnRetour.onclick = function(){ goTo('s-camion'); };
     } else {
@@ -1630,7 +1636,7 @@ function _depScanBoucle(){
             ? (window.depotClients || {})[dl.clientId]
             : (((window.clientsParCollecte || {})[dl.collecteId]) || {})[dl.clientId];
           if(!cible){ toast('⚠️ Facture introuvable pour ce QR.'); goTo('s-espaces'); return; }
-          depOuvrirFacture(dl.collecteId, dl.clientId, dl.depot);
+          depOuvrirFacture(dl.collecteId, dl.clientId, dl.depot, false, true);
           return;
         }
       }
