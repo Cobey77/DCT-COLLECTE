@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.5';
+var DEP_VERSION = 'v1.19.6';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -3483,11 +3483,22 @@ window.depOuvrirHistoriqueContact = function(){
       var d = c.departId ? ((window.departsData||{})[c.departId]) : null;
       var st = d ? (STATUTS_DEPART[d.statut] || STATUTS_DEPART.preparation) : null;
       var pay = depCalculerPaiement(c);
+      // v1.19.6 : origine de l'envoi (quelle collecte, ou dépôt direct) —
+      // sans ça, un client "pas encore rattaché à un départ" n'a aucun
+      // moyen d'être resitué (surtout s'il a plusieurs envois en cours).
+      var origine;
+      if(e.depot){
+        origine = 'D&eacute;p&ocirc;t direct';
+      } else {
+        var colOrig = (window.collectes||[]).filter(function(x){ return x && x.id === e.collecteId; })[0];
+        origine = colOrig ? ('Collecte du ' + esc(colOrig.date||'')) : 'Collecte';
+      }
       h += '<div class="dep-card" style="border-left-color:'+(st ? st.dot : '#ccc')+';">'
         +   '<div class="dep-card-top">'
         +     '<div class="dep-nom">'+(d ? esc(d.nom||'D&eacute;part') : 'Pas encore rattach&eacute; &agrave; un d&eacute;part')+'</div>'
         +     (st ? ('<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';">'+st.label+'</div>') : '')
         +   '</div>'
+        +   '<div style="font-size:12px;color:#999;margin:-4px 0 6px;">'+origine+'</div>'
         +   '<div class="dep-meta">'
         +     '<span>&#128230; '+esc(c.colis||'—')+'</span>'
         +     '<span>&#128176; <b>'+(c.prixADefinir ? '&agrave; d&eacute;finir' : (pay.total+' &euro;'))+'</b></span>'
