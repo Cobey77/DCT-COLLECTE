@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.4';
+var DEP_VERSION = 'v1.19.5';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -3432,6 +3432,12 @@ function _depTousEnvoisContact(contactKey){
   var telRef = contact ? (contact.tel||'').replace(/\s/g,'') : '';
 
   Object.keys(window.clientsParCollecte||{}).forEach(function(collecteId){
+    // v1.19.5 : on ne remonte l'historique que pour les collectes en cours
+    // ou à venir — les collectes déjà terminées (souvent d'anciennes fiches
+    // jamais complétées) ne sont plus comptabilisées ici, elles restent
+    // consultables dans ARCHIVAGE.
+    var col = (window.collectes||[]).filter(function(x){ return x && x.id === collecteId; })[0];
+    if(!col || col.statut === 'terminee') return;
     var cls = window.clientsParCollecte[collecteId] || {};
     Object.keys(cls).forEach(function(clientId){
       var c = cls[clientId];
