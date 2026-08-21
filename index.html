@@ -2,6 +2,19 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
+<script>
+// v1.16.1 (departs.js) : si l'appli est ouverte via un lien de facture
+// (?facture=...), on masque la page tout de suite, avant même que l'écran
+// de connexion ait pu s'afficher — departs.js la rend visible dès qu'il a
+// pris la main (voir tout en haut de departs.js). Sans lien facture,
+// cette ligne ne fait rien.
+if(/[?&]facture=/.test(location.search)){
+  document.write('<style>body{visibility:hidden;}</style>');
+  // Filet de sécurité : si departs.js ne se charge pas (erreur réseau...),
+  // on ne reste pas bloqué sur une page blanche indéfiniment.
+  setTimeout(function(){ if(document.body) document.body.style.visibility = 'visible'; }, 5000);
+}
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
