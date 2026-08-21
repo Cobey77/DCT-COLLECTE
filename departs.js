@@ -188,6 +188,12 @@ var DEP_VERSION = 'v1.16.2';
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
 
+// Un versement enregistré ne peut être supprimé que dans les 5 minutes
+// (le temps de rectifier une mauvaise manip) — passé ce délai, un
+// versement est considéré comme validé et ne se corrige plus qu'en
+// contactant la direction (voir depSupprimerVersement).
+var DEP_VERSEMENT_DELAI_SUPPR = 5 * 60 * 1000;
+
 // Les profils qui pilotent : Issyaka et Cobey.
 // On teste l'identifiant et pas seulement le drapeau, parce que
 // chargerConfigFirebase() remplace le tableau COLLABS par celui
@@ -1959,6 +1965,39 @@ window.depAjouterVersement = function(){
   depRenderFacture(c);
 };
 
+// v1.16.2 : corriger un versement (erreur de saisie, trop perçu...) en le
+// supprimant — pas d'édition en place, juste retirer puis en ajouter un
+// bon si besoin, plus simple et sans risque d'erreur de calcul.
+window.depSupprimerVersement = function(idx){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c || !Array.isArray(c.versements) || !c.versements[idx]) return;
+
+  var v = c.versements[idx];
+  if(!estDirection() && (Date.now() - (v.le||0)) > DEP_VERSEMENT_DELAI_SUPPR){
+    toast('🔒 Délai dépassé — ce versement est validé, contactez la direction pour le corriger.');
+    return;
+  }
+  if(!confirm('Supprimer ce versement de ' + (parseFloat(v.montant)||0) + ' € ?')) return;
+
+  c.versements.splice(idx, 1);
+
+  if(ctx.depot){
+    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update({ versements: c.versements });
+  } else {
+    try{ sauvegarder(); }catch(e){}
+  }
+
+  var u = window.currentUser || {};
+  depActivite('&#128465;', 'a supprim&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong> pour <strong>'+esc(c.name||'')+'</strong>');
+
+  toast('🗑️ Versement supprimé');
+  depRenderFacture(c);
+};
+
 function depRenderFacture(c){
   var pay = depCalculerPaiement(c);
   var st = STATUTS_PAIEMENT[pay.statut];
@@ -2028,7 +2067,17 @@ function depRenderFacture(c){
   if(!versements.length){
     h += '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucun versement enregistr&eacute; pour l\'instant.</div>';
   } else {
+    // v1.16.2 : bouton de suppression sur chaque versement, pour corriger
+    // une erreur de saisie (trop perçu, mauvais montant...) — mais limité
+    // à 5 minutes après l'enregistrement, pour un collaborateur normal :
+    // une fois payé et validé, ça ne se remet plus en cause à long terme.
+    // La direction, elle, garde la main en cas de besoin réel plus tard.
+    // On retrouve l'index dans le tableau d'origine (non trié) par
+    // identité de l'objet, plus fiable qu'un index recalculé sur la
+    // liste triée affichée.
     versements.forEach(function(v){
+      var idxOriginal = c.versements.indexOf(v);
+      var supprimable = estDirection() || (Date.now() - (v.le||0)) <= DEP_VERSEMENT_DELAI_SUPPR;
       var sousLignes = '';
       if(v.montantFCFA) sousLignes += '<div style="font-size:10.5px;color:var(--text3);">' + (parseFloat(v.montantFCFA)||0) + ' FCFA</div>';
       if(v.methode) sousLignes += '<div style="font-size:10.5px;color:var(--text3);">' + (v.methode === 'virement' ? 'Virement' : 'Esp&egrave;ces') + '</div>';
@@ -2036,6 +2085,11 @@ function depRenderFacture(c){
         + '<div><div style="font-size:15px;font-weight:800;color:#006b2d;">' + (parseFloat(v.montant)||0) + ' &euro;</div>' + sousLignes + '</div>'
         + '<div style="font-size:11px;color:var(--text3);text-align:right;">' + esc(dateHeureFr(v.le))
         +   (v.par ? '<br>'+esc(v.par) : '') + '</div>'
+        + (supprimable
+            ? ('<button type="button" onclick="depSupprimerVersement(' + idxOriginal + ')" '
+               + 'style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;border-radius:8px;width:30px;height:30px;'
+               + 'font-size:13px;cursor:pointer;flex-shrink:0;">&#128465;</button>')
+            : '')
         + '</div>';
     });
   }
@@ -2190,6 +2244,57 @@ function _depPhotosCourantes(prefixe){
   if(prefixe === 'dv') return (_depValiderCtx && _depValiderCtx.photos) || [];
   return window._depDepotPhotos || [];
 }
+
+// v1.16.2 : affichage en lecture seule des photos sur la fiche client
+// (#s-client) — pas de suppression/ajout ici, juste la consultation
+// (utile notamment pour Modou à l'arrivée du colis). Un tap agrandit la
+// photo en plein écran.
+function _depChargerPhotosFiche(clientId, c){
+  var box = $('e-photos-box');
+  if(!box) return;
+  if(!c || !c.aPhotoColis || !window.db || !window.firebaseReady){
+    box.innerHTML = '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucune photo pour ce colis.</div>';
+    return;
+  }
+  box.innerHTML = '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Chargement…</div>';
+  db.ref('dct_photos_colis/'+clientId).once('value', function(snap){
+    // le client a pu changer d'écran / rouvrir une autre fiche entretemps
+    if(window.currentClientId && window.currentClientId !== clientId) return;
+    var v = snap.val() || {};
+    var arr = Object.keys(v).map(function(k){ return v[k]; }).filter(function(p){ return p && p.d; });
+    arr.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+    _depRenderPhotosLecture(box, arr);
+  });
+}
+
+function _depRenderPhotosLecture(box, photos){
+  if(!photos.length){
+    box.innerHTML = '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucune photo pour ce colis.</div>';
+    return;
+  }
+  var h = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
+  photos.forEach(function(p, idx){
+    h += '<div onclick="_depAgrandirPhoto(' + idx + ')" style="border-radius:10px;overflow:hidden;'
+      +   'border:1.5px solid var(--border);background:#fff;cursor:pointer;">'
+      +   '<img src="' + p.d + '" style="width:100%;height:80px;object-fit:cover;display:block;">'
+      + '</div>';
+  });
+  h += '</div>';
+  box.innerHTML = h;
+  window._depPhotosFicheCourantes = photos;
+}
+
+window._depAgrandirPhoto = function(idx){
+  var photos = window._depPhotosFicheCourantes || [];
+  var p = photos[idx];
+  if(!p) return;
+  var m = document.createElement('div');
+  m.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.9);'
+    + 'display:flex;align-items:center;justify-content:center;padding:20px;';
+  m.onclick = function(){ document.body.removeChild(m); };
+  m.innerHTML = '<img src="' + p.d + '" style="max-width:100%;max-height:100%;border-radius:8px;object-fit:contain;">';
+  document.body.appendChild(m);
+};
 
 function _depRenderPhotosGrille(prefixe){
   var box = $(prefixe + '-photo-box');
@@ -2355,7 +2460,16 @@ window.depEnregistrerDepot = function(){
   toast('✅ ' + fiche.name + ' enregistré');
   window._depDepotPhotos = [];
   _depDepotEditId = null;
-  depDetail(departId);
+
+  // v1.16.2 : à la création (pas à la modification), on atterrit direct-
+  // ement sur la facture du client — pour ajouter tout de suite un
+  // versement si le paiement se fait sur place, exactement comme après
+  // la validation d'une collecte. Un seul mécanisme de paiement, partout.
+  if(!existant){
+    depOuvrirFacture('', id, true);
+  } else {
+    depDetail(departId);
+  }
 };
 
 window.depSupprimerDepot = function(){
@@ -2835,6 +2949,13 @@ function injecterChampsFiche(){
 
   var bloc = document.createElement('div');
   bloc.innerHTML = ''
+    // v1.16.2 : photos du colis, en lecture seule — prises à la
+    // validation de la collecte (ou à l'inscription au dépôt), utiles
+    // ici pour vérifier le colis à l'arrivée (Modou notamment). Pas de
+    // modification possible depuis cet écran, juste la consultation.
+    + '<div class="dep-sec" style="margin-top:0;padding-top:0;border-top:none;">Photos du colis</div>'
+    + '<div id="e-photos-box" style="margin-bottom:8px;"></div>'
+
     // Le départ (v1.11.0) : plus de sélecteur ici — il se choisit
     // désormais uniquement au moment de la validation de la collecte
     // (voir depOuvrirValidation). Le dupliquer ici prêtait à confusion.
@@ -2877,9 +2998,11 @@ window.depSetLivraisonFiche = function(oui){
   window._depLivraisonFiche = oui;
 };
 
-// Remplit nos champs quand la fiche s'ouvre. Depuis v1.11.0, ni le
-// départ ni la photo ne se gèrent plus ici (voir injecterChampsFiche) :
-// les deux se posent désormais uniquement à la validation de la collecte.
+// Remplit nos champs quand la fiche s'ouvre. Depuis v1.11.0, le départ ne
+// se gère plus ici (voir injecterChampsFiche) : il se pose désormais
+// uniquement à la validation de la collecte. Les photos, elles, sont
+// affichées ici en lecture seule depuis la v1.16.2 (prises à la
+// validation, ou à l'inscription au dépôt).
 function remplirFiche(clientId){
   var colId = window.currentCollecteId;
   var c = ((window.clientsParCollecte||{})[colId] || {})[clientId] || {};
@@ -2891,6 +3014,7 @@ function remplirFiche(clientId){
   e = $('e-liv-prix');    if(e) e.value = c.prixLivraison ? String(c.prixLivraison) : '';
   e = $('e-note');        if(e) e.value = c.note || '';
   depSetLivraisonFiche(c.livraisonDakar === true);
+  _depChargerPhotosFiche(clientId, c);
 
   // Verrouillage si la collecte est terminée
   var locked = false;
