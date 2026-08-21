@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.16.5';
+var DEP_VERSION = 'v1.17.0';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -341,6 +341,11 @@ var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — d
 var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
 var _depVersMethode = '';       // 'especes' | 'virement' — méthode choisie sur le bouton "Ajouter un versement"
 var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bouton "Ajouter un versement"
+
+// v1.17.0 : prix "à définir sur place" — bascules des formulaires
+// d'inscription (collecte et dépôt), remises à zéro à chaque ouverture.
+var _depPrixIndefiniCollecte = false;
+var _depPrixIndefiniDepot    = false;
 
 var _depValiderCtx = null;      // { collecteId, clientId, tk, prixModifie, photo } — écran de validation de collecte
 var _depValiderMethode = '';    // 'especes' | 'virement' — méthode choisie sur l'écran de validation
@@ -747,6 +752,9 @@ function injecterEcrans(){
   +     '</div>'
   +     '<div class="fg"><label class="fl">Description du colis</label><textarea class="fi" id="dp-colis" rows="3" placeholder="ex: 2 valises + 1 carton..." style="resize:none;"></textarea></div>'
   +     '<div class="fg"><label class="fl">Prix (&euro;)</label><input class="fi" id="dp-prix" placeholder="100" type="number" min="0" style="font-size:20px;font-weight:700;text-align:center;padding:14px;"></div>'
+  +     '<div style="margin:-6px 0 12px;">'
+  +       '<button type="button" class="dep-st" id="dp-prix-adef" onclick="depTogglePrixIndefiniDepot()" style="width:100%;">&#128337; Prix &agrave; d&eacute;finir sur place</button>'
+  +     '</div>'
 
   +     '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
   +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dp-dest-nom" placeholder="Awa Ndiaye"></div>'
@@ -815,6 +823,20 @@ function injecterEcrans(){
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content" id="dep-fact-content"></div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 7ter (v1.17.0) : le Suivi — regroupe en un seul endroit,
+     dans l'ordre chronologique, tout ce qui est arrivé à un client depuis
+     son inscription (création, changements de prix/colis/destinataire/
+     livraison/note, versements ajoutés ou supprimés) : la facture
+     elle-même reste ainsi plus légère. ---- */
+  + '<div class="screen" id="s-dep-suivi">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-facture\')">&larr; Facture</button>'
+  +     '<div class="h-title">Suivi</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content" id="dep-suivi-content"></div>'
   + '</div>'
 
   /* ---- ÉCRAN 7bis : aperçu imprimable de la facture, façon vrai document
@@ -1047,6 +1069,20 @@ function injecterChampsClient(){
   if(!ecran || $('f-dest-nom')) return;
   var content = ecran.querySelector('.content');
   if(!content) return;
+
+  // v1.17.0 : bascule "prix à définir sur place", insérée juste après le
+  // champ Prix d'origine (index.html) — pas de vrai prix connu tant que le
+  // colis n'a pas été pesé/vu sur place.
+  var champPrixF = $('f-prix');
+  if(champPrixF){
+    var blocF = champPrixF.closest ? champPrixF.closest('.fg') : champPrixF.parentNode;
+    if(blocF && blocF.parentNode){
+      var toggleF = document.createElement('div');
+      toggleF.style.cssText = 'margin:-6px 0 12px;';
+      toggleF.innerHTML = '<button type="button" class="dep-st" id="f-prix-adef" onclick="depTogglePrixIndefiniCollecte()" style="width:100%;">&#128337; Prix &agrave; d&eacute;finir sur place</button>';
+      blocF.parentNode.insertBefore(toggleF, blocF.nextSibling);
+    }
+  }
 
   /* --- Le départ n'est PLUS choisi à l'inscription : il est attribué
      plus tard, quand le colis est confié à un container (au moment de
@@ -1439,7 +1475,7 @@ window.depDetail = function(id){
         +   '<div style="flex:1;min-width:0;">'
         +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
         +       (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
-        +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
+        +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(c.prixADefinir ? '&agrave; d&eacute;finir' : ((parseFloat(c.prix)||0)+' &euro;'))
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
         +   '</div>'
         +   '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">'
@@ -1801,11 +1837,14 @@ function depAfficherFacturePublique(ctx){
 
 function depRenderFacturePublique(c, ctx){
   var pay = depCalculerPaiement(c);
-  var st = STATUTS_PAIEMENT[pay.statut] || {};
+  var prixIndefiniPub = !!c.prixADefinir;
+  var st = prixIndefiniPub ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : (STATUTS_PAIEMENT[pay.statut] || {});
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
   var totalColis = parseFloat(c.prix) || 0;
+  var totalColisTxt = prixIndefiniPub ? 'à définir' : (totalColis + ' €');
   var totalLivraison = c.livraisonDakar ? (parseFloat(c.prixLivraison) || 0) : 0;
   var totalGeneral = totalColis + totalLivraison;
+  var totalGeneralTxt = prixIndefiniPub ? 'à définir' : (totalGeneral + ' €');
   var numero = depNumeroFacture(c, ctx);
   // v1.16.5 : le premier collaborateur à avoir encaissé ce client (son tout
   // premier versement enregistré), affiché à la place de l'ancienne ligne
@@ -1864,18 +1903,18 @@ function depRenderFacturePublique(c, ctx){
     +     '<div class="fac-tbl-wrap"><table class="fac-table">'
     +       '<thead><tr><th>N&deg;</th><th>Description</th><th>Qt&eacute;</th><th>Unit&eacute;</th><th>Prix unitaire</th><th>Montant</th></tr></thead>'
     +       '<tbody>'
-    +         '<tr><td>1</td><td>'+esc(c.colis||'Colis')+'</td><td>1</td><td>colis</td><td>'+totalColis+' &euro;</td><td>'+totalColis+' &euro;</td></tr>'
+    +         '<tr><td>1</td><td>'+esc(c.colis||'Colis')+'</td><td>1</td><td>colis</td><td>'+esc(totalColisTxt)+'</td><td>'+esc(totalColisTxt)+'</td></tr>'
     +         (c.livraisonDakar ? ('<tr><td>2</td><td>Livraison &agrave; Dakar'+(c.livraisonAdresse ? (' &mdash; '+esc(c.livraisonAdresse)) : '')+'</td><td>1</td><td>service</td><td>'+totalLivraison+' &euro;</td><td>'+totalLivraison+' &euro;</td></tr>') : '')
     +       '</tbody>'
     +     '</table></div>'
 
     +     '<div class="fac-bas">'
-    +       '<div class="fac-lettres">Arr&ecirc;t&eacute;e la pr&eacute;sente facture &agrave; la somme de&nbsp;: '+esc(_depSommeEnLettres(totalGeneral))+'.</div>'
+    +       '<div class="fac-lettres">Arr&ecirc;t&eacute;e la pr&eacute;sente facture &agrave; la somme de&nbsp;: '+(prixIndefiniPub ? 'prix &agrave; d&eacute;finir sur place' : esc(_depSommeEnLettres(totalGeneral)))+'.</div>'
     +       '<div class="fac-totaux">'
-    +         '<div class="fac-totaux-ligne"><span>Sous-total colis</span><span>'+totalColis+' &euro;</span></div>'
+    +         '<div class="fac-totaux-ligne"><span>Sous-total colis</span><span>'+esc(totalColisTxt)+'</span></div>'
     +         (totalLivraison ? '<div class="fac-totaux-ligne"><span>Livraison &agrave; Dakar</span><span>'+totalLivraison+' &euro;</span></div>' : '')
     +         '<div class="fac-totaux-ligne"><span>TVA</span><span>0 &euro;</span></div>'
-    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL</span><span>'+totalGeneral+' &euro;</span></div>'
+    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL</span><span>'+esc(totalGeneralTxt)+'</span></div>'
     +         '<div class="fac-totaux-ligne"><span>Montant pay&eacute;</span><span>'+pay.paye+' &euro;</span></div>'
     +         '<div class="fac-totaux-ligne"><span>Reste &agrave; payer</span><span>'+pay.reste+' &euro;</span></div>'
     +       '</div>'
@@ -1971,6 +2010,61 @@ window.depVersMajFcfa = function(){
   hint.textContent = '≈ ' + eur + ' € (taux fixe 1 € = ' + TAUX_FCFA_EUR + ' FCFA)';
 };
 
+// v1.17.0 : écriture Firebase immédiate et ciblée d'un client (collecte ou
+// dépôt), factorisée — même logique que pour les versements (voir plus
+// bas), utilisée aussi pour le prix et pourra resservir ensuite.
+function _depEcrireClient(ctx, champs){
+  if(!(window.db && window.firebaseReady)) return;
+  if(ctx.depot){
+    db.ref('dct_depot/'+ctx.clientId).update(champs)
+      .catch(function(e){ console.error('departs: échec écriture client (dépôt)', e); });
+  } else {
+    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update(champs)
+      .catch(function(e){ console.error('departs: échec écriture client (collecte)', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
+  }
+}
+
+// v1.17.0 : "Modifier le prix" — seul point d'entrée pour changer le prix
+// dû une fois le client déjà créé (voir aussi remplirFiche/depOuvrirDepotForm
+// qui verrouillent le champ prix ailleurs). Trace l'ancien et le nouveau
+// montant dans l'historique (c.hist), lu par l'écran Suivi.
+window.depModifierPrix = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  var actuel = c.prixADefinir ? '' : String(depArrondi2(parseFloat(c.prix)||0));
+  var saisie = window.prompt('Nouveau prix du colis (€) :', actuel);
+  if(saisie === null) return; // annulé
+  saisie = String(saisie).trim().replace(',', '.');
+  if(!saisie){ toast('⚠️ Indiquez un montant, ou annulez.'); return; }
+  var val = parseFloat(saisie);
+  if(isNaN(val) || val < 0){ toast('⚠️ Montant invalide.'); return; }
+  val = depArrondi2(val);
+
+  var avantTxt = c.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(c.prix)||0) + ' €');
+  var apresTxt = val + ' €';
+  if(!c.prixADefinir && avantTxt === apresTxt){ toast('Le prix n\'a pas changé.'); return; }
+
+  var u = window.currentUser || {};
+  var hist = Array.isArray(c.hist) ? c.hist : [];
+  hist.push({ q: u.name || u.id || '', a: 'a modifié le prix : ' + avantTxt + ' → ' + apresTxt, ts: Date.now() });
+
+  c.prix = val;
+  c.prixADefinir = false;
+  c.hist = hist;
+
+  _depEcrireClient(ctx, { prix: val, prixADefinir: false, hist: hist });
+  if(!ctx.depot){ try{ sauvegarder(); }catch(e){} }
+
+  depActivite('&#128176;', 'a modifi&eacute; le prix de <strong>'+esc(c.name||'')+'</strong> : '+esc(avantTxt)+' &rarr; '+esc(apresTxt));
+  toast('✅ Prix mis à jour');
+  depRenderFacture(c);
+};
+
 window.depAjouterVersement = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
@@ -2042,26 +2136,36 @@ window.depSupprimerVersement = function(idx){
 
   c.versements.splice(idx, 1);
 
+  // v1.17.0 : trace aussi dans l'historique (c.hist), lu par l'écran Suivi
+  // — pas seulement dans le fil d'Activité global.
+  var u = window.currentUser || {};
+  var hist = Array.isArray(c.hist) ? c.hist : [];
+  hist.push({ q: u.name || u.id || '', a: 'a supprim&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong>', ts: Date.now() });
+  c.hist = hist;
+
   if(ctx.depot){
-    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update({ versements: c.versements });
+    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update({ versements: c.versements, hist: hist });
   } else {
     if(window.db && window.firebaseReady){
-      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versements: c.versements })
+      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versements: c.versements, hist: hist })
         .catch(function(e){ console.error('departs: échec suppression versement', e); toast('❌ Échec de la suppression, réessayez.'); });
     }
     try{ sauvegarder(); }catch(e){}
   }
 
-  var u = window.currentUser || {};
   depActivite('&#128465;', 'a supprim&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong> pour <strong>'+esc(c.name||'')+'</strong>');
 
   toast('🗑️ Versement supprimé');
-  depRenderFacture(c);
+  // Rafraîchit l'écran actuellement affiché (Suivi ou Facture directement).
+  var ecranSuivi = $('s-dep-suivi');
+  if(ecranSuivi && ecranSuivi.classList.contains('active')) depRenderSuivi(c);
+  else depRenderFacture(c);
 };
 
 function depRenderFacture(c){
   var pay = depCalculerPaiement(c);
-  var st = STATUTS_PAIEMENT[pay.statut];
+  var prixIndefini = !!c.prixADefinir;
+  var st = prixIndefini ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : STATUTS_PAIEMENT[pay.statut];
   var prixLivraison = parseFloat(c.prixLivraison) || 0;
   var totalAvecLivraison = pay.total + (c.livraisonDakar ? prixLivraison : 0);
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
@@ -2087,13 +2191,18 @@ function depRenderFacture(c){
   }
 
   // Le total colis est mis en avant (c'est ce qui compte pour la
-  // compta DCT) ; la livraison reste visible mais secondaire.
+  // compta DCT) ; la livraison reste visible mais secondaire. v1.17.0 :
+  // "à définir sur place" tant que personne n'a fixé de prix, avec le
+  // bouton dédié pour le faire (seul point d'entrée, voir depModifierPrix).
   h += '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;margin:16px 0;text-align:center;">'
     + '<div style="font-size:11px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;">Total colis</div>'
-    + '<div style="font-size:28px;font-weight:800;color:var(--text);margin:4px 0;">' + pay.total + ' &euro;</div>'
+    + (prixIndefini
+        ? '<div style="font-size:19px;font-weight:800;color:#856404;margin:6px 0;">&#128337; &Agrave; d&eacute;finir sur place</div>'
+        : '<div style="font-size:28px;font-weight:800;color:var(--text);margin:4px 0;">' + pay.total + ' &euro;</div>')
     + (c.livraisonDakar
         ? '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;">+ ' + prixLivraison + ' &euro; livraison &middot; total avec livraison : ' + totalAvecLivraison + ' &euro;</div>'
         : '')
+    + '<button type="button" class="dep-cli-btn" style="margin-top:10px;" onclick="depModifierPrix()">&#9999;&#65039; Modifier le prix</button>'
     + '</div>';
 
   h += '<div style="display:flex;gap:10px;margin-bottom:16px;">'
@@ -2109,51 +2218,10 @@ function depRenderFacture(c){
     h += kv('Note', esc(c.note));
   }
 
-  // Historique des modifications de la facture (prix, colis, destinataire,
-  // livraison, note) — même mécanisme que la fiche France & Europe, le plus
-  // récent en premier. Vide tant qu'aucune modification n'a été faite.
-  var histFact = Array.isArray(c.hist) ? c.hist.slice().reverse() : [];
-  h += '<div class="dep-sec">Historique des modifications</div>';
-  if(!histFact.length){
-    h += '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucune modification enregistr&eacute;e pour l\'instant.</div>';
-  } else {
-    h += '<div class="dep-fc-champ" style="font-size:12px;color:var(--text2);line-height:1.9;">'
-      + histFact.map(function(x){ return esc(dateHeureFr(x.ts))+' &mdash; <b>'+esc(x.q||'')+'</b> '+esc(x.a||''); }).join('<br>')
-      + '</div>';
-  }
-
-  // Historique des versements — le plus récent en premier.
-  var versements = Array.isArray(c.versements) ? c.versements.slice().sort(function(a,b){ return (b.le||0)-(a.le||0); }) : [];
-  h += '<div class="dep-sec">Historique des versements</div>';
-  if(!versements.length){
-    h += '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucun versement enregistr&eacute; pour l\'instant.</div>';
-  } else {
-    // v1.16.2 : bouton de suppression sur chaque versement, pour corriger
-    // une erreur de saisie (trop perçu, mauvais montant...) — mais limité
-    // à 5 minutes après l'enregistrement, pour un collaborateur normal :
-    // une fois payé et validé, ça ne se remet plus en cause à long terme.
-    // La direction, elle, garde la main en cas de besoin réel plus tard.
-    // On retrouve l'index dans le tableau d'origine (non trié) par
-    // identité de l'objet, plus fiable qu'un index recalculé sur la
-    // liste triée affichée.
-    versements.forEach(function(v){
-      var idxOriginal = c.versements.indexOf(v);
-      var supprimable = estDirection() || (Date.now() - (v.le||0)) <= DEP_VERSEMENT_DELAI_SUPPR;
-      var sousLignes = '';
-      if(v.montantFCFA) sousLignes += '<div style="font-size:10.5px;color:var(--text3);">' + (parseFloat(v.montantFCFA)||0) + ' FCFA</div>';
-      if(v.methode) sousLignes += '<div style="font-size:10.5px;color:var(--text3);">' + (v.methode === 'virement' ? 'Virement' : 'Esp&egrave;ces') + '</div>';
-      h += '<div class="dep-fc-champ" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-        + '<div><div style="font-size:15px;font-weight:800;color:#006b2d;">' + (parseFloat(v.montant)||0) + ' &euro;</div>' + sousLignes + '</div>'
-        + '<div style="font-size:11px;color:var(--text3);text-align:right;">' + esc(dateHeureFr(v.le))
-        +   (v.par ? '<br>'+esc(v.par) : '') + '</div>'
-        + (supprimable
-            ? ('<button type="button" onclick="depSupprimerVersement(' + idxOriginal + ')" '
-               + 'style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;border-radius:8px;width:30px;height:30px;'
-               + 'font-size:13px;cursor:pointer;flex-shrink:0;">&#128465;</button>')
-            : '')
-        + '</div>';
-    });
-  }
+  // v1.17.0 : les historiques (modifications + versements) sont regroupés
+  // dans un écran dédié "Suivi" (voir depOuvrirSuivi), pour désencombrer
+  // la facture — elle ne garde que ce qui sert à agir.
+  h += '<button type="button" class="btn btn-gray" style="margin:4px 0 16px;" onclick="depOuvrirSuivi()">&#128203; Voir le suivi</button>';
 
   // Ajout d'un versement — ouvert à tous les collaborateurs connectés.
   // Devise et méthode repartent à zéro à chaque affichage de la facture.
@@ -2199,6 +2267,72 @@ function depRenderFacture(c){
   if(box) box.innerHTML = h;
 
   try{ depGenererQR(_depFactureCtx); }catch(e){ console.error('departs: QR', e); }
+}
+
+/* ─────────────────────────────────────────────
+   10bis-suivi (v1.17.0). L'ÉCRAN SUIVI — regroupe création, changements
+   de fiche (c.hist) et versements ajoutés/supprimés, triés du plus récent
+   au plus ancien, dans un seul endroit.
+   ───────────────────────────────────────────── */
+
+window.depOuvrirSuivi = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  depRenderSuivi(c);
+  goTo('s-dep-suivi');
+};
+
+function depRenderSuivi(c){
+  var evts = [];
+
+  evts.push({ ts: c.creeLe || 0, q: c.by || '', a: 'a cr&eacute;&eacute; la fiche client', type: 'creation' });
+
+  (Array.isArray(c.hist) ? c.hist : []).forEach(function(x){
+    evts.push({ ts: x.ts || 0, q: x.q || '', a: x.a || '', type: 'modif' });
+  });
+
+  (Array.isArray(c.versements) ? c.versements : []).forEach(function(v){
+    var idxOriginal = c.versements.indexOf(v);
+    var sousLignes = '';
+    if(v.montantFCFA) sousLignes = ' (' + (parseFloat(v.montantFCFA)||0) + ' FCFA)';
+    evts.push({
+      ts: v.le || 0,
+      q: v.par || '',
+      a: 'a enregistr&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong>'+sousLignes
+        + (v.methode ? (' &middot; ' + (v.methode === 'virement' ? 'Virement' : 'Esp&egrave;ces')) : ''),
+      type: 'versement', idx: idxOriginal, le: v.le
+    });
+  });
+
+  evts.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+
+  var h = '';
+  if(!evts.length){
+    h = '<div class="dep-vide" style="padding:28px 16px;">Aucun &eacute;v&eacute;nement enregistr&eacute; pour l\'instant.</div>';
+  } else {
+    evts.forEach(function(x){
+      var supprimable = x.type === 'versement'
+        && (estDirection() || (Date.now() - (x.le||0)) <= DEP_VERSEMENT_DELAI_SUPPR);
+      h += '<div class="dep-fc-champ" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+        + '<div style="font-size:12.5px;color:var(--text2);line-height:1.5;">'
+        +   esc(dateHeureFr(x.ts)) + ' &mdash; <b>' + esc(x.q) + '</b> ' + x.a
+        + '</div>'
+        + (supprimable
+            ? ('<button type="button" onclick="depSupprimerVersement(' + x.idx + ')" '
+               + 'style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;border-radius:8px;width:30px;height:30px;'
+               + 'font-size:13px;cursor:pointer;flex-shrink:0;">&#128465;</button>')
+            : '')
+        + '</div>';
+    });
+  }
+
+  var box = $('dep-suivi-content');
+  if(box) box.innerHTML = h;
 }
 
 /* ─────────────────────────────────────────────
@@ -2266,6 +2400,15 @@ window.depOuvrirDepotForm = function(departId, clientId){
   }
 
   depSetLivraisonDepot(c.livraisonDakar === true);
+  _depPrixIndefiniDepot = !!c.prixADefinir;
+  depAppliquerPrixIndefiniDepot();
+  // v1.17.0 : une fois le client créé, le prix ne se modifie plus que via
+  // le bouton dédié "Modifier le prix" sur la facture (avec traçabilité) —
+  // plus depuis ce formulaire, pour éviter deux façons de faire la même
+  // chose sans historique.
+  var champPrixDp = $('dp-prix'), toggleAdefDp = $('dp-prix-adef');
+  if(champPrixDp) champPrixDp.disabled = !!clientId;
+  if(toggleAdefDp) toggleAdefDp.disabled = !!clientId;
   _depRenderPhotosGrille('dp');
   if(clientId && c.aPhotoColis && window.db && window.firebaseReady){
     db.ref('dct_photos_colis/'+clientId).once('value', function(snap){
@@ -2401,6 +2544,22 @@ window.depSetLivraisonDepot = function(oui){
   window._depLivraisonDepot = oui;
 };
 
+// v1.17.0 : bascule "prix à définir sur place" du formulaire dépôt —
+// désactive/vide le champ prix pendant que la bascule est active.
+window.depTogglePrixIndefiniDepot = function(){
+  _depPrixIndefiniDepot = !_depPrixIndefiniDepot;
+  depAppliquerPrixIndefiniDepot();
+};
+function depAppliquerPrixIndefiniDepot(){
+  var btn = $('dp-prix-adef'), champ = $('dp-prix');
+  if(btn) btn.className = 'dep-st' + (_depPrixIndefiniDepot ? ' on' : '');
+  if(champ){
+    champ.disabled = _depPrixIndefiniDepot;
+    champ.style.background = _depPrixIndefiniDepot ? '#f5f5f5' : '';
+    if(_depPrixIndefiniDepot) champ.value = '';
+  }
+}
+
 window.depOuvrirPhotoDepot = function(){ window._depAjouterPhoto('dp'); };
 
 window.depPhotoChoisieDepot = function(input){
@@ -2439,7 +2598,8 @@ window.depEnregistrerDepot = function(){
   var infos     = (($('dp-infos')||{}).value || '').trim();
   var ville     = (($('dp-ville')||{}).value || '').trim();
   var colis     = (($('dp-colis')||{}).value || '').trim();
-  var prix      = parseFloat(($('dp-prix')||{}).value) || 0;
+  var prixIndefini = _depPrixIndefiniDepot;
+  var prix      = prixIndefini ? 0 : (parseFloat(($('dp-prix')||{}).value) || 0);
   var dnom      = (($('dp-dest-nom')||{}).value || '').trim();
   var dtel      = (($('dp-dest-tel')||{}).value || '').trim();
   var livraison = !!window._depLivraisonDepot;
@@ -2456,7 +2616,7 @@ window.depEnregistrerDepot = function(){
   var fiche = {
     civilite: civ, prenom: prenom, nom: nom, name: _composeNom(civ, prenom, nom),
     tel: tel, tel2: tel2, adresse: adresse, infos: infos, ville: ville, cp: cp, dept: dept,
-    colis: colis, prix: prix,
+    colis: colis, prix: prix, prixADefinir: prixIndefini,
     departId: departId,
     destinataireNom: dnom, destinataireTel: dtel,
     livraisonDakar: livraison, livraisonAdresse: ladresse, prixLivraison: lprix,
@@ -2482,7 +2642,11 @@ window.depEnregistrerDepot = function(){
   if(existant){
     var histD = existant.hist || [];
     var changeD = [];
-    if((parseFloat(fiche.prix)||0) !== (parseFloat(existant.prix)||0)) changeD.push('montant');
+    if(!!fiche.prixADefinir !== !!existant.prixADefinir || (parseFloat(fiche.prix)||0) !== (parseFloat(existant.prix)||0)){
+      var avantPrixD = existant.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(existant.prix)||0) + ' €');
+      var apresPrixD = fiche.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(fiche.prix)||0) + ' €');
+      changeD.push('prix : ' + avantPrixD + ' → ' + apresPrixD);
+    }
     if((fiche.colis||'') !== (existant.colis||'')) changeD.push('colis');
     if((fiche.destinataireNom||'') !== (existant.destinataireNom||'') || (fiche.destinataireTel||'') !== (existant.destinataireTel||'')) changeD.push('destinataire');
     if(!!fiche.livraisonDakar !== !!existant.livraisonDakar || (fiche.livraisonAdresse||'') !== (existant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(existant.prixLivraison)||0)) changeD.push('livraison');
@@ -2521,6 +2685,7 @@ window.depEnregistrerDepot = function(){
   toast('✅ ' + fiche.name + ' enregistré');
   window._depDepotPhotos = [];
   _depDepotEditId = null;
+  _depPrixIndefiniDepot = false;
 
   // v1.16.2 : à la création (pas à la modification), on atterrit direct-
   // ement sur la facture du client — pour ajouter tout de suite un
@@ -3077,6 +3242,18 @@ function remplirFiche(clientId){
   depSetLivraisonFiche(c.livraisonDakar === true);
   _depChargerPhotosFiche(clientId, c);
 
+  // v1.17.0 : le prix ne se modifie plus depuis cette fiche générale —
+  // seulement via le bouton dédié "Modifier le prix" sur la facture (ou à
+  // la validation de la collecte), pour garder une trace de chaque
+  // changement. Affiche "à définir sur place" tant qu'aucun prix n'est fixé.
+  var ep = $('e-prix');
+  if(ep){
+    ep.disabled = true;
+    ep.style.background = '#f5f5f5';
+    ep.value = c.prixADefinir ? '' : (c.prix ? String(c.prix) : '');
+    ep.placeholder = c.prixADefinir ? 'à définir sur place' : '100';
+  }
+
   // Verrouillage si la collecte est terminée
   var locked = false;
   try{ locked = isLocked(); }catch(e2){}
@@ -3137,7 +3314,25 @@ function reinitialiserNouveauxChamps(){
     var e = $(id); if(e) e.value = '';
   });
   depSetLivraison(false);
+  _depPrixIndefiniCollecte = false;
+  depAppliquerPrixIndefiniCollecte();
   depRemplirSelect();
+}
+
+// v1.17.0 : bascule "prix à définir sur place" du formulaire collecte —
+// désactive/vide le champ prix pendant que la bascule est active.
+window.depTogglePrixIndefiniCollecte = function(){
+  _depPrixIndefiniCollecte = !_depPrixIndefiniCollecte;
+  depAppliquerPrixIndefiniCollecte();
+};
+function depAppliquerPrixIndefiniCollecte(){
+  var btn = $('f-prix-adef'), champ = $('f-prix');
+  if(btn) btn.className = 'dep-st' + (_depPrixIndefiniCollecte ? ' on' : '');
+  if(champ){
+    champ.disabled = _depPrixIndefiniCollecte;
+    champ.style.background = _depPrixIndefiniCollecte ? '#f5f5f5' : '';
+    if(_depPrixIndefiniCollecte) champ.value = '';
+  }
 }
 
 /* ─────────────────────────────────────────────
@@ -3151,7 +3346,11 @@ function reinitialiserNouveauxChamps(){
 function _depTracerModifsFacture(fiche, avant, verbe){
   var uH = window.currentUser || {};
   var change = [];
-  if((parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)) change.push('montant');
+  if(!!fiche.prixADefinir !== !!avant.prixADefinir || (parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)){
+    var avantPrixC = avant.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(avant.prix)||0) + ' €');
+    var apresPrixC = fiche.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(fiche.prix)||0) + ' €');
+    change.push('prix : ' + avantPrixC + ' → ' + apresPrixC);
+  }
   if((fiche.colis||'') !== (avant.colis||'')) change.push('colis');
   if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')) change.push('destinataire');
   if(!!fiche.livraisonDakar !== !!avant.livraisonDakar || (fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)) change.push('livraison');
@@ -3187,8 +3386,9 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   var colisEl = $('dv-colis'); if(colisEl) colisEl.value = fiche.colis || '';
 
   var pay = depCalculerPaiement(fiche);
-  var pAff = $('dv-prix-affiche'); if(pAff){ pAff.textContent = pay.total + ' €'; pAff.style.display = 'block'; }
-  var pInp = $('dv-prix-input'); if(pInp){ pInp.value = pay.total; pInp.style.display = 'none'; }
+  var pAff = $('dv-prix-affiche');
+  if(pAff){ pAff.textContent = fiche.prixADefinir ? '🕗 À définir sur place' : (pay.total + ' €'); pAff.style.display = 'block'; }
+  var pInp = $('dv-prix-input'); if(pInp){ pInp.value = fiche.prixADefinir ? '' : pay.total; pInp.style.display = 'none'; }
   var pBtn = $('dv-prix-btn'); if(pBtn) pBtn.style.display = 'inline-block';
 
   var mInp = $('dv-montant'); if(mInp) mInp.value = '';
@@ -3347,6 +3547,7 @@ window.depValiderConfirmer = function(){
 
   if(ctx.prixModifie !== null && ctx.prixModifie !== undefined){
     fiche.prix = ctx.prixModifie;
+    fiche.prixADefinir = false;
   }
 
   fiche.destinataireNom = (($('dv-dest-nom')||{}).value || '').trim();
@@ -3646,6 +3847,34 @@ function greffer(){
       }catch(e){}
     };
     window.ouvrirConfirmClient._depPatch = true;
+  }
+
+  /* --- F bis. Prix "à définir sur place" (v1.17.0) : saveClientConfirme()
+     ne connaît pas cette notion — on repère le client tout juste créé (le
+     seul id apparu entre avant/après dans cette collecte) pour y ajouter
+     le marqueur prixADefinir quand la bascule était active à l'inscription. --- */
+  if(typeof window.saveClientConfirme === 'function' && !window.saveClientConfirme._depPatch){
+    var origSaveClientConfirme = window.saveClientConfirme;
+    window.saveClientConfirme = function(){
+      var colId = window.currentCollecteId;
+      var avantIds = Object.keys((window.clientsParCollecte||{})[colId] || {});
+      var prixIndefiniC = _depPrixIndefiniCollecte;
+
+      origSaveClientConfirme.apply(this, arguments);
+
+      if(prixIndefiniC){
+        try{
+          var cls = (window.clientsParCollecte||{})[colId] || {};
+          var nouvelId = Object.keys(cls).filter(function(k){ return avantIds.indexOf(k) === -1; })[0];
+          if(nouvelId){
+            cls[nouvelId].prixADefinir = true;
+            if(window.db && window.firebaseReady) db.ref('dct/clients/'+colId+'/'+nouvelId).update({ prixADefinir: true });
+          }
+        }catch(e){ console.error('departs: prix indéfini collecte', e); }
+      }
+      _depPrixIndefiniCollecte = false;
+    };
+    window.saveClientConfirme._depPatch = true;
   }
 
   /* --- G. Le carré Client : cliquer sur un contact ouvre désormais une
