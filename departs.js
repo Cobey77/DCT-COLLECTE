@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.6';
+var DEP_VERSION = 'v1.19.7';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -647,7 +647,7 @@ function injecterEcrans(){
   +       'Où souhaitez-vous travailler ?</div>'
   +     '<div class="dep-cases">'
   +       '<div class="dep-case" id="dep-case-departs" style="border-color:#252599;" onclick="depOuvrirEspaceDeparts()">'
-  +         '<div class="dep-case-ico">&#128230;</div>'
+  +         '<div class="dep-case-ico">&#128674;</div>'
   +         '<div class="dep-case-tit" style="color:#252599;">D&Eacute;PARTS</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-dep">—</div>'
   +       '</div>'
@@ -667,7 +667,7 @@ function injecterEcrans(){
   +         '<div class="dep-case-sub">Scanner une facture</div>'
   +       '</div>'
   +       '<div class="dep-case" id="dep-case-france" style="border-color:#1a237e;" onclick="ouvrirFrance()">'
-  +         '<div class="dep-case-ico">&#127467;&#127479;</div>'
+  +         '<div class="dep-case-ico">&#127467;&#127479;&#127466;&#127482;</div>'
   +         '<div class="dep-case-tit" style="color:#1a237e;">FRANCE &amp; EUROPE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-fr">—</div>'
   +       '</div>'
@@ -1229,8 +1229,22 @@ window.depRenderEspaces = function(){
   // Case COLLECTE
   var sc = $('dep-case-sub-col');
   if(sc){
-    var cols = window.collectes || [];
-    var enc  = cols.filter(function(x){ return x && x.statut==='en_cours'; })[0] || cols[0];
+    // v1.19.7 : la collecte mise en avant doit être la plus proche dans le
+    // temps (en cours en priorité, sinon la prochaine à venir) — avant, en
+    // l'absence de collecte "en_cours", on retombait sur cols[0], le
+    // premier élément du tableau (ordre de création Firebase, pas de
+    // date), ce qui pouvait afficher une collecte plus lointaine que
+    // d'autres déjà programmées avant elle.
+    function _depParseDateSure(s){
+      try{ return (typeof parseDate === 'function') ? parseDate(s) : new Date(NaN); }
+      catch(e){ return new Date(NaN); }
+    }
+    var cols = (window.collectes || []).slice();
+    var enCoursListe = cols.filter(function(x){ return x && x.statut === 'en_cours'; })
+      .sort(function(a,b){ return _depParseDateSure(a.date) - _depParseDateSure(b.date); });
+    var aVenirListe = cols.filter(function(x){ return x && x.statut === 'a_venir'; })
+      .sort(function(a,b){ return _depParseDateSure(a.date) - _depParseDateSure(b.date); });
+    var enc = enCoursListe[0] || aVenirListe[0] || cols[0];
     if(enc){
       var n = Object.keys((window.clientsParCollecte||{})[enc.id] || {}).length;
       sc.innerHTML = esc(enc.date||'Collecte')+'<br><b style="color:#009A44;">'+n+'</b> client'+(n>1?'s':'');
