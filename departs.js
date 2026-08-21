@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.17.0';
+var DEP_VERSION = 'v1.18.1';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -348,7 +348,6 @@ var _depPrixIndefiniCollecte = false;
 var _depPrixIndefiniDepot    = false;
 
 var _depValiderCtx = null;      // { collecteId, clientId, tk, prixModifie, photo } — écran de validation de collecte
-var _depValiderMethode = '';    // 'especes' | 'virement' — méthode choisie sur l'écran de validation
 
 window.depotClients = {};       // { id: {...} } — clients inscrits directement au dépôt, hors collecte
 var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un client du dépôt
@@ -771,7 +770,8 @@ function injecterEcrans(){
   +       '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label><input class="fi" id="dp-liv-prix" type="number" min="0" placeholder="0"></div>'
   +     '</div>'
 
-  +     '<div class="dep-sec">Photo et note</div>'
+  +     '<div class="dep-sec">Photo <span style="color:#992020;">*</span> et note</div>'
+  +     '<div style="font-size:11.5px;color:var(--text3);margin:-6px 0 8px;">Au moins 1 photo du colis est obligatoire pour enregistrer.</div>'
   // v1.16.0 : jusqu'à 5 photos (comme France & Europe), pas plus une
   // seule — voir _depRenderPhotosGrille().
   +     '<div id="dp-photo-box" style="margin-bottom:12px;"></div>'
@@ -832,7 +832,7 @@ function injecterEcrans(){
      elle-même reste ainsi plus légère. ---- */
   + '<div class="screen" id="s-dep-suivi">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="goTo(\'s-facture\')">&larr; Facture</button>'
+  +     '<button class="btn-back" id="dep-suivi-back" onclick="goTo(\'s-facture\')">&larr; Facture</button>'
   +     '<div class="h-title">Suivi</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
@@ -971,15 +971,8 @@ function injecterEcrans(){
   +       '<button type="button" class="dep-cli-btn" id="dv-prix-btn" onclick="depValiderModifierPrix()">&#9999;&#65039; Modifier</button>'
   +     '</div>'
 
-  +     '<div class="dep-sec">Montant re&ccedil;u (&euro;)</div>'
-  +     '<div class="fg"><input class="fi" id="dv-montant" type="number" min="0" step="1" placeholder="0" style="font-size:20px;font-weight:700;text-align:center;padding:14px;" oninput="depValiderMajCoherence()"></div>'
-  +     '<div id="dv-coherence" style="display:none;border-radius:8px;padding:9px 12px;font-size:12.5px;font-weight:700;margin-bottom:10px;"></div>'
-  +     '<div id="dv-methode-bloc" style="display:none;gap:8px;margin-bottom:14px;">'
-  +       '<button type="button" class="dep-st" id="dv-meth-esp" onclick="depValiderMethode(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
-  +       '<button type="button" class="dep-st" id="dv-meth-vir" onclick="depValiderMethode(\'virement\')" style="flex:1;">Virement</button>'
-  +     '</div>'
-
-  +     '<div class="dep-sec">Photo du colis</div>'
+  +     '<div class="dep-sec">Photo du colis <span style="color:#992020;">*</span></div>'
+  +     '<div style="font-size:11.5px;color:var(--text3);margin:-6px 0 8px;">Obligatoire pour valider &mdash; le paiement se fait ensuite sur la facture.</div>'
   +     '<div id="dv-photo-box" style="margin-bottom:12px;"></div>'
   +     '<input type="file" id="dv-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="depPhotoChoisieValider(this)">'
 
@@ -1377,6 +1370,19 @@ window.depEnregistrer = function(){
     statut            : _depFormStatut || 'preparation'
   };
 
+  // v1.18.0 : le statut du départ (préparation/parti/arrivé/clôturé) n'avait
+  // aucun historique — juste la valeur courante. On trace chaque changement
+  // (date + auteur), repris ensuite dans le Suivi de chaque client rattaché
+  // (voir depRenderSuivi) pour reconstituer tout le parcours du colis.
+  if(_depEditId){
+    var dActuel = (window.departsData||{})[_depEditId] || {};
+    if((dActuel.statut || 'preparation') !== obj.statut){
+      var histStatut = Array.isArray(dActuel.histStatut) ? dActuel.histStatut.slice() : [];
+      histStatut.push({ statut: obj.statut, ts: Date.now(), q: u.name || u.id || '' });
+      obj.histStatut = histStatut;
+    }
+  }
+
   if(_depEditId){
     db.ref('departs/'+_depEditId).update(obj).then(function(){
       toast('✅ Départ mis à jour');
@@ -1481,6 +1487,8 @@ window.depDetail = function(id){
         +   '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">'
               + '<button class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
                 + 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#129534; Facture</button>'
+              + '<button class="dep-cli-btn" style="background:#E0E9FF;border-color:#C3CFFA;color:#252599;" '
+                + 'onclick="event.stopPropagation();depOuvrirSuiviDirect(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+',\''+id+'\')">&#128203; Suivi</button>'
               + (peutBouger
                 ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
                   + '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
@@ -2051,7 +2059,7 @@ window.depModifierPrix = function(){
 
   var u = window.currentUser || {};
   var hist = Array.isArray(c.hist) ? c.hist : [];
-  hist.push({ q: u.name || u.id || '', a: 'a modifié le prix : ' + avantTxt + ' → ' + apresTxt, ts: Date.now() });
+  hist.push({ q: u.name || u.id || '', a: 'a modifié le prix : ' + avantTxt + ' → ' + apresTxt, ts: Date.now(), type: 'prix' });
 
   c.prix = val;
   c.prixADefinir = false;
@@ -2140,7 +2148,7 @@ window.depSupprimerVersement = function(idx){
   // — pas seulement dans le fil d'Activité global.
   var u = window.currentUser || {};
   var hist = Array.isArray(c.hist) ? c.hist : [];
-  hist.push({ q: u.name || u.id || '', a: 'a supprim&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong>', ts: Date.now() });
+  hist.push({ q: u.name || u.id || '', a: 'a supprim&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong>', ts: Date.now(), type: 'versement' });
   c.hist = hist;
 
   if(ctx.depot){
@@ -2178,6 +2186,10 @@ function depRenderFacture(c){
   h += '<div style="text-align:center;margin-bottom:16px;">'
     + '<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';font-size:12.5px;padding:7px 16px;display:inline-block;">'+st.label+'</div>'
     + '</div>';
+
+  // v1.18.1 : remonté en haut de la facture (juste sous le statut) — trop
+  // long à atteindre tout en bas, retour de Cobey du 21/08/2026.
+  h += '<button type="button" class="btn btn-gray" style="margin:0 0 16px;" onclick="depOuvrirSuivi()">&#128203; Voir le suivi</button>';
 
   h += kv('Client', esc(nom));
   h += kv('T&eacute;l&eacute;phone', esc(c.tel || '—'));
@@ -2217,11 +2229,6 @@ function depRenderFacture(c){
   if(c.note){
     h += kv('Note', esc(c.note));
   }
-
-  // v1.17.0 : les historiques (modifications + versements) sont regroupés
-  // dans un écran dédié "Suivi" (voir depOuvrirSuivi), pour désencombrer
-  // la facture — elle ne garde que ce qui sert à agir.
-  h += '<button type="button" class="btn btn-gray" style="margin:4px 0 16px;" onclick="depOuvrirSuivi()">&#128203; Voir le suivi</button>';
 
   // Ajout d'un versement — ouvert à tous les collaborateurs connectés.
   // Devise et méthode repartent à zéro à chaque affichage de la facture.
@@ -2283,8 +2290,48 @@ window.depOuvrirSuivi = function(){
     : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
+  var bk = $('dep-suivi-back');
+  if(bk){ bk.innerHTML = '&larr; Facture'; bk.onclick = function(){ goTo('s-facture'); }; }
+
   depRenderSuivi(c);
   goTo('s-dep-suivi');
+};
+
+// v1.18.1 : accès direct au Suivi depuis la liste des clients d'un départ,
+// sans passer par la facture — retour de Cobey du 21/08/2026 ("dans la
+// facture faut aller jusqu'en bas, c'est trop long"). On pose quand même
+// _depFactureCtx : depSupprimerVersement (bouton 🗑 dans le Suivi) et un
+// éventuel retour vers "Ajouter un versement" en dépendent.
+window.depOuvrirSuiviDirect = function(collecteId, clientId, depot, departId){
+  var c = depot
+    ? (window.depotClients || {})[clientId]
+    : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  _depFactureCtx = { collecteId: collecteId || '', clientId: clientId, depot: !!depot };
+
+  var bk = $('dep-suivi-back');
+  if(bk){ bk.innerHTML = '&larr; D&eacute;part'; bk.onclick = function(){ depDetail(departId); }; }
+
+  depRenderSuivi(c);
+  goTo('s-dep-suivi');
+};
+
+// v1.18.0 : un code visuel (icône + couleur) par thème, pour repérer d'un
+// coup d'œil de quel type d'événement il s'agit dans le Suivi — demande de
+// Cobey du 21/08/2026 ("chaque thème a son code"). 'modif' sert de repli
+// pour d'anciennes entrées hist[] enregistrées avant l'ajout du champ type.
+var DEP_SUIVI_THEMES = {
+  creation:     { icon:'&#127881;', color:'#666666', bg:'#EDEDED' },
+  validation:   { icon:'&#9989;',   color:'#006b2d', bg:'#D4F0E0' },
+  statut:       { icon:'&#128666;', color:'#252599', bg:'#E0E9FF' },
+  versement:    { icon:'&#128176;', color:'#A04800', bg:'#FFF4E0' },
+  prix:         { icon:'&#128181;', color:'#7B2D8B', bg:'#F3E3F7' },
+  colis:        { icon:'&#128230;', color:'#33607D', bg:'#E4EEF3' },
+  destinataire: { icon:'&#128100;', color:'#1F7A63', bg:'#E1F3ED' },
+  livraison:    { icon:'&#128205;', color:'#9A4B0C', bg:'#FBE8D6' },
+  note:         { icon:'&#128221;', color:'#8A7300', bg:'#FFF9DB' },
+  modif:        { icon:'&#9999;&#65039;', color:'#555555', bg:'#F0F0F0' }
 };
 
 function depRenderSuivi(c){
@@ -2293,7 +2340,7 @@ function depRenderSuivi(c){
   evts.push({ ts: c.creeLe || 0, q: c.by || '', a: 'a cr&eacute;&eacute; la fiche client', type: 'creation' });
 
   (Array.isArray(c.hist) ? c.hist : []).forEach(function(x){
-    evts.push({ ts: x.ts || 0, q: x.q || '', a: x.a || '', type: 'modif' });
+    evts.push({ ts: x.ts || 0, q: x.q || '', a: x.a || '', type: x.type || 'modif' });
   });
 
   (Array.isArray(c.versements) ? c.versements : []).forEach(function(v){
@@ -2309,6 +2356,22 @@ function depRenderSuivi(c){
     });
   });
 
+  // v1.18.0 : historique des statuts du départ (préparation/parti/arrivé/
+  // clôturé — voir depEnregistrer), fusionné dans le Suivi de chaque
+  // client rattaché, pour voir tout le parcours en un seul endroit.
+  var d = c.departId ? ((window.departsData||{})[c.departId]) : null;
+  if(d && Array.isArray(d.histStatut)){
+    d.histStatut.forEach(function(hs){
+      var st = STATUTS_DEPART[hs.statut] || {};
+      evts.push({
+        ts: hs.ts || 0,
+        q: hs.q || '',
+        a: 'a plac&eacute; le d&eacute;part sur le statut <strong>'+esc(st.label||hs.statut)+'</strong>',
+        type: 'statut'
+      });
+    });
+  }
+
   evts.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
 
   var h = '';
@@ -2316,11 +2379,17 @@ function depRenderSuivi(c){
     h = '<div class="dep-vide" style="padding:28px 16px;">Aucun &eacute;v&eacute;nement enregistr&eacute; pour l\'instant.</div>';
   } else {
     evts.forEach(function(x){
-      var supprimable = x.type === 'versement'
+      var theme = DEP_SUIVI_THEMES[x.type] || DEP_SUIVI_THEMES.modif;
+      var supprimable = x.type === 'versement' && x.idx !== undefined
         && (estDirection() || (Date.now() - (x.le||0)) <= DEP_VERSEMENT_DELAI_SUPPR);
-      h += '<div class="dep-fc-champ" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
-        + '<div style="font-size:12.5px;color:var(--text2);line-height:1.5;">'
-        +   esc(dateHeureFr(x.ts)) + ' &mdash; <b>' + esc(x.q) + '</b> ' + x.a
+      h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;'
+        + 'border-left:4px solid '+theme.color+';background:'+theme.bg+';border-radius:8px;'
+        + 'margin-bottom:8px;padding:10px 12px;">'
+        + '<div style="display:flex;gap:9px;align-items:flex-start;">'
+        +   '<div style="font-size:16px;line-height:1.4;flex-shrink:0;">'+theme.icon+'</div>'
+        +   '<div style="font-size:12.5px;color:var(--text2);line-height:1.5;">'
+        +     esc(dateHeureFr(x.ts)) + ' &mdash; <b style="color:'+theme.color+';">' + esc(x.q||'—') + '</b><br>' + x.a
+        +   '</div>'
         + '</div>'
         + (supprimable
             ? ('<button type="button" onclick="depSupprimerVersement(' + x.idx + ')" '
@@ -2633,27 +2702,30 @@ window.depEnregistrerDepot = function(){
   // qui sera sauvegardé, en remplacement complet du nœud (contrairement
   // à l'ancien système à 3 états qui distinguait "pas touché").
   var photosDepot = window._depDepotPhotos || [];
-  fiche.aPhotoColis = photosDepot.length > 0;
+  // v1.18.0 : photo obligatoire (au moins 1) avant d'enregistrer. En
+  // édition, si les photos existantes ne sont pas encore rechargées dans
+  // le tableau local (chargement asynchrone, voir depOuvrirDepotForm), on
+  // s'appuie sur aPhotoColis déjà enregistré pour ne pas bloquer à tort.
+  if(!photosDepot.length && !(existant && existant.aPhotoColis)){
+    toast('⚠️ Ajoutez au moins une photo du colis avant d\'enregistrer.');
+    return;
+  }
+  fiche.aPhotoColis = photosDepot.length > 0 || !!(existant && existant.aPhotoColis);
 
   // Traçabilité des modifications de facture — uniquement en édition (pas à
-  // la création), même mécanisme que pour les clients de collecte. .set()
+  // la création), même mécanisme que pour les clients de collecte (voir
+  // _depDiffFacturePourHist, v1.18.0 : une ligne par thème). .set()
   // remplaçant tout le nœud, l'historique existant doit être recopié dans
   // tous les cas, sinon il serait perdu même sans changement cette fois-ci.
   if(existant){
     var histD = existant.hist || [];
-    var changeD = [];
-    if(!!fiche.prixADefinir !== !!existant.prixADefinir || (parseFloat(fiche.prix)||0) !== (parseFloat(existant.prix)||0)){
-      var avantPrixD = existant.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(existant.prix)||0) + ' €');
-      var apresPrixD = fiche.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(fiche.prix)||0) + ' €');
-      changeD.push('prix : ' + avantPrixD + ' → ' + apresPrixD);
-    }
-    if((fiche.colis||'') !== (existant.colis||'')) changeD.push('colis');
-    if((fiche.destinataireNom||'') !== (existant.destinataireNom||'') || (fiche.destinataireTel||'') !== (existant.destinataireTel||'')) changeD.push('destinataire');
-    if(!!fiche.livraisonDakar !== !!existant.livraisonDakar || (fiche.livraisonAdresse||'') !== (existant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(existant.prixLivraison)||0)) changeD.push('livraison');
-    if((fiche.note||'') !== (existant.note||'')) changeD.push('note');
-    if(changeD.length){
-      histD.push({ q: u.name || u.id || '', a: 'a modifié la facture — '+changeD.join(', '), ts: Date.now() });
-      depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(changeD.join(', ')));
+    var diffsD = _depDiffFacturePourHist(fiche, existant);
+    if(diffsD.length){
+      var tsD = Date.now();
+      var qD = u.name || u.id || '';
+      diffsD.forEach(function(d){ histD.push({ q: qD, a: d.texte, ts: tsD, type: d.type }); });
+      var labelsD = diffsD.map(function(d){ return d.label; });
+      depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(labelsD.join(', ')));
     }
     fiche.hist = histD;
     // .set() remplace tout le nœud : sans ça, corriger la fiche d'un client
@@ -3343,33 +3415,47 @@ function depAppliquerPrixIndefiniCollecte(){
    d'Activité si quelque chose a changé.
    ───────────────────────────────────────────── */
 
-function _depTracerModifsFacture(fiche, avant, verbe){
-  var uH = window.currentUser || {};
-  var change = [];
+// v1.18.0 : détecte les changements et renvoie une ligne par thème (prix,
+// colis, destinataire, livraison, note) au lieu d'une seule ligne combinée
+// — chaque thème garde ainsi sa propre icône/couleur dans l'écran Suivi.
+// Partagée entre la fiche client, la validation de collecte et le
+// formulaire dépôt (voir depEnregistrerDepot).
+function _depDiffFacturePourHist(fiche, avant){
+  var out = [];
   if(!!fiche.prixADefinir !== !!avant.prixADefinir || (parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)){
     var avantPrixC = avant.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(avant.prix)||0) + ' €');
     var apresPrixC = fiche.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(fiche.prix)||0) + ' €');
-    change.push('prix : ' + avantPrixC + ' → ' + apresPrixC);
+    out.push({ type:'prix', label:'prix', texte:'a modifi&eacute; le prix : ' + avantPrixC + ' &rarr; ' + apresPrixC });
   }
-  if((fiche.colis||'') !== (avant.colis||'')) change.push('colis');
-  if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')) change.push('destinataire');
-  if(!!fiche.livraisonDakar !== !!avant.livraisonDakar || (fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)) change.push('livraison');
-  if((fiche.note||'') !== (avant.note||'')) change.push('note');
-  if(change.length){
+  if((fiche.colis||'') !== (avant.colis||'')) out.push({ type:'colis', label:'colis', texte:'a modifi&eacute; le colis' });
+  if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')) out.push({ type:'destinataire', label:'destinataire', texte:'a modifi&eacute; le destinataire' });
+  if(!!fiche.livraisonDakar !== !!avant.livraisonDakar || (fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)) out.push({ type:'livraison', label:'livraison', texte:'a modifi&eacute; la livraison' });
+  if((fiche.note||'') !== (avant.note||'')) out.push({ type:'note', label:'note', texte:'a modifi&eacute; la note' });
+  return out;
+}
+
+function _depTracerModifsFacture(fiche, avant){
+  var uH = window.currentUser || {};
+  var q = uH.name || uH.id || '';
+  var diffs = _depDiffFacturePourHist(fiche, avant);
+  if(diffs.length){
+    var ts = Date.now();
     var histFact = fiche.hist || [];
-    histFact.push({ q: uH.name || uH.id || '', a: (verbe || 'a modifié la facture') + ' — ' + change.join(', '), ts: Date.now() });
+    diffs.forEach(function(d){ histFact.push({ q: q, a: d.texte, ts: ts, type: d.type }); });
     fiche.hist = histFact;
-    depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(change.join(', ')));
+    var labels = diffs.map(function(d){ return d.label; });
+    depActivite('&#9999;&#65039;', 'a modifi&eacute; la facture de <strong>'+esc(fiche.name||'')+'</strong> &mdash; '+esc(labels.join(', ')));
   }
-  return change;
+  return diffs.map(function(d){ return d.label; });
 }
 
 /* ─────────────────────────────────────────────
    14bis. VALIDATION DE LA COLLECTE D'UN CLIENT (écran camion/dispatch)
    Remplace la simple modale de confirmation d'origine (askValider /
-   modal-valider) par un écran complet : colis, prix (verrouillé),
-   montant reçu + méthode de paiement, photo du colis, destinataire,
-   départ (container) — obligatoire, ouvert à tous les collaborateurs.
+   modal-valider) par un écran complet : colis, prix (verrouillé), photo
+   du colis (obligatoire), destinataire, départ (container) — obligatoire,
+   ouvert à tous les collaborateurs. Le paiement (v1.18.0) ne se fait plus
+   ici : il se fait juste après, sur la facture ("Ajouter un versement").
    Une fois validé, on délègue à confirmValider() d'origine, telle
    quelle, pour tout le reste (dispatch, camion, fil d'Activité).
    ───────────────────────────────────────────── */
@@ -3379,7 +3465,6 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   if(!fiche){ toast('⚠️ Client introuvable.'); return; }
 
   _depValiderCtx = { collecteId: window.currentCollecteId, clientId: id, tk: tk, prixModifie: null, photos: [] };
-  _depValiderMethode = '';
 
   var titre = $('dv-titre'); if(titre) titre.textContent = 'Valider — ' + (fiche.name || name || '');
 
@@ -3390,11 +3475,6 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   if(pAff){ pAff.textContent = fiche.prixADefinir ? '🕗 À définir sur place' : (pay.total + ' €'); pAff.style.display = 'block'; }
   var pInp = $('dv-prix-input'); if(pInp){ pInp.value = fiche.prixADefinir ? '' : pay.total; pInp.style.display = 'none'; }
   var pBtn = $('dv-prix-btn'); if(pBtn) pBtn.style.display = 'inline-block';
-
-  var mInp = $('dv-montant'); if(mInp) mInp.value = '';
-  var coh = $('dv-coherence'); if(coh) coh.style.display = 'none';
-  var mb  = $('dv-methode-bloc'); if(mb) mb.style.display = 'none';
-  depValiderMethode('');
 
   window.depRetirerPhotoValider();
 
@@ -3422,7 +3502,6 @@ window.depValiderPrixChange = function(){
   var inp = $('dv-prix-input');
   var v = parseFloat(inp && inp.value);
   if(_depValiderCtx) _depValiderCtx.prixModifie = isNaN(v) ? 0 : v;
-  depValiderMajCoherence();
 };
 
 function depValiderRemplirDepart(departIdActuel){
@@ -3454,43 +3533,6 @@ function depValiderRemplirDepart(departIdActuel){
     sel.value = opts[0]._id;
   }
 }
-
-window.depValiderMethode = function(m){
-  _depValiderMethode = m;
-  var be = $('dv-meth-esp'), bv = $('dv-meth-vir');
-  if(be) be.className = 'dep-st' + (m === 'especes' ? ' on' : '');
-  if(bv) bv.className = 'dep-st' + (m === 'virement' ? ' on' : '');
-};
-
-window.depValiderMajCoherence = function(){
-  var ctx = _depValiderCtx; if(!ctx) return;
-  var fiche = (typeof getClients === 'function') ? getClients()[ctx.clientId] : null;
-  if(!fiche) return;
-
-  var pay = depCalculerPaiement(fiche);
-  var prixCourant = (ctx.prixModifie !== null && ctx.prixModifie !== undefined) ? ctx.prixModifie : pay.total;
-  var montant = parseFloat((($('dv-montant')||{}).value)) || 0;
-
-  var mb = $('dv-methode-bloc');
-  if(mb) mb.style.display = montant > 0 ? 'flex' : 'none';
-
-  var msg = $('dv-coherence');
-  if(!msg) return;
-  if(montant <= 0){ msg.style.display = 'none'; return; }
-
-  var resteApres = depArrondi2(prixCourant - (pay.paye + montant));
-  msg.style.display = 'block';
-  if(resteApres > 0){
-    msg.style.background = '#fff3cd'; msg.style.color = '#856404';
-    msg.textContent = '🕓 Reste à payer après ce versement : ' + resteApres + ' €';
-  } else if(resteApres === 0){
-    msg.style.background = '#d4f0e0'; msg.style.color = '#006b2d';
-    msg.textContent = '✅ Payé intégralement';
-  } else {
-    msg.style.background = '#FDEDED'; msg.style.color = '#992020';
-    msg.textContent = '⚠️ Le montant dépasse le prix de ' + Math.abs(resteApres) + ' €';
-  }
-};
 
 /* ---- Photo du colis, à la validation : même compression que les
    autres photos du module. ---- */
@@ -3535,9 +3577,8 @@ window.depValiderConfirmer = function(){
   var departId = selDepart ? selDepart.value : '';
   if(!departId){ toast('⚠️ Choisissez un départ avant de valider.'); return; }
 
-  var montant = parseFloat((($('dv-montant')||{}).value)) || 0;
-  var methode = _depValiderMethode;
-  if(montant > 0 && !methode){ toast('⚠️ Choisissez le mode de paiement.'); return; }
+  var photosCtx = ctx.photos || [];
+  if(!photosCtx.length){ toast('⚠️ Ajoutez au moins une photo du colis avant de valider.'); return; }
 
   var avant = {};
   try{ avant = JSON.parse(JSON.stringify(fiche)); }catch(e){}
@@ -3560,27 +3601,46 @@ window.depValiderConfirmer = function(){
     fiche.historiqueDepart = histD;
   }
   fiche.departId = departId;
+  fiche.aPhotoColis = true;
 
-  if(montant > 0){
-    var versements = Array.isArray(fiche.versements) ? fiche.versements : [];
-    versements.push({ montant: montant, le: Date.now(), par: u.name || u.id || '', methode: methode });
-    fiche.versements = versements;
-  }
-
-  var photosCtx = ctx.photos || [];
-  if(photosCtx.length) fiche.aPhotoColis = true;
+  // v1.18.0 : le paiement ne se fait plus depuis cet écran (MONTANT REÇU
+  // retiré) — il se fait exclusivement via "Ajouter un versement" sur la
+  // facture, ouverte automatiquement juste après. Un seul mécanisme de
+  // paiement pour les clients collecte, fiable (écriture immédiate ciblée).
 
   // À partir d'ici, plus aucune modification de la fiche : tout ce qui
   // suit ne fait qu'écrire sur Firebase (Activité, photo, sauvegarde),
   // ce qui peut redéclencher la synchronisation temps réel et détacher
   // cette référence locale — sans risque puisque tout est déjà posé.
-  _depTracerModifsFacture(fiche, avant, 'a modifié la facture — validation de la collecte');
+  _depTracerModifsFacture(fiche, avant);
+
+  // v1.18.0 : la validation elle-même est toujours tracée dans le Suivi,
+  // qu'il y ait ou non d'autres champs modifiés en même temps.
+  var histValid = Array.isArray(fiche.hist) ? fiche.hist : [];
+  histValid.push({ q: u.name || u.id || '', a: 'a valid&eacute; la collecte', ts: Date.now(), type: 'validation' });
+  fiche.hist = histValid;
 
   if(photosCtx.length && window.db && window.firebaseReady){
     var mapPhotosCtx = {};
     photosCtx.forEach(function(p, i){ mapPhotosCtx['p'+i] = p; });
     db.ref('dct_photos_colis/'+ctx.clientId).set(mapPhotosCtx);
   }
+
+  // v1.18.0 : écriture Firebase immédiate et ciblée, même logique que pour
+  // les versements (v1.16.4) — la validation ne doit plus dépendre du seul
+  // sauvegarder() débounced (800ms) qui pouvait se faire écraser par la
+  // resynchronisation temps réel avant d'avoir vraiment persisté.
+  _depEcrireClient({ collecteId: ctx.collecteId, clientId: ctx.clientId }, {
+    colis: fiche.colis,
+    destinataireNom: fiche.destinataireNom,
+    destinataireTel: fiche.destinataireTel,
+    departId: fiche.departId,
+    historiqueDepart: fiche.historiqueDepart || null,
+    prix: fiche.prix,
+    prixADefinir: !!fiche.prixADefinir,
+    aPhotoColis: true,
+    hist: fiche.hist
+  });
 
   try{ sauvegarder(); }catch(e){}
 
