@@ -477,7 +477,14 @@ function injecterStyles(){
     + '.dep-menu-item.dep-menu-avenir{background:#fafafa;}'
     + '.dep-menu-item.dep-menu-avenir .dep-menu-txt{color:var(--text3);}'
     + '.dep-menu-tag{font-size:9.5px;font-weight:800;letter-spacing:0.04em;text-transform:uppercase;'
-    +   'background:#EEE;color:#999;padding:2px 7px;border-radius:20px;}';
+    +   'background:#EEE;color:#999;padding:2px 7px;border-radius:20px;}'
+    // v1.16.2 : écran du lecteur QR interne (voir depOuvrirScanQR)
+    + '#s-dep-scan .content{padding:0;background:#000;position:relative;overflow:hidden;}'
+    + '#s-dep-scan video{width:100%;height:100%;object-fit:cover;display:block;background:#000;}'
+    + '#dep-scan-msg{position:absolute;left:0;right:0;bottom:26px;text-align:center;color:#fff;'
+    +   'font-size:13px;font-weight:600;padding:0 24px;text-shadow:0 1px 3px rgba(0,0,0,.6);}'
+    + '#dep-scan-cadre{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);'
+    +   'width:64%;aspect-ratio:1/1;border:3px solid #fff;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.35);}';
   document.head.appendChild(s);
 }
 
@@ -500,6 +507,9 @@ function injecterEcrans(){
   +     '<div><div class="h-title">Dakar City Transport</div>'
   +     '<div class="h-sub" id="dep-esp-greet">Bonjour !</div></div>'
   +     '<div style="display:flex;align-items:center;gap:8px;">'
+  +       '<button id="dep-esp-scan-btn" onclick="depOuvrirScanQR()" title="Scanner un QR" '
+  +         'style="background:#006b2d;color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:15px;'
+  +         'cursor:pointer;font-family:var(--font);line-height:1;">&#128247;</button>'
   +       '<button id="dep-esp-activite-btn" onclick="setNav(\'activite\')" title="Activit&eacute;" '
   +         'style="background:#1a1a2e;color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:15px;'
   +         'cursor:pointer;font-family:var(--font);line-height:1;">&#128337;</button>'
@@ -777,6 +787,25 @@ function injecterEcrans(){
   +       '<div style="font-size:13px;margin-top:6px;">Ce lien n&rsquo;est plus valide, ou la facture a &eacute;t&eacute; d&eacute;plac&eacute;e.</div>'
   +     '</div>'
   +     '<div id="pub-contenu" style="display:none;"></div>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 7ter : lecteur QR interne (v1.16.2) — réservé aux employés
+     DCT connectés. Le QR affiché sur la facture n'encode plus un lien
+     (voir _depTokenQR) : un appareil photo externe le décode en texte
+     inerte, sans rien pouvoir en faire. Ce lecteur, lui, le décode et
+     ouvre directement la fiche du client visé, pour valider un paiement
+     par exemple. ---- */
+  + '<div class="screen" id="s-dep-scan">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depFermerScanQR()">&larr; Annuler</button>'
+  +     '<div class="h-title">Scanner un QR</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<video id="dep-scan-video" playsinline muted autoplay></video>'
+  +     '<div id="dep-scan-cadre"></div>'
+  +     '<div id="dep-scan-msg">Chargement&hellip;</div>'
   +   '</div>'
   + '</div>'
 
@@ -1353,12 +1382,33 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion){
   goTo('s-facture');
 };
 
-// Lien direct vers une facture précise (utilisé par le QR code) :
-// même page (quel que soit l'endroit où le site est hébergé), avec
-// un paramètre ?facture=... repris au chargement (voir _depFactureDeepLink).
+// Lien de facture (lecture seule, sans connexion) — utilisé UNIQUEMENT
+// pour le texte envoyé par WhatsApp (voir depPartagerWhatsapp). Le QR
+// code, lui, n'utilise plus ce lien depuis la v1.16.2 (voir _depTokenQR).
 function depLienFacture(ctx){
   var code = (ctx.depot ? 'D' : 'C') + '|' + (ctx.collecteId || '') + '|' + ctx.clientId;
   return location.origin + location.pathname + '?facture=' + encodeURIComponent(code);
+}
+
+// v1.16.2 : jeton QR opaque (pas une URL) — un appareil photo/scanner
+// externe le décode en texte inerte, sans rien pouvoir en faire (pas de
+// lien à ouvrir). Seul le lecteur interne de l'appli (depOuvrirScanQR)
+// sait le décoder, pour ouvrir directement la fiche du client visé.
+// NB : c'est de l'obfuscation, pas un vrai chiffrement — l'appli n'a pas
+// de serveur pour émettre des jetons secrets à usage unique.
+function _depTokenQR(ctx){
+  try{
+    var payload = JSON.stringify({ d: !!ctx.depot, c: ctx.collecteId || '', i: ctx.clientId });
+    return 'DCTQR1:' + btoa(unescape(encodeURIComponent(payload)));
+  }catch(e){ return ''; }
+}
+function _depDecoderTokenQR(txt){
+  try{
+    if(typeof txt !== 'string' || txt.indexOf('DCTQR1:') !== 0) return null;
+    var payload = JSON.parse(decodeURIComponent(escape(atob(txt.slice(7)))));
+    if(!payload || !payload.i) return null;
+    return { depot: !!payload.d, collecteId: payload.c || '', clientId: payload.i };
+  }catch(e){ return null; }
 }
 
 // Chargement à la demande de la librairie de génération de QR code
@@ -1382,15 +1432,110 @@ function _depChargerQR(cb){
 // changer d'écran pendant le chargement de la librairie).
 function depGenererQR(ctx, canvasId){
   if(!ctx) return;
-  var lien = depLienFacture(ctx);
+  var valeur = _depTokenQR(ctx);
   _depChargerQR(function(){
     try{
       var canvas = $(canvasId || 'dep-fact-qr');
-      if(!canvas) return;
-      new QRious({ element: canvas, value: lien, size: 176, background: '#fff', foreground: '#222' });
+      if(!canvas || !valeur) return;
+      new QRious({ element: canvas, value: valeur, size: 176, background: '#fff', foreground: '#222' });
     }catch(e){ console.error('departs: génération QR', e); }
   });
 }
+
+/* ─────────────────────────────────────────────
+   Lecteur QR interne (v1.16.2) — caméra + jsQR, réservé aux employés
+   connectés (accessible depuis l'écran des espaces). Décode le jeton
+   opaque généré par _depTokenQR et ouvre directement la fiche du client.
+   ───────────────────────────────────────────── */
+var _depScanStream = null;
+var _depScanRAF = null;
+var _depScanEnCours = false;
+var _depJsQrEnCours = false;
+
+function _depChargerJsQR(cb){
+  if(window.jsQR){ cb(); return; }
+  if(_depJsQrEnCours){ setTimeout(function(){ _depChargerJsQR(cb); }, 200); return; }
+  _depJsQrEnCours = true;
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.js';
+  s.onload = function(){ _depJsQrEnCours = false; cb(); };
+  s.onerror = function(){ _depJsQrEnCours = false; console.error('departs: échec chargement jsQR (connexion internet ?)'); cb(); };
+  document.head.appendChild(s);
+}
+
+window.depOuvrirScanQR = function(){
+  goTo('s-dep-scan');
+  var msg = $('dep-scan-msg');
+  if(msg) msg.textContent = 'Chargement…';
+  _depChargerJsQR(function(){
+    if(!window.jsQR){ if(msg) msg.textContent = '⚠️ Lecteur QR indisponible (connexion internet ?)'; return; }
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      if(msg) msg.textContent = '⚠️ Caméra non disponible sur ce navigateur.';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } }).then(function(stream){
+      if(document.querySelector('.screen.active').id !== 's-dep-scan'){
+        // l'utilisateur a déjà annulé pendant l'attente de la caméra
+        stream.getTracks().forEach(function(t){ t.stop(); });
+        return;
+      }
+      _depScanStream = stream;
+      var video = $('dep-scan-video');
+      if(!video){ stream.getTracks().forEach(function(t){ t.stop(); }); return; }
+      video.srcObject = stream;
+      video.play().catch(function(){});
+      if(msg) msg.textContent = 'Visez le QR code de la facture';
+      _depScanEnCours = true;
+      _depScanBoucle();
+    }).catch(function(e){
+      console.error('departs: caméra', e);
+      if(msg) msg.textContent = "⚠️ Impossible d'accéder à la caméra.";
+    });
+  });
+};
+
+function _depScanBoucle(){
+  if(!_depScanEnCours) return;
+  var video = $('dep-scan-video');
+  if(video && video.readyState === video.HAVE_ENOUGH_DATA && window.jsQR && video.videoWidth){
+    try{
+      var c = document.createElement('canvas');
+      c.width = video.videoWidth; c.height = video.videoHeight;
+      var ctx2d = c.getContext('2d');
+      ctx2d.drawImage(video, 0, 0, c.width, c.height);
+      var img = ctx2d.getImageData(0, 0, c.width, c.height);
+      var res = window.jsQR(img.data, c.width, c.height);
+      if(res && res.data){
+        var dl = _depDecoderTokenQR(res.data);
+        if(dl){
+          _depArreterCamera();
+          _depScanEnCours = false;
+          var cible = dl.depot
+            ? (window.depotClients || {})[dl.clientId]
+            : (((window.clientsParCollecte || {})[dl.collecteId]) || {})[dl.clientId];
+          if(!cible){ toast('⚠️ Facture introuvable pour ce QR.'); goTo('s-espaces'); return; }
+          depOuvrirFacture(dl.collecteId, dl.clientId, dl.depot);
+          return;
+        }
+      }
+    }catch(e){}
+  }
+  _depScanRAF = requestAnimationFrame(_depScanBoucle);
+}
+
+function _depArreterCamera(){
+  if(_depScanRAF){ cancelAnimationFrame(_depScanRAF); _depScanRAF = null; }
+  if(_depScanStream){
+    _depScanStream.getTracks().forEach(function(t){ t.stop(); });
+    _depScanStream = null;
+  }
+}
+
+window.depFermerScanQR = function(){
+  _depScanEnCours = false;
+  _depArreterCamera();
+  goTo('s-espaces');
+};
 
 /* ─────────────────────────────────────────────
    10bis-2. FACTURE IMPRIMABLE (façon vrai document, mise en page reprise
