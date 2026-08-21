@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.18.1';
+var DEP_VERSION = 'v1.18.3';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -2226,6 +2226,27 @@ function depRenderFacture(c){
       + '<div style="font-size:10px;color:var(--text3);font-weight:700;">RESTE &Agrave; PAYER</div></div>'
     + '</div>';
 
+  // v1.18.3 : résumé compact des versements directement sous PAYÉ/RESTE —
+  // pour qu'on comprenne d'où vient un montant sans devoir aller jusqu'au
+  // Suivi (retour de Cobey du 21/08/2026). Ordre chronologique (le premier
+  // versement en premier), comme un relevé qui se construit au fil de l'eau.
+  var versementsFacture = Array.isArray(c.versements) ? c.versements.slice() : [];
+  if(versementsFacture.length){
+    versementsFacture.sort(function(a,b){ return (a.le||0) - (b.le||0); });
+    h += '<div style="background:#F9F9F7;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:16px;">'
+      + '<div style="font-size:10.5px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">D&eacute;tail des versements</div>';
+    versementsFacture.forEach(function(v){
+      var meth = v.methode === 'virement' ? 'Virement' : (v.methode === 'especes' ? 'Esp&egrave;ces' : '');
+      var fcfa = v.montantFCFA ? (' (' + (parseFloat(v.montantFCFA)||0) + ' FCFA)') : '';
+      h += '<div style="font-size:12px;color:var(--text2);line-height:1.6;">'
+        + '&#128176; <strong>' + (parseFloat(v.montant)||0) + ' &euro;</strong>' + fcfa
+        + (meth ? (' &middot; ' + meth) : '') + ' &middot; ' + esc(dateHeureFr(v.le))
+        + (v.par ? (' &middot; ' + esc(v.par)) : '')
+        + '</div>';
+    });
+    h += '</div>';
+  }
+
   if(c.note){
     h += kv('Note', esc(c.note));
   }
@@ -2312,6 +2333,23 @@ window.depOuvrirSuiviDirect = function(collecteId, clientId, depot, departId){
 
   var bk = $('dep-suivi-back');
   if(bk){ bk.innerHTML = '&larr; D&eacute;part'; bk.onclick = function(){ depDetail(departId); }; }
+
+  depRenderSuivi(c);
+  goTo('s-dep-suivi');
+};
+
+// v1.18.2 : même chose, mais depuis l'écran "Camion" (tournée de collecte)
+// — voir l'icône 📋 posée à côté du nom sur chaque carte, greffe L bis.
+// Client pas forcément encore validé/rattaché à un départ, donc pas de
+// depDetail() possible au retour : on revient simplement à la tournée.
+window.depOuvrirSuiviCamion = function(collecteId, clientId){
+  var c = (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  _depFactureCtx = { collecteId: collecteId || '', clientId: clientId, depot: false };
+
+  var bk2 = $('dep-suivi-back');
+  if(bk2){ bk2.innerHTML = '&larr; Tourn&eacute;e'; bk2.onclick = function(){ goTo('s-camion'); }; }
 
   depRenderSuivi(c);
   goTo('s-dep-suivi');
@@ -4088,6 +4126,11 @@ function greffer(){
     window.renderCamion = function(k){
       origRenderCamion.apply(this, arguments);
       try{ _depAjouterFactureCamionValide(k); }catch(e){ console.error('departs: bouton facture (client validé)', e); }
+      // v1.18.2 : icône Suivi à côté du nom de chaque client de la tournée
+      // — c'est là que les collaborateurs passent le plus de temps au
+      // quotidien, retour de Cobey du 21/08/2026 ("pas dans la facture,
+      // plutôt à côté de chaque client sur l'écran de la tournée").
+      try{ _depAjouterSuiviCamion(k); }catch(e){ console.error('departs: icône suivi (camion)', e); }
     };
     window.renderCamion._depPatch = true;
   }
@@ -4131,6 +4174,40 @@ function _depAjouterFactureCamionValide(k){
       b.textContent = '🧾';
       b.onclick = function(e){ if(e) e.stopPropagation(); depOuvrirFacture(window.currentCollecteId || '', cid, false, true); };
       act.appendChild(b);
+    })(sorted[i]);
+  }
+}
+
+// v1.18.2 : petite icône "📋" juste à côté du nom, sur CHAQUE carte de la
+// tournée (pas seulement les validées — le Suivi est utile dès la création
+// de la fiche). Contrairement à _depAjouterFactureCamionValide, on mappe
+// sorted[i] ↔ cartes[i] un-à-un : sans filtrer par statut, l'ordre des
+// cartes générées par renderCamion() correspond exactement à celui de
+// `sorted` (l'arrêt de Chartres, lui, n'a pas la classe .route-card).
+function _depAjouterSuiviCamion(k){
+  var trks = getTrucks(), tk = trks[k];
+  if(!tk || !(tk.clients||[]).length) return;
+  var hours = tk.hours || {};
+  var sorted = (tk.clients || []).slice().sort(function(a,b){
+    var ha = hours[a], hb = hours[b];
+    if(ha && hb) return ha.localeCompare(hb);
+    if(ha) return -1;
+    if(hb) return 1;
+    return tk.clients.indexOf(a) - tk.clients.indexOf(b);
+  });
+  var cartes = document.querySelectorAll('#camion-route .route-card');
+  for(var i = 0; i < sorted.length; i++){
+    var carte = cartes[i];
+    if(!carte) continue;
+    var nomEl = carte.querySelector('.route-client-name');
+    if(!nomEl || nomEl.querySelector('.dep-suivi-icone')) continue;
+    (function(cid){
+      var ic = document.createElement('span');
+      ic.className = 'dep-suivi-icone';
+      ic.innerHTML = ' &#128203;';
+      ic.style.cssText = 'cursor:pointer;';
+      ic.onclick = function(e){ if(e) e.stopPropagation(); depOuvrirSuiviCamion(window.currentCollecteId || '', cid); };
+      nomEl.appendChild(ic);
     })(sorted[i]);
   }
 }
