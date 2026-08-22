@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.22';
+var DEP_VERSION = 'v1.19.23';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -344,7 +344,6 @@ var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bout
 // v1.19.22 : caisse livraison, indépendante de celle du colis ci-dessus.
 var _depVersMethodeLivraison = '';
 var _depVersDeviseLivraison  = 'eur';
-var _depFactureLivraisonChoix = false; // état du toggle Oui/Non en cours d'édition sur la facture
 
 // v1.19.2 : navigation en dossiers cliquables de l'écran ARCHIVAGE
 // (Année > Mois > Semaine > liste). null = niveau non choisi.
@@ -1043,6 +1042,24 @@ function injecterEcrans(){
   +   '<div class="content" id="dep-fact-content"></div>'
   + '</div>'
 
+  /* ---- ÉCRAN 7bis-impression (v1.19.23) : documents (étiquette,
+     PDF, WhatsApp) — accessible uniquement une fois la facture validée
+     (voir depValiderFactureFinale). Contenu fixe, tous les boutons
+     s'appuient sur _depFactureCtx déjà posé par depOuvrirFacture. ---- */
+  + '<div class="screen" id="s-dep-impression">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depRetourFactureDepuisImpression()">&larr; Facture</button>'
+  +     '<div class="h-title">Documents</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div style="text-align:center;color:#006b2d;font-weight:800;font-size:14px;margin-bottom:20px;">&#9989; Collecte valid&eacute;e</div>'
+  +     '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
+  +     '<button class="btn" style="background:#111;color:#fff;margin-top:10px;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
+  +     '<button class="btn" style="background:#25D366;color:#fff;margin-top:10px;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
+  +   '</div>'
+  + '</div>'
+
   /* ---- ÉCRAN 7ter (v1.17.0) : le Suivi — regroupe en un seul endroit,
      dans l'ordre chronologique, tout ce qui est arrivé à un client depuis
      son inscription (création, changements de prix/colis/destinataire/
@@ -1249,12 +1266,30 @@ function injecterEcrans(){
   +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dv-dest-nom" placeholder="Awa Ndiaye"></div>'
   +     '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label><input class="fi" id="dv-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
 
+  /* v1.19.23 : la livraison (Oui/Non + ville/adresse + prix) se décide
+     désormais ici, avant la facture — voir depValiderToggleLivraison et
+     le §6ter/§13 point 5 du récap projet. Elle n'est plus éditable sur
+     la facture elle-même (qui ne sert plus qu'au paiement). */
+  +     '<div class="dep-sec">Livraison</div>'
+  +     '<div style="display:flex;gap:8px;margin-bottom:10px;">'
+  +       '<button type="button" class="dep-st" id="dv-liv-non" onclick="depValiderToggleLivraison(false)" style="flex:1;">Non &middot; retrait sur place</button>'
+  +       '<button type="button" class="dep-st" id="dv-liv-oui" onclick="depValiderToggleLivraison(true)" style="flex:1;">Oui &middot; livraison</button>'
+  +     '</div>'
+  +     '<div id="dv-liv-bloc" style="display:none;">'
+  +       '<div class="fg"><label class="fl">Ville / adresse de livraison</label><input class="fi" id="dv-liv-adresse" placeholder="Thi&egrave;s, quartier..."></div>'
+  +       '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label><input class="fi" id="dv-liv-prix" type="number" min="0" placeholder="0"></div>'
+  +     '</div>'
+
   +     '<div class="dep-sec">D&eacute;part (container)</div>'
   +     '<div class="fg"><select class="fi" id="dv-depart"></select></div>'
   +     '<div id="dv-depart-msg" style="display:none;" class="dep-alert"></div>'
 
+  /* v1.19.23 : ce bouton n'affirme plus "valider" — il fait avancer vers
+     la facture (paiement), sans valider la collecte pour de vrai. La
+     validation réelle se fait désormais depuis la facture elle-même
+     (bouton "✅ Valider la facture", voir depValiderFactureFinale). */
   +     '<div style="margin-top:18px;">'
-  +       '<button class="btn btn-green" id="dv-btn-valider" onclick="depValiderConfirmer()">&#9989; Valider la collecte</button>'
+  +       '<button class="btn btn-green" id="dv-btn-valider" onclick="depValiderConfirmer()">&#10132; Continuer vers la facture</button>'
   +       '<button class="btn btn-gray" onclick="depValiderAnnuler()">&#10005; Annuler</button>'
   +     '</div>'
   +   '</div>'
@@ -2581,9 +2616,10 @@ window.depCalculerPaiement = function(c){
   return depCalculerPaiementGenerique(parseFloat(c.prix) || 0, c.versements);
 }
 
-// v1.19.22 : caisse livraison, séparée de celle du colis — voir toggle
-// livraison sur la facture (depToggleLivraisonFacture/depEnregistrerLivraison)
-// et les versements dédiés (depAjouterVersementLivraison).
+// v1.19.22 : caisse livraison, séparée de celle du colis — le toggle
+// livraison (Oui/Non/ville/prix) vit sur #s-dep-valider côté collecte
+// depuis la v1.19.23 (voir depValiderToggleLivraison/depValiderConfirmer),
+// et les versements dédiés (depAjouterVersementLivraison) sur la facture.
 function depCalculerPaiementLivraison(c){
   return depCalculerPaiementGenerique(c && c.livraisonDakar ? (parseFloat(c.prixLivraison) || 0) : 0, c && c.versementsLivraison);
 }
@@ -2629,12 +2665,39 @@ function depNumeroFacture(c, ctx){
   return num;
 }
 
+// v1.19.23 : trouve, pour un client de collecte donné, le camion qui le
+// porte et si sa collecte est déjà validée (trks[tk].validated, écrit par
+// confirmValider() — voir §6ter/§13 point 5 du récap projet). Renvoie null
+// si le client n'appartient à aucun camion de cette collecte (dépôt direct,
+// ou pas encore dispatché) : dans ce cas on ne bloque rien, comme avant.
+function _depTruckEtStatut(collecteId, clientId){
+  var d = (window.dispatchParCollecte || {})[collecteId];
+  var trucks = (d && d.trucks) || {};
+  for(var tk in trucks){
+    var t = trucks[tk];
+    if(t && Array.isArray(t.clients) && t.clients.indexOf(clientId) !== -1){
+      var valide = Array.isArray(t.validated) && t.validated.indexOf(clientId) !== -1;
+      return { tk: tk, valide: valide };
+    }
+  }
+  return null;
+}
+
 window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, viaScan, viaHistorique){
   var c = depot
     ? (window.depotClients || {})[clientId]
     : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
   if(!c){ toast('⚠️ Facture introuvable.'); return; }
   _depFactureCtx = { collecteId: collecteId || '', clientId: clientId, depot: !!depot };
+
+  // v1.19.23 : tant que la collecte n'est pas validée pour de vrai (voir
+  // depValiderFactureFinale), la facture ne sert qu'au paiement — le
+  // retour ramène systématiquement à l'écran de validation (l'étape
+  // d'avant), quelle que soit la provenance, plutôt que là où le
+  // paramètre retourCamion/viaScan/viaHistorique l'aurait envoyé.
+  var truckInfo = (!depot && collecteId) ? _depTruckEtStatut(collecteId, clientId) : null;
+  var gatePrint = !!(truckInfo && !truckInfo.valide);
+
   // v1.14.0 : le bouton retour s'adapte selon la provenance — depuis
   // l'écran Départs (direction), "← Départ" ramène au détail du départ
   // comme avant ; depuis le camion (validation ou menu "⋯", ouvert à
@@ -2645,7 +2708,10 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
   // "← Espaces" ramène à l'écran de choix d'espace à la place.
   var btnRetour = $('dep-fact-retour');
   if(btnRetour){
-    if(viaScan){
+    if(gatePrint){
+      btnRetour.textContent = '← Retour';
+      btnRetour.onclick = function(){ depOuvrirValidation(clientId, truckInfo.tk, c.name || '', 0); };
+    } else if(viaScan){
       btnRetour.textContent = '← Espaces';
       btnRetour.onclick = function(){ goTo('s-espaces'); };
     } else if(retourCamion){
@@ -2663,6 +2729,53 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
     }
   }
   depRenderFacture(c);
+  goTo('s-facture');
+};
+
+// v1.19.23 : validation réelle de la collecte, déplacée ici (avant : au
+// clic sur "Valider la collecte" de l'écran d'avant — voir §6ter/§13
+// point 5 du récap projet). Débloque l'impression des documents, jamais
+// avant. S'appuie sur le camion trouvé via _depTruckEtStatut et délègue,
+// comme avant, à confirmValider() d'origine pour tout le reste (dispatch/
+// camion/Activité).
+window.depValiderFactureFinale = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx || ctx.depot){ toast('⚠️ Rien à valider ici.'); return; }
+
+  var info = _depTruckEtStatut(ctx.collecteId, ctx.clientId);
+  if(!info){ toast('⚠️ Camion introuvable pour ce client.'); return; }
+
+  var fiche = (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+
+  if(!info.valide){
+    if(fiche){
+      var u = window.currentUser || {};
+      var histValid = Array.isArray(fiche.hist) ? fiche.hist : [];
+      histValid.push({ q: u.name || u.id || '', a: 'a valid&eacute; la collecte', ts: Date.now(), type: 'validation' });
+      fiche.hist = histValid;
+      _depEcrireClient({ collecteId: ctx.collecteId, clientId: ctx.clientId }, { hist: fiche.hist });
+    }
+    curValiderId = ctx.clientId;
+    curValiderTk = info.tk;
+    try{ confirmValider(); }catch(e){ console.error('departs: confirmValider (validation finale facture)', e); }
+    toast('✅ Collecte validée');
+  }
+
+  if(fiche) depRenderFacture(fiche); // débloque immédiatement les boutons si on revient sur s-facture
+  goTo('s-dep-impression');
+};
+
+// v1.19.23 : retour "Documents" → "Facture" — on ré-affiche la facture
+// (désormais débloquée) plutôt qu'un simple goTo sur un contenu resté
+// figé dans son état d'avant validation.
+window.depRetourFactureDepuisImpression = function(){
+  var ctx = _depFactureCtx;
+  if(ctx){
+    var c = ctx.depot
+      ? (window.depotClients || {})[ctx.clientId]
+      : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+    if(c) depRenderFacture(c);
+  }
   goTo('s-facture');
 };
 
@@ -3232,46 +3345,11 @@ function _depEcrireClient(ctx, champs){
   }
 }
 
-// v1.17.0 : "Modifier le prix" — seul point d'entrée pour changer le prix
-// dû une fois le client déjà créé (voir aussi remplirFiche/depOuvrirDepotForm
-// qui verrouillent le champ prix ailleurs). Trace l'ancien et le nouveau
-// montant dans l'historique (c.hist), lu par l'écran Suivi.
-window.depModifierPrix = function(){
-  var ctx = _depFactureCtx;
-  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
-  if(!c){ toast('⚠️ Client introuvable.'); return; }
-
-  var actuel = c.prixADefinir ? '' : String(depArrondi2(parseFloat(c.prix)||0));
-  var saisie = window.prompt('Nouveau prix du colis (€) :', actuel);
-  if(saisie === null) return; // annulé
-  saisie = String(saisie).trim().replace(',', '.');
-  if(!saisie){ toast('⚠️ Indiquez un montant, ou annulez.'); return; }
-  var val = parseFloat(saisie);
-  if(isNaN(val) || val < 0){ toast('⚠️ Montant invalide.'); return; }
-  val = depArrondi2(val);
-
-  var avantTxt = c.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(c.prix)||0) + ' €');
-  var apresTxt = val + ' €';
-  if(!c.prixADefinir && avantTxt === apresTxt){ toast('Le prix n\'a pas changé.'); return; }
-
-  var u = window.currentUser || {};
-  var hist = Array.isArray(c.hist) ? c.hist : [];
-  hist.push({ q: u.name || u.id || '', a: 'a modifié le prix : ' + avantTxt + ' → ' + apresTxt, ts: Date.now(), type: 'prix' });
-
-  c.prix = val;
-  c.prixADefinir = false;
-  c.hist = hist;
-
-  _depEcrireClient(ctx, { prix: val, prixADefinir: false, hist: hist });
-  if(!ctx.depot){ try{ sauvegarder(); }catch(e){} }
-
-  depActivite('&#128176;', 'a modifi&eacute; le prix de <strong>'+esc(c.name||'')+'</strong> : '+esc(avantTxt)+' &rarr; '+esc(apresTxt));
-  toast('✅ Prix mis à jour');
-  depRenderFacture(c);
-};
+// v1.19.23 : "Modifier le prix" (ex-window.depModifierPrix, seul point
+// d'entrée pour changer le prix depuis la facture) retiré — le prix ne se
+// modifie plus que côté collecte, sur #s-dep-valider (avant la facture,
+// voir depValiderConfirmer/depValiderModifierPrix), ou via "Modifier la
+// fiche" sinon (voir §6ter/§13 point 5 du récap projet).
 
 window.depAjouterVersement = function(){
   var ctx = _depFactureCtx;
@@ -3371,62 +3449,19 @@ window.depSupprimerVersement = function(idx){
 };
 
 /* ─────────────────────────────────────────────
-   10quater. LIVRAISON — toggle + caisse d'encaissement séparée (v1.19.22)
+   10quater. LIVRAISON — caisse d'encaissement séparée (v1.19.22)
    ─────────────────────────────────────────────
-   Le choix "livraison" (vers une autre ville que Dakar, où le container
-   arrive) est maintenant modifiable directement depuis la facture (avant,
-   uniquement à l'inscription ou via l'écran "Modifier la fiche") — les
-   clients à la ramasse changent parfois d'avis (retour d'Issyaka). Et,
-   comme la livraison est encaissée dans une caisse à part (jamais mélangée
-   à celle du colis, voir depCalculerPaiementLivraison), elle a désormais
-   son propre suivi PAYÉ/RESTE et son propre "Ajouter un versement" —
-   copie fidèle du mécanisme du colis (depAjouterVersement/
-   depSupprimerVersement), juste sur c.versementsLivraison au lieu de
-   c.versements. ---- */
-
-window.depToggleLivraisonFacture = function(oui){
-  _depFactureLivraisonChoix = !!oui;
-  var bOui = $('dep-fact-liv-oui'), bNon = $('dep-fact-liv-non'), bloc = $('dep-fact-liv-bloc');
-  if(bOui) bOui.className = 'dep-st' + (oui ? ' on' : '');
-  if(bNon) bNon.className = 'dep-st' + (!oui ? ' on' : '');
-  if(bloc) bloc.style.display = oui ? 'block' : 'none';
-};
-
-window.depEnregistrerLivraison = function(){
-  var ctx = _depFactureCtx;
-  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
-  if(!c){ toast('⚠️ Client introuvable.'); return; }
-
-  var oui = !!_depFactureLivraisonChoix;
-  var adresse = oui ? (($('dep-fact-liv-adresse')||{}).value || '').trim() : '';
-  var prix = oui ? (parseFloat(($('dep-fact-liv-prix')||{}).value) || 0) : 0;
-  if(oui && !adresse){ toast('⚠️ Indiquez la ville / adresse de livraison.'); return; }
-
-  var avant = { oui: !!c.livraisonDakar, adresse: c.livraisonAdresse || '', prix: parseFloat(c.prixLivraison) || 0 };
-  if(avant.oui === oui && avant.adresse === adresse && avant.prix === prix){ toast('Rien n\'a changé.'); return; }
-
-  var u = window.currentUser || {};
-  var hist = Array.isArray(c.hist) ? c.hist : [];
-  var texte = oui
-    ? ('a activ&eacute; la livraison (' + esc(adresse) + ', ' + prix + ' &euro;)')
-    : 'a annul&eacute; la livraison';
-  hist.push({ q: u.name || u.id || '', a: texte, ts: Date.now(), type: 'livraison' });
-
-  c.livraisonDakar = oui;
-  c.livraisonAdresse = adresse;
-  c.prixLivraison = prix;
-  c.hist = hist;
-
-  _depEcrireClient(ctx, { livraisonDakar: oui, livraisonAdresse: adresse, prixLivraison: prix, hist: hist });
-  if(!ctx.depot){ try{ sauvegarder(); }catch(e){} }
-
-  depActivite('&#128666;', (oui ? 'a activ&eacute; ' : 'a annul&eacute; ') + 'la livraison de <strong>'+esc(c.name||'')+'</strong>');
-  toast('✅ Livraison mise à jour');
-  depRenderFacture(c);
-};
+   Comme la livraison est encaissée dans une caisse à part (jamais mélangée
+   à celle du colis, voir depCalculerPaiementLivraison), elle a son propre
+   suivi PAYÉ/RESTE et son propre "Ajouter un versement" — copie fidèle du
+   mécanisme du colis (depAjouterVersement/depSupprimerVersement), juste
+   sur c.versementsLivraison au lieu de c.versements.
+   v1.19.23 : le toggle Oui/Non + ville/adresse + prix (ex-
+   depToggleLivraisonFacture/depEnregistrerLivraison) a été retiré d'ici —
+   il vit désormais sur #s-dep-valider côté collecte (voir
+   depValiderToggleLivraison/depValiderConfirmer), avant la facture, qui
+   ne fait plus qu'afficher/encaisser. Voir §6ter/§13 point 5 du récap
+   projet. ---- */
 
 window.depVersDeviseLivraison = function(d){
   _depVersDeviseLivraison = d;
@@ -3542,8 +3577,16 @@ function depRenderFacture(c){
   var prixIndefini = !!c.prixADefinir;
   var st = prixIndefini ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : STATUTS_PAIEMENT[pay.statut];
   var prixLivraison = parseFloat(c.prixLivraison) || 0;
-  var totalAvecLivraison = pay.total + (c.livraisonDakar ? prixLivraison : 0);
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+
+  // v1.19.23 : côté collecte, tant que la collecte n'est pas validée pour
+  // de vrai (voir depValiderFactureFinale/_depTruckEtStatut), l'impression
+  // des documents reste bloquée — remplacée par le bouton "Valider la
+  // facture" tout en bas. Pas de blocage côté dépôt direct (pas de notion
+  // de validation camion pour ces clients).
+  var ctxFact = _depFactureCtx || {};
+  var truckInfoFact = (!ctxFact.depot && ctxFact.collecteId) ? _depTruckEtStatut(ctxFact.collecteId, ctxFact.clientId) : null;
+  var gatePrint = !!(truckInfoFact && !truckInfoFact.valide);
 
   var kv = function(lab, val){
     return '<div class="dep-fc-champ"><div class="dep-fc-lab">'+lab+'</div><div class="dep-fc-val">'+val+'</div></div>';
@@ -3568,37 +3611,21 @@ function depRenderFacture(c){
     h += kv('Destinataire', esc(c.destinataireNom || '—') + (c.destinataireTel ? (' &middot; ' + esc(c.destinataireTel)) : ''));
   }
 
-  // v1.19.22 : livraison modifiable directement ici (avant, uniquement à
-  // l'inscription ou via "Modifier la fiche") — un client à la ramasse
-  // change parfois d'avis (retour d'Issyaka). "Livraison" tout court, pas
-  // "à Dakar" : le container arrive à Dakar, la livraison c'est vers une
-  // AUTRE ville (voir _depFactureLivraisonChoix, réinitialisé à chaque
-  // affichage sur l'état réel de la fiche).
-  _depFactureLivraisonChoix = !!c.livraisonDakar;
-  h += '<div class="dep-sec">Livraison</div>'
-    + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
-    +   '<button type="button" class="dep-st' + (c.livraisonDakar ? '' : ' on') + '" id="dep-fact-liv-non" onclick="depToggleLivraisonFacture(false)" style="flex:1;">Non &middot; retrait sur place</button>'
-    +   '<button type="button" class="dep-st' + (c.livraisonDakar ? ' on' : '') + '" id="dep-fact-liv-oui" onclick="depToggleLivraisonFacture(true)" style="flex:1;">Oui &middot; livraison</button>'
-    + '</div>'
-    + '<div id="dep-fact-liv-bloc" style="display:' + (c.livraisonDakar ? 'block' : 'none') + ';">'
-    +   '<div class="fg"><label class="fl">Ville / adresse de livraison</label><input class="fi" id="dep-fact-liv-adresse" value="' + esc(c.livraisonAdresse || '') + '" placeholder="Thi&egrave;s, quartier..."></div>'
-    +   '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label><input class="fi" id="dep-fact-liv-prix" type="number" min="0" value="' + (c.prixLivraison ? esc(String(c.prixLivraison)) : '') + '" placeholder="0"></div>'
-    + '</div>'
-    + '<button type="button" class="dep-cli-btn" style="margin-bottom:16px;" onclick="depEnregistrerLivraison()">&#128190; Enregistrer la livraison</button>';
+  // v1.19.23 : la livraison (Oui/Non + ville/adresse + prix) ne se
+  // modifie plus ici — voir #s-dep-valider (côté collecte, avant la
+  // facture) ou "Modifier la fiche" (côté dépôt direct). La facture ne
+  // fait plus qu'afficher/encaisser, voir le bloc "Total livraison"
+  // ci-dessous et la caisse séparée plus bas.
 
   // Le total colis est mis en avant (c'est ce qui compte pour la
-  // compta DCT) ; la livraison reste visible mais secondaire. v1.17.0 :
-  // "à définir sur place" tant que personne n'a fixé de prix, avec le
-  // bouton dédié pour le faire (seul point d'entrée, voir depModifierPrix).
+  // compta DCT). v1.17.0 : "à définir sur place" tant que personne n'a
+  // fixé de prix (le prix se modifie désormais uniquement en amont —
+  // #s-dep-valider côté collecte, "Modifier la fiche" sinon).
   h += '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;margin:16px 0;text-align:center;">'
     + '<div style="font-size:11px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;">Total colis</div>'
     + (prixIndefini
         ? '<div style="font-size:19px;font-weight:800;color:#856404;margin:6px 0;">&#128337; &Agrave; d&eacute;finir sur place</div>'
         : '<div style="font-size:28px;font-weight:800;color:var(--text);margin:4px 0;">' + pay.total + ' &euro;</div>')
-    + (c.livraisonDakar
-        ? '<div style="font-size:11.5px;color:var(--text3);margin-top:6px;">+ ' + prixLivraison + ' &euro; livraison &middot; total avec livraison : ' + totalAvecLivraison + ' &euro;</div>'
-        : '')
-    + '<button type="button" class="dep-cli-btn" style="margin-top:10px;" onclick="depModifierPrix()">&#9999;&#65039; Modifier le prix</button>'
     + '</div>';
 
   h += '<div style="display:flex;gap:10px;margin-bottom:16px;">'
@@ -3648,10 +3675,21 @@ function depRenderFacture(c){
   // "Ajouter un versement" (voir depCalculerPaiementLivraison /
   // depAjouterVersementLivraison). N'apparaît que si la livraison est
   // active pour ce client — pas de bloc vide inutile sinon.
+  // v1.19.23 : regroupée dans un encart bleu distinct (avant : prix
+  // livraison déjà mentionné en double dans le bloc colis ci-dessus,
+  // retour de Cobey — "ça fait trop d'information, je vois la livraison
+  // en doublon"). Même code couleur pour le bouton de versement, afin
+  // qu'on ne confonde jamais les deux caisses au clic.
   if(c.livraisonDakar){
     var payLiv = depCalculerPaiementLivraison(c);
-    h += '<div class="dep-sec">Livraison &mdash; caisse s&eacute;par&eacute;e</div>'
-      + '<div style="display:flex;gap:10px;margin-bottom:16px;">'
+    h += '<div style="border:2px solid #1a73c7;background:#EAF2FB;border-radius:var(--radius);padding:14px 14px 4px;margin:20px 0 16px;">'
+      + '<div style="font-size:11px;color:#1a4971;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">&#128666; Livraison &mdash; caisse s&eacute;par&eacute;e</div>'
+      + '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;text-align:center;">'
+        + '<div style="font-size:11px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;">Total livraison</div>'
+        + '<div style="font-size:22px;font-weight:800;color:var(--text);margin:4px 0;">' + prixLivraison + ' &euro;</div>'
+        + (c.livraisonAdresse ? '<div style="font-size:12px;color:var(--text3);margin-top:2px;">' + esc(c.livraisonAdresse) + '</div>' : '')
+      + '</div>'
+      + '<div style="display:flex;gap:10px;margin-bottom:14px;">'
       + '<div style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px;text-align:center;">'
         + '<div style="font-size:17px;font-weight:800;color:#006b2d;">' + payLiv.paye + ' &euro;</div>'
         + '<div style="font-size:10px;color:var(--text3);font-weight:700;">PAY&Eacute; (livraison)</div></div>'
@@ -3701,7 +3739,8 @@ function depRenderFacture(c){
       +   '<button type="button" class="dep-st" id="dep-vers-liv-meth-esp" onclick="depVersMethodeLivraison(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
       +   '<button type="button" class="dep-st" id="dep-vers-liv-meth-vir" onclick="depVersMethodeLivraison(\'virement\')" style="flex:1;">Virement</button>'
       + '</div>'
-      + '<button class="btn btn-green" onclick="depAjouterVersementLivraison()">&#9989; Enregistrer le versement (livraison)</button>';
+      + '<button class="btn" style="background:#1a73c7;color:#fff;margin-bottom:14px;" onclick="depAjouterVersementLivraison()">&#9989; Enregistrer le versement (livraison)</button>'
+      + '</div>'; // fin de l'encart bleu "Livraison — caisse séparée"
   }
 
   if(c.note){
@@ -3731,12 +3770,25 @@ function depRenderFacture(c){
   // imprimable / PDF, partageable par WhatsApp) est désormais accessible
   // ici, une fois connecté — plus via un lien public (voir "petit
   // changement" de Cobey : le QR est réservé aux employés DCT).
-  h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
-    +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
-    // v1.19.21 : étiquette(s) colis — voir depOuvrirEtiquette.
-    +   '<button class="btn" style="background:#111;color:#fff;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
-    +   '<button class="btn" style="background:#25D366;color:#fff;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
-    + '</div>';
+  // v1.19.23 : côté collecte, ces boutons restent cachés tant que la
+  // collecte n'est pas validée pour de vrai (voir gatePrint ci-dessus et
+  // depValiderFactureFinale) — remplacés par un seul bouton qui valide
+  // puis débloque l'impression (écran "Documents"). Retour de Cobey :
+  // "on devrait valider la facture avant de pouvoir imprimer les
+  // documents [...] les paiements ne sont pas forcément faits".
+  if(gatePrint){
+    h += '<div style="margin-top:18px;">'
+      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">La collecte n&rsquo;est pas encore valid&eacute;e &mdash; l&rsquo;impression des documents sera disponible juste apr&egrave;s.</div>'
+      + '<button class="btn btn-green" onclick="depValiderFactureFinale()">&#9989; Valider la facture</button>'
+      + '</div>';
+  } else {
+    h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
+      +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
+      // v1.19.21 : étiquette(s) colis — voir depOuvrirEtiquette.
+      +   '<button class="btn" style="background:#111;color:#fff;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
+      +   '<button class="btn" style="background:#25D366;color:#fff;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
+      + '</div>';
+  }
 
   // QR code — lien direct vers cette facture précise, réservé aux
   // employés DCT (il faut être connecté pour qu'il fonctionne : un
@@ -5048,14 +5100,22 @@ function _depTracerModifsFacture(fiche, avant){
 }
 
 /* ─────────────────────────────────────────────
-   14bis. VALIDATION DE LA COLLECTE D'UN CLIENT (écran camion/dispatch)
+   14bis. ÉCRAN D'AVANT LA FACTURE — COLIS/PRIX/PHOTO/DESTINATAIRE/
+   LIVRAISON/DÉPART D'UN CLIENT (écran camion/dispatch)
    Remplace la simple modale de confirmation d'origine (askValider /
    modal-valider) par un écran complet : colis, prix (verrouillé), photo
-   du colis (obligatoire), destinataire, départ (container) — obligatoire,
-   ouvert à tous les collaborateurs. Le paiement (v1.18.0) ne se fait plus
-   ici : il se fait juste après, sur la facture ("Ajouter un versement").
-   Une fois validé, on délègue à confirmValider() d'origine, telle
-   quelle, pour tout le reste (dispatch, camion, fil d'Activité).
+   du colis (obligatoire), destinataire, livraison, départ (container) —
+   obligatoire, ouvert à tous les collaborateurs. Le paiement (v1.18.0) ne
+   se fait pas ici : il se fait juste après, sur la facture ("Ajouter un
+   versement").
+   v1.19.23 : ce n'est plus ici que la collecte est validée pour de vrai —
+   le bouton du bas ("Continuer vers la facture") enregistre juste ces
+   champs et fait avancer. La validation réelle (trks[tk].validated, et
+   donc le déblocage de l'impression des documents) se fait maintenant
+   depuis la facture elle-même, voir depValiderFactureFinale plus haut —
+   qui délègue, comme avant, à confirmValider() d'origine pour tout le
+   reste (dispatch, camion, fil d'Activité). Voir §6ter/§13 point 5 du
+   récap projet pour le contexte de ce changement.
    ───────────────────────────────────────────── */
 
 window.depOuvrirValidation = function(id, tk, name, prix){
@@ -5079,6 +5139,17 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   var dn = $('dv-dest-nom'); if(dn) dn.value = fiche.destinataireNom || '';
   var dt = $('dv-dest-tel'); if(dt) dt.value = fiche.destinataireTel || '';
 
+  // v1.19.23 : livraison (Oui/Non + ville/adresse + prix) — reprend l'état
+  // déjà déclaré (inscription, ou une validation/passage précédent),
+  // pré-rempli exactement comme à l'inscription (voir depValiderConfirmer).
+  var livOui = !!fiche.livraisonDakar;
+  var dvLivNon = $('dv-liv-non'), dvLivOui = $('dv-liv-oui'), dvLivBloc = $('dv-liv-bloc');
+  if(dvLivNon) dvLivNon.className = 'dep-st' + (livOui ? '' : ' on');
+  if(dvLivOui) dvLivOui.className = 'dep-st' + (livOui ? ' on' : '');
+  if(dvLivBloc) dvLivBloc.style.display = livOui ? 'block' : 'none';
+  var dvLivAdr = $('dv-liv-adresse'); if(dvLivAdr) dvLivAdr.value = fiche.livraisonAdresse || '';
+  var dvLivPrix = $('dv-liv-prix'); if(dvLivPrix) dvLivPrix.value = fiche.prixLivraison || '';
+
   // v1.19.16 : ne proposer que les containers du pays déclaré à l'inscription
   // de ce client (Sénégal par défaut pour une fiche créée avant ce chantier).
   depValiderRemplirDepart(fiche.departId || '', depPaysClient(fiche));
@@ -5096,6 +5167,16 @@ window.depValiderModifierPrix = function(){
   if(disp) disp.style.display = 'none';
   if(btn) btn.style.display = 'none';
   if(inp){ inp.style.display = 'block'; inp.focus(); }
+};
+
+// v1.19.23 : toggle Oui/Non de la livraison, sur l'écran de validation
+// (voir depOuvrirValidation pour le pré-remplissage, depValiderConfirmer
+// pour l'enregistrement — c'est là, pas ici, que ça écrit en base).
+window.depValiderToggleLivraison = function(oui){
+  var bNon = $('dv-liv-non'), bOui = $('dv-liv-oui'), bloc = $('dv-liv-bloc');
+  if(bNon) bNon.className = 'dep-st' + (oui ? '' : ' on');
+  if(bOui) bOui.className = 'dep-st' + (oui ? ' on' : '');
+  if(bloc) bloc.style.display = oui ? 'block' : 'none';
 };
 
 window.depValiderPrixChange = function(){
@@ -5169,6 +5250,11 @@ window.depRetirerPhotoValider = function(){
   _depRenderPhotosGrille('dv');
 };
 
+// v1.19.23 : ce bouton ne valide plus la collecte pour de vrai — il
+// enregistre colis/prix/destinataire/livraison/photo et fait avancer vers
+// la facture (paiement). La validation réelle (trks[tk].validated) se
+// fait désormais depuis la facture, voir depValiderFactureFinale — voir
+// §6ter/§13 point 5 du récap projet.
 window.depValiderConfirmer = function(){
   var ctx = _depValiderCtx;
   if(!ctx){ toast('⚠️ Rien à valider.'); return; }
@@ -5178,10 +5264,18 @@ window.depValiderConfirmer = function(){
 
   var selDepart = $('dv-depart');
   var departId = selDepart ? selDepart.value : '';
-  if(!departId){ toast('⚠️ Choisissez un départ avant de valider.'); return; }
+  if(!departId){ toast('⚠️ Choisissez un départ avant de continuer.'); return; }
 
   var photosCtx = ctx.photos || [];
-  if(!photosCtx.length){ toast('⚠️ Ajoutez au moins une photo du colis avant de valider.'); return; }
+  if(!photosCtx.length){ toast('⚠️ Ajoutez au moins une photo du colis avant de continuer.'); return; }
+
+  // v1.19.23 : livraison — même règle que sur l'ancien toggle de la
+  // facture (voir depEnregistrerLivraison, retiré) : adresse obligatoire
+  // si "Oui", tout remis à zéro si "Non".
+  var livOui = !!($('dv-liv-oui') && $('dv-liv-oui').className.indexOf(' on') !== -1);
+  var livAdresse = livOui ? (($('dv-liv-adresse')||{}).value || '').trim() : '';
+  var livPrix = livOui ? (parseFloat(($('dv-liv-prix')||{}).value) || 0) : 0;
+  if(livOui && !livAdresse){ toast('⚠️ Indiquez la ville / adresse de livraison.'); return; }
 
   var avant = {};
   try{ avant = JSON.parse(JSON.stringify(fiche)); }catch(e){}
@@ -5196,6 +5290,10 @@ window.depValiderConfirmer = function(){
 
   fiche.destinataireNom = (($('dv-dest-nom')||{}).value || '').trim();
   fiche.destinataireTel = (($('dv-dest-tel')||{}).value || '').trim();
+
+  fiche.livraisonDakar = livOui;
+  fiche.livraisonAdresse = livAdresse;
+  fiche.prixLivraison = livPrix;
 
   var u = window.currentUser || {};
   if(departId !== (avant.departId || '')){
@@ -5215,13 +5313,10 @@ window.depValiderConfirmer = function(){
   // suit ne fait qu'écrire sur Firebase (Activité, photo, sauvegarde),
   // ce qui peut redéclencher la synchronisation temps réel et détacher
   // cette référence locale — sans risque puisque tout est déjà posé.
+  // (Trace prix/colis/destinataire/livraison — la trace "a validé la
+  // collecte" elle-même s'ajoute désormais plus tard, voir
+  // depValiderFactureFinale.)
   _depTracerModifsFacture(fiche, avant);
-
-  // v1.18.0 : la validation elle-même est toujours tracée dans le Suivi,
-  // qu'il y ait ou non d'autres champs modifiés en même temps.
-  var histValid = Array.isArray(fiche.hist) ? fiche.hist : [];
-  histValid.push({ q: u.name || u.id || '', a: 'a valid&eacute; la collecte', ts: Date.now(), type: 'validation' });
-  fiche.hist = histValid;
 
   if(photosCtx.length && window.db && window.firebaseReady){
     var mapPhotosCtx = {};
@@ -5230,13 +5325,16 @@ window.depValiderConfirmer = function(){
   }
 
   // v1.18.0 : écriture Firebase immédiate et ciblée, même logique que pour
-  // les versements (v1.16.4) — la validation ne doit plus dépendre du seul
-  // sauvegarder() débounced (800ms) qui pouvait se faire écraser par la
-  // resynchronisation temps réel avant d'avoir vraiment persisté.
+  // les versements (v1.16.4) — ne dépend pas du seul sauvegarder()
+  // débounced (800ms) qui pouvait se faire écraser par la resynchronisation
+  // temps réel avant d'avoir vraiment persisté.
   _depEcrireClient({ collecteId: ctx.collecteId, clientId: ctx.clientId }, {
     colis: fiche.colis,
     destinataireNom: fiche.destinataireNom,
     destinataireTel: fiche.destinataireTel,
+    livraisonDakar: !!fiche.livraisonDakar,
+    livraisonAdresse: fiche.livraisonAdresse || '',
+    prixLivraison: fiche.prixLivraison || 0,
     departId: fiche.departId,
     historiqueDepart: fiche.historiqueDepart || null,
     prix: fiche.prix,
@@ -5247,20 +5345,16 @@ window.depValiderConfirmer = function(){
 
   try{ sauvegarder(); }catch(e){}
 
-  // On délègue à la logique d'origine, inchangée, pour le dispatch/
-  // camion/Activité : elle lit ces deux globales.
-  curValiderId = ctx.clientId;
-  curValiderTk = ctx.tk;
-  try{ confirmValider(); }catch(e){ console.error('departs: confirmValider original', e); }
-
-  toast('✅ Collecte validée');
-  // v1.14.0 : on atterrit directement sur la facture du client (au lieu
-  // de l'écran camion) — pour la confirmer et l'envoyer au client tout
-  // de suite, sans repasser par le menu "⋯". "← Camion" en cas de retour.
+  // v1.19.23 : plus d'appel à confirmValider() ici — la collecte n'est pas
+  // encore validée pour de vrai, seulement "en brouillon" (voir en-tête de
+  // section). On atterrit directement sur la facture du client (comme
+  // depuis la v1.14.0) pour le paiement ; le bouton retour y ramène
+  // automatiquement à cet écran tant que ce n'est pas validé (voir
+  // depOuvrirFacture/_depTruckEtStatut).
   try{
     depOuvrirFacture(ctx.collecteId, ctx.clientId, false, true);
   }catch(e){
-    console.error('departs: ouverture facture après validation', e);
+    console.error('departs: ouverture facture après continuation', e);
     goTo('s-camion');
   }
   _depValiderCtx = null;
