@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.12';
+var DEP_VERSION = 'v1.19.13';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -736,7 +736,7 @@ function injecterEcrans(){
   + '<div class="screen" id="s-stats">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
-  +     '<div class="h-title">Statistiques</div>'
+  +     '<div class="h-title" id="dep-stats-titre">Statistiques</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
@@ -1582,70 +1582,137 @@ function _depStatsCalculer(periode){
   return liste;
 }
 
-// v1.19.12 : filtre de période du classement — 'tout' (par défaut),
-// 'annee' (année en cours) ou 'mois' (mois en cours).
-var _depStatsPeriodeType = 'tout';
+// v1.19.13 : navigation en dossiers du classement — Tout > Année > Mois,
+// même logique que l'Archivage. Le classement (le "détail") s'affiche à
+// chaque niveau pour la période choisie ; les dossiers pour affiner
+// restent visibles juste en dessous, pas besoin d'un écran à part.
+var _depStatsNav = { annee: null, mois: null };
 
-function _depStatsPeriodeActuelle(){
-  var maintenant = new Date();
-  if(_depStatsPeriodeType === 'mois') return { annee: maintenant.getFullYear(), mois: maintenant.getMonth() };
-  if(_depStatsPeriodeType === 'annee') return { annee: maintenant.getFullYear() };
-  return null;
+function _depStatsAnneesDisponibles(){
+  var annees = {};
+  (window.collectes || []).forEach(function(c){
+    var d = _depParseDateSure(c && c.date);
+    if(d && !isNaN(d.getTime())) annees[d.getFullYear()] = true;
+  });
+  Object.keys(window.depotClients || {}).forEach(function(id){
+    var c = window.depotClients[id];
+    if(c && c.creeLe){
+      var d = new Date(c.creeLe);
+      if(!isNaN(d.getTime())) annees[d.getFullYear()] = true;
+    }
+  });
+  return Object.keys(annees).map(Number).sort(function(a,b){ return b-a; });
+}
+
+function _depStatsMoisDisponibles(annee){
+  var mois = {};
+  (window.collectes || []).forEach(function(c){
+    var d = _depParseDateSure(c && c.date);
+    if(d && !isNaN(d.getTime()) && d.getFullYear() === annee) mois[d.getMonth()] = true;
+  });
+  Object.keys(window.depotClients || {}).forEach(function(id){
+    var c = window.depotClients[id];
+    if(c && c.creeLe){
+      var d = new Date(c.creeLe);
+      if(!isNaN(d.getTime()) && d.getFullYear() === annee) mois[d.getMonth()] = true;
+    }
+  });
+  return Object.keys(mois).map(Number).sort(function(a,b){ return a-b; });
+}
+
+function _depStatsMajBoutonRetour(){
+  var btn = document.querySelector('#s-stats .btn-back');
+  if(!btn) return;
+  if(_depStatsNav.mois !== null){
+    btn.textContent = '← ' + _depStatsNav.annee;
+    btn.onclick = function(){ _depStatsNav.mois = null; depRenderStats(); };
+  } else if(_depStatsNav.annee !== null){
+    btn.textContent = '← Tout';
+    btn.onclick = function(){ _depStatsNav = { annee: null, mois: null }; depRenderStats(); };
+  } else {
+    btn.textContent = '← Espaces';
+    btn.onclick = function(){ goTo('s-espaces'); depRenderEspaces(); };
+  }
 }
 
 window.depOuvrirEspaceStats = function(){
-  _depStatsPeriodeType = 'tout';
+  _depStatsNav = { annee: null, mois: null };
   goTo('s-stats');
   depRenderStats();
 };
 
-window.depStatsChoisirPeriode = function(type){
-  _depStatsPeriodeType = type;
+window.depStatsOuvrirAnnee = function(annee){
+  _depStatsNav = { annee: annee, mois: null };
+  depRenderStats();
+};
+window.depStatsOuvrirMois = function(mois){
+  _depStatsNav.mois = mois;
   depRenderStats();
 };
 
 window.depRenderStats = function(){
   var box = $('dep-stats-content');
   if(!box) return;
-  var liste = _depStatsCalculer(_depStatsPeriodeActuelle());
 
-  var options = [
-    { type: 'tout',  libelle: 'Tout' },
-    { type: 'annee', libelle: 'Cette ann&eacute;e' },
-    { type: 'mois',  libelle: 'Ce mois' }
-  ];
-  var toolbar = '<div style="display:flex;gap:8px;margin-bottom:14px;">'
-    + options.map(function(o){
-        var actif = (_depStatsPeriodeType === o.type);
-        return '<button type="button" class="dep-cli-btn" '
-          + (actif ? 'style="background:#B8860B;border-color:#96690a;color:#fff;" ' : '')
-          + 'onclick="depStatsChoisirPeriode(\''+o.type+'\')">'+o.libelle+'</button>';
-      }).join('')
-    + '</div>';
+  var periode = (_depStatsNav.annee === null) ? null
+    : { annee: _depStatsNav.annee, mois: (_depStatsNav.mois === null ? undefined : _depStatsNav.mois) };
+  var liste = _depStatsCalculer(periode);
+
+  var titrePeriode = 'Tout l\'historique';
+  if(_depStatsNav.annee !== null){
+    titrePeriode = (_depStatsNav.mois !== null)
+      ? (DEP_MOIS_NOMS[_depStatsNav.mois] + ' ' + _depStatsNav.annee)
+      : ('Ann&eacute;e ' + _depStatsNav.annee);
+  }
+  var h = '<div style="font-size:12.5px;color:var(--text3);font-weight:700;margin-bottom:12px;">'+titrePeriode+'</div>';
 
   if(!liste.length){
-    box.innerHTML = toolbar + '<div class="dep-vide" style="padding:20px 16px;">Aucune donn&eacute;e pour cette p&eacute;riode.</div>';
-    return;
+    h += '<div class="dep-vide" style="padding:16px;margin-bottom:14px;">Aucune donn&eacute;e pour cette p&eacute;riode.</div>';
+  } else {
+    var medailles = ['&#129351;','&#129352;','&#129353;'];
+    liste.forEach(function(s, i){
+      var medaille = medailles[i] || ('#'+(i+1));
+      h += '<div class="dep-card" style="border-left-color:#B8860B;">'
+        +   '<div class="dep-card-top">'
+        +     '<div class="dep-nom">'+medaille+' '+esc(s.nom)+'</div>'
+        +   '</div>'
+        +   '<div class="dep-meta">'
+        +     '<span>&#128100; <b>'+s.nbClients+'</b> client'+(s.nbClients>1?'s':'')+' inscrit'+(s.nbClients>1?'s':'')+'</span>'
+        +     '<span>&#128176; <b>'+s.montantApporte+'</b> &euro; apport&eacute;s</span>'
+        +     '<span>&#128179; <b>'+s.montantEncaisse+'</b> &euro; encaiss&eacute;s</span>'
+        +     '<span>&#128230; <b>'+s.nbValidations+'</b> colis valid&eacute;'+(s.nbValidations>1?'s':'')+'</span>'
+        +     '<span>&#128197; <b>'+s.nbCollectes+'</b> jour'+(s.nbCollectes>1?'s':'')+' de collecte</span>'
+        +     '<span>&#9203; <b>'+_depFormatDuree(s.dureeTourneeMoyenneMs)+'</b> tourn&eacute;e moyenne</span>'
+        +   '</div>'
+        + '</div>';
+    });
   }
-  var medailles = ['&#129351;','&#129352;','&#129353;'];
-  var h = '';
-  liste.forEach(function(s, i){
-    var medaille = medailles[i] || ('#'+(i+1));
-    h += '<div class="dep-card" style="border-left-color:#B8860B;">'
-      +   '<div class="dep-card-top">'
-      +     '<div class="dep-nom">'+medaille+' '+esc(s.nom)+'</div>'
-      +   '</div>'
-      +   '<div class="dep-meta">'
-      +     '<span>&#128100; <b>'+s.nbClients+'</b> client'+(s.nbClients>1?'s':'')+' inscrit'+(s.nbClients>1?'s':'')+'</span>'
-      +     '<span>&#128176; <b>'+s.montantApporte+'</b> &euro; apport&eacute;s</span>'
-      +     '<span>&#128179; <b>'+s.montantEncaisse+'</b> &euro; encaiss&eacute;s</span>'
-      +     '<span>&#128230; <b>'+s.nbValidations+'</b> colis valid&eacute;'+(s.nbValidations>1?'s':'')+'</span>'
-      +     '<span>&#128197; <b>'+s.nbCollectes+'</b> jour'+(s.nbCollectes>1?'s':'')+' de collecte</span>'
-      +     '<span>&#9203; <b>'+_depFormatDuree(s.dureeTourneeMoyenneMs)+'</b> tourn&eacute;e moyenne</span>'
-      +   '</div>'
-      + '</div>';
-  });
-  box.innerHTML = toolbar + h;
+
+  // Dossiers pour affiner la période, juste sous le classement.
+  if(_depStatsNav.annee === null){
+    var annees = _depStatsAnneesDisponibles();
+    if(annees.length){
+      h += '<div class="dep-sec">Voir par ann&eacute;e</div>';
+      annees.forEach(function(a){
+        h += '<div class="dep-card" style="border-left-color:#B8860B;cursor:pointer;" onclick="depStatsOuvrirAnnee('+a+')">'
+          +   '<div class="dep-card-top"><div class="dep-nom">&#128193; '+a+'</div></div>'
+          + '</div>';
+      });
+    }
+  } else if(_depStatsNav.mois === null){
+    var moisDispo = _depStatsMoisDisponibles(_depStatsNav.annee);
+    if(moisDispo.length){
+      h += '<div class="dep-sec">Voir par mois</div>';
+      moisDispo.forEach(function(m){
+        h += '<div class="dep-card" style="border-left-color:#B8860B;cursor:pointer;" onclick="depStatsOuvrirMois('+m+')">'
+          +   '<div class="dep-card-top"><div class="dep-nom">&#128193; '+DEP_MOIS_NOMS[m]+'</div></div>'
+          + '</div>';
+      });
+    }
+  }
+
+  box.innerHTML = h;
+  _depStatsMajBoutonRetour();
 };
 
 // v1.19.0 : carré ARCHIVAGE — consultation en lecture seule des départs
