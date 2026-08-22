@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.23';
+var DEP_VERSION = 'v1.19.25';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -2758,7 +2758,20 @@ window.depValiderFactureFinale = function(){
     curValiderId = ctx.clientId;
     curValiderTk = info.tk;
     try{ confirmValider(); }catch(e){ console.error('departs: confirmValider (validation finale facture)', e); }
-    toast('✅ Collecte validée');
+
+    // v1.19.25 : rappel (non bloquant) si un paiement manque encore à la
+    // validation — le client peut toujours régler plus tard, à la remise
+    // avec Modou, mais retour de Cobey : « il faut un rappel quand même ».
+    var resteMsg = '';
+    if(fiche){
+      var payC = depCalculerPaiement(fiche);
+      if(payC.reste > 0) resteMsg += payC.reste + ' € (colis)';
+      if(fiche.livraisonDakar){
+        var payLivC = depCalculerPaiementLivraison(fiche);
+        if(payLivC.reste > 0) resteMsg += (resteMsg ? ' + ' : '') + payLivC.reste + ' € (livraison)';
+      }
+    }
+    toast(resteMsg ? ('✅ Collecte validée — ⚠️ reste ' + resteMsg + ' à payer') : '✅ Collecte validée');
   }
 
   if(fiche) depRenderFacture(fiche); // débloque immédiatement les boutons si on revient sur s-facture
@@ -3670,6 +3683,28 @@ function depRenderFacture(c){
     h += '</div>';
   }
 
+  // v1.19.23-fix : "Ajouter un versement" (colis) remis juste sous son
+  // propre solde/détail, avant le bloc livraison — retour de Cobey
+  // ("le bouton de versement des colis se trouve en dessous de la caisse
+  // livraison, c'est pas logique"). Devise et méthode repartent à zéro à
+  // chaque affichage de la facture.
+  _depVersDevise = 'eur';
+  _depVersMethode = '';
+  h += '<div class="dep-sec">Ajouter un versement</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
+    +   '<button type="button" class="dep-st on" id="dep-vers-dev-eur" onclick="depVersDevise(\'eur\')" style="flex:1;">&euro; Euros</button>'
+    +   '<button type="button" class="dep-st" id="dep-vers-dev-fcfa" onclick="depVersDevise(\'fcfa\')" style="flex:1;">FCFA</button>'
+    + '</div>'
+    + '<div class="fg"><label class="fl" id="dep-fact-vers-lab">Montant (&euro;)</label>'
+    +   '<input class="fi" id="dep-fact-vers-montant" type="number" min="0" step="1" placeholder="0" '
+    +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;" oninput="depVersMajFcfa()"></div>'
+    + '<div id="dep-vers-fcfa-hint" style="display:none;font-size:11.5px;color:var(--text3);margin:-6px 0 10px;text-align:center;"></div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
+    +   '<button type="button" class="dep-st" id="dep-vers-meth-esp" onclick="depVersMethode(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
+    +   '<button type="button" class="dep-st" id="dep-vers-meth-vir" onclick="depVersMethode(\'virement\')" style="flex:1;">Virement</button>'
+    + '</div>'
+    + '<button class="btn btn-green" style="margin-bottom:6px;" onclick="depAjouterVersement()">&#9989; Enregistrer le versement</button>';
+
   // v1.19.22 : caisse livraison, séparée de celle du colis ci-dessus —
   // son propre PAYÉ/RESTE, son propre détail de versements, son propre
   // "Ajouter un versement" (voir depCalculerPaiementLivraison /
@@ -3747,25 +3782,6 @@ function depRenderFacture(c){
     h += kv('Note', esc(c.note));
   }
 
-  // Ajout d'un versement — ouvert à tous les collaborateurs connectés.
-  // Devise et méthode repartent à zéro à chaque affichage de la facture.
-  _depVersDevise = 'eur';
-  _depVersMethode = '';
-  h += '<div class="dep-sec">Ajouter un versement</div>'
-    + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
-    +   '<button type="button" class="dep-st on" id="dep-vers-dev-eur" onclick="depVersDevise(\'eur\')" style="flex:1;">&euro; Euros</button>'
-    +   '<button type="button" class="dep-st" id="dep-vers-dev-fcfa" onclick="depVersDevise(\'fcfa\')" style="flex:1;">FCFA</button>'
-    + '</div>'
-    + '<div class="fg"><label class="fl" id="dep-fact-vers-lab">Montant (&euro;)</label>'
-    +   '<input class="fi" id="dep-fact-vers-montant" type="number" min="0" step="1" placeholder="0" '
-    +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;" oninput="depVersMajFcfa()"></div>'
-    + '<div id="dep-vers-fcfa-hint" style="display:none;font-size:11.5px;color:var(--text3);margin:-6px 0 10px;text-align:center;"></div>'
-    + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
-    +   '<button type="button" class="dep-st" id="dep-vers-meth-esp" onclick="depVersMethode(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
-    +   '<button type="button" class="dep-st" id="dep-vers-meth-vir" onclick="depVersMethode(\'virement\')" style="flex:1;">Virement</button>'
-    + '</div>'
-    + '<button class="btn btn-green" onclick="depAjouterVersement()">&#9989; Enregistrer le versement</button>';
-
   // v1.16.0 : la facture "vrai document" (mise en page CARGO 360,
   // imprimable / PDF, partageable par WhatsApp) est désormais accessible
   // ici, une fois connecté — plus via un lien public (voir "petit
@@ -3796,11 +3812,17 @@ function depRenderFacture(c){
   // connexion, jamais la facture). La librairie est chargée à la
   // demande (voir depGenererQR) : le canvas reste vide un court instant
   // le temps du chargement, puis se remplit.
-  h += '<div class="dep-sec">QR code (r&eacute;serv&eacute; aux employ&eacute;s DCT)</div>'
-    + '<div style="text-align:center;padding:6px 0 10px;">'
-    +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
-    +   '<div style="font-size:10.5px;color:var(--text3);margin-top:8px;">&Agrave; scanner, une fois connect&eacute;, pour retrouver directement cette facture</div>'
-    + '</div>';
+  // v1.19.25 : caché tant que la collecte n'est pas validée — pas logique
+  // de pouvoir déjà scanner/retrouver une facture pas encore validée
+  // (retour de Cobey). depGenererQR ne fait rien si le canvas n'existe
+  // pas (voir plus bas), pas besoin de le conditionner en plus.
+  if(!gatePrint){
+    h += '<div class="dep-sec">QR code (r&eacute;serv&eacute; aux employ&eacute;s DCT)</div>'
+      + '<div style="text-align:center;padding:6px 0 10px;">'
+      +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
+      +   '<div style="font-size:10.5px;color:var(--text3);margin-top:8px;">&Agrave; scanner, une fois connect&eacute;, pour retrouver directement cette facture</div>'
+      + '</div>';
+  }
 
   var box = $('dep-fact-content');
   if(box) box.innerHTML = h;
