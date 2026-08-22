@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.21';
+var DEP_VERSION = 'v1.19.22';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -341,6 +341,10 @@ var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — d
 var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
 var _depVersMethode = '';       // 'especes' | 'virement' — méthode choisie sur le bouton "Ajouter un versement"
 var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bouton "Ajouter un versement"
+// v1.19.22 : caisse livraison, indépendante de celle du colis ci-dessus.
+var _depVersMethodeLivraison = '';
+var _depVersDeviseLivraison  = 'eur';
+var _depFactureLivraisonChoix = false; // état du toggle Oui/Non en cours d'édition sur la facture
 
 // v1.19.2 : navigation en dossiers cliquables de l'écran ARCHIVAGE
 // (Année > Mois > Semaine > liste). null = niveau non choisi.
@@ -1177,10 +1181,9 @@ function injecterEcrans(){
   +     '#s-etiquette .etq-partie-nom{font-size:12.5px;font-weight:700;color:#111;}'
   +     '#s-etiquette .etq-partie-detail{font-size:11px;color:#555;line-height:1.45;}'
   +     '#s-etiquette .etq-nature{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:6px;}'
-  +     '#s-etiquette .etq-refs{font-size:9.5px;color:#999;text-align:center;}'
   +     '#s-etiquette .etq-footer{background:#006b2d;color:#fff;text-align:center;font-size:9.5px;padding:8px;}'
   +     '@media print{'
-  +       '@page{size:A5;margin:8mm;}'
+  +       '@page{size:A5 portrait;margin:8mm;}'
   +       'html,body,.app{height:auto !important;overflow:visible !important;}'
   +       '.app{max-width:100% !important;}'
   +       '#s-etiquette{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
@@ -2562,13 +2565,27 @@ window.depDetail = function(id){
 // binaires du type 24.760000000000005 affichés tels quels à l'écran.
 function depArrondi2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
 
-window.depCalculerPaiement = function(c){
-  var total = parseFloat(c.prix) || 0;
-  var versements = Array.isArray(c.versements) ? c.versements : [];
+// v1.19.22 : calcul générique — réutilisé pour le colis (versements) ET,
+// séparément, pour la livraison (versementsLivraison), voir
+// depCalculerPaiementLivraison plus bas. Deux caisses distinctes, jamais
+// mélangées (demande de Cobey du 22/08/2026).
+function depCalculerPaiementGenerique(total, versementsArr){
+  var versements = Array.isArray(versementsArr) ? versementsArr : [];
   var paye = depArrondi2(versements.reduce(function(s, v){ return s + (parseFloat(v && v.montant) || 0); }, 0));
   var reste = depArrondi2(Math.max(0, total - paye));
   var statut = paye <= 0 ? 'non_paye' : (reste > 0 ? 'partiel' : 'paye');
   return { total: total, paye: paye, reste: reste, statut: statut };
+}
+
+window.depCalculerPaiement = function(c){
+  return depCalculerPaiementGenerique(parseFloat(c.prix) || 0, c.versements);
+}
+
+// v1.19.22 : caisse livraison, séparée de celle du colis — voir toggle
+// livraison sur la facture (depToggleLivraisonFacture/depEnregistrerLivraison)
+// et les versements dédiés (depAjouterVersementLivraison).
+function depCalculerPaiementLivraison(c){
+  return depCalculerPaiementGenerique(c && c.livraisonDakar ? (parseFloat(c.prixLivraison) || 0) : 0, c && c.versementsLivraison);
 }
 
 // v1.16.5 : numéro de facture lisible, lié au départ concerné plutôt qu'à
@@ -3078,6 +3095,25 @@ window.depGenererEtiquettes = function(){
   goTo('s-etiquette');
 };
 
+// v1.19.22 : téléphone/adresse partiellement masqués sur l'étiquette — elle
+// est collée sur un colis en transit, donc visible par n'importe qui, pas
+// seulement le staff DCT (contrairement à l'appli, où tout reste en clair).
+// Règle simple et prévisible : les 2 premiers et 2 derniers chiffres du
+// téléphone restent visibles ("06 ** ** ** 78"), et pour l'adresse seul le
+// premier mot (généralement le numéro) reste visible, le reste est masqué.
+function _depMasquerTel(tel){
+  var digits = String(tel||'').replace(/\D/g,'');
+  if(!digits) return '—';
+  if(digits.length < 5) return digits.charAt(0) + '***';
+  return digits.slice(0,2) + ' ** ** ** ' + digits.slice(-2);
+}
+function _depMasquerAdresse(adr){
+  var s = String(adr||'').trim();
+  if(!s) return '—';
+  var mots = s.split(/\s+/);
+  return mots[0] + (mots.length > 1 ? ' ***' : '');
+}
+
 function depRenderEtiquettes(c, ctx, n){
   var d = (window.departsData || {})[c.departId] || {};
   var pInfo = DEP_PAYS_DEST[depPaysDepart(d)] || {};
@@ -3087,12 +3123,16 @@ function depRenderEtiquettes(c, ctx, n){
     if(parts.length === 3) ddmmyy = parts[2] + parts[1] + parts[0].slice(2);
   }
   var refClient = depRefClientPour(_depCleContact(c));
-  var numeroFacture = depNumeroFacture(c, ctx);
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+
+  // Adresse expéditeur : reprend ce qui est déjà affiché sur la facture
+  // (voir depRenderFacturePublique), en une seule ligne, avant masquage.
+  var adresseExp = [c.adresse||'', ((c.cp||'')+' '+(c.ville||'')).trim()].filter(Boolean).join(', ');
+
   var destBlock = c.destinataireNom
     ? ('<div class="etq-partie-nom">'+esc(c.destinataireNom)+'</div>'
-       + '<div class="etq-partie-detail">'+esc(c.destinataireTel||'—')
-       + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(c.livraisonAdresse) : '')
+       + '<div class="etq-partie-detail">'+esc(_depMasquerTel(c.destinataireTel))
+       + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(_depMasquerAdresse(c.livraisonAdresse)) : '')
        + '</div>')
     : '<div class="etq-partie-nom">—</div>';
 
@@ -3116,7 +3156,9 @@ function depRenderEtiquettes(c, ctx, n){
       +         '<div>'
       +           '<div class="etq-partie-titre">EXP&Eacute;DITEUR</div>'
       +           '<div class="etq-partie-nom">'+esc(nom)+'</div>'
-      +           '<div class="etq-partie-detail">'+esc(c.tel||'—')+'</div>'
+      +           '<div class="etq-partie-detail">'+esc(_depMasquerTel(c.tel))
+      +             (adresseExp ? '<br>'+esc(_depMasquerAdresse(adresseExp)) : '')
+      +           '</div>'
       +         '</div>'
       +         '<div>'
       +           '<div class="etq-partie-titre">DESTINATAIRE</div>'
@@ -3124,7 +3166,6 @@ function depRenderEtiquettes(c, ctx, n){
       +         '</div>'
       +       '</div>'
       +       '<div class="etq-nature"><span>Nature</span><strong>'+esc(c.colis||'—')+'</strong></div>'
-      +       '<div class="etq-refs">R&eacute;f. client&nbsp;'+esc(refClient)+' &middot; Facture&nbsp;'+esc(numeroFacture)+'</div>'
       +     '</div>'
       +     '<div class="etq-footer">dakarcitytransport.com &middot; +33 6 69 18 30 01</div>'
       +   '</div>'
@@ -3329,6 +3370,173 @@ window.depSupprimerVersement = function(idx){
   else depRenderFacture(c);
 };
 
+/* ─────────────────────────────────────────────
+   10quater. LIVRAISON — toggle + caisse d'encaissement séparée (v1.19.22)
+   ─────────────────────────────────────────────
+   Le choix "livraison" (vers une autre ville que Dakar, où le container
+   arrive) est maintenant modifiable directement depuis la facture (avant,
+   uniquement à l'inscription ou via l'écran "Modifier la fiche") — les
+   clients à la ramasse changent parfois d'avis (retour d'Issyaka). Et,
+   comme la livraison est encaissée dans une caisse à part (jamais mélangée
+   à celle du colis, voir depCalculerPaiementLivraison), elle a désormais
+   son propre suivi PAYÉ/RESTE et son propre "Ajouter un versement" —
+   copie fidèle du mécanisme du colis (depAjouterVersement/
+   depSupprimerVersement), juste sur c.versementsLivraison au lieu de
+   c.versements. ---- */
+
+window.depToggleLivraisonFacture = function(oui){
+  _depFactureLivraisonChoix = !!oui;
+  var bOui = $('dep-fact-liv-oui'), bNon = $('dep-fact-liv-non'), bloc = $('dep-fact-liv-bloc');
+  if(bOui) bOui.className = 'dep-st' + (oui ? ' on' : '');
+  if(bNon) bNon.className = 'dep-st' + (!oui ? ' on' : '');
+  if(bloc) bloc.style.display = oui ? 'block' : 'none';
+};
+
+window.depEnregistrerLivraison = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  var oui = !!_depFactureLivraisonChoix;
+  var adresse = oui ? (($('dep-fact-liv-adresse')||{}).value || '').trim() : '';
+  var prix = oui ? (parseFloat(($('dep-fact-liv-prix')||{}).value) || 0) : 0;
+  if(oui && !adresse){ toast('⚠️ Indiquez la ville / adresse de livraison.'); return; }
+
+  var avant = { oui: !!c.livraisonDakar, adresse: c.livraisonAdresse || '', prix: parseFloat(c.prixLivraison) || 0 };
+  if(avant.oui === oui && avant.adresse === adresse && avant.prix === prix){ toast('Rien n\'a changé.'); return; }
+
+  var u = window.currentUser || {};
+  var hist = Array.isArray(c.hist) ? c.hist : [];
+  var texte = oui
+    ? ('a activ&eacute; la livraison (' + esc(adresse) + ', ' + prix + ' &euro;)')
+    : 'a annul&eacute; la livraison';
+  hist.push({ q: u.name || u.id || '', a: texte, ts: Date.now(), type: 'livraison' });
+
+  c.livraisonDakar = oui;
+  c.livraisonAdresse = adresse;
+  c.prixLivraison = prix;
+  c.hist = hist;
+
+  _depEcrireClient(ctx, { livraisonDakar: oui, livraisonAdresse: adresse, prixLivraison: prix, hist: hist });
+  if(!ctx.depot){ try{ sauvegarder(); }catch(e){} }
+
+  depActivite('&#128666;', (oui ? 'a activ&eacute; ' : 'a annul&eacute; ') + 'la livraison de <strong>'+esc(c.name||'')+'</strong>');
+  toast('✅ Livraison mise à jour');
+  depRenderFacture(c);
+};
+
+window.depVersDeviseLivraison = function(d){
+  _depVersDeviseLivraison = d;
+  var be = $('dep-vers-liv-dev-eur'), bf = $('dep-vers-liv-dev-fcfa');
+  if(be) be.className = 'dep-st' + (d === 'eur' ? ' on' : '');
+  if(bf) bf.className = 'dep-st' + (d === 'fcfa' ? ' on' : '');
+  var lab = $('dep-fact-vers-liv-lab');
+  if(lab) lab.textContent = d === 'fcfa' ? 'Montant (FCFA)' : 'Montant (€)';
+  depVersMajFcfaLivraison();
+};
+
+window.depVersMethodeLivraison = function(m){
+  _depVersMethodeLivraison = m;
+  var be = $('dep-vers-liv-meth-esp'), bv = $('dep-vers-liv-meth-vir');
+  if(be) be.className = 'dep-st' + (m === 'especes' ? ' on' : '');
+  if(bv) bv.className = 'dep-st' + (m === 'virement' ? ' on' : '');
+};
+
+window.depVersMajFcfaLivraison = function(){
+  var hint = $('dep-vers-liv-fcfa-hint');
+  if(!hint) return;
+  if(_depVersDeviseLivraison !== 'fcfa'){ hint.style.display = 'none'; return; }
+  var input = $('dep-fact-vers-liv-montant');
+  var montantFcfa = parseFloat(input && input.value) || 0;
+  if(montantFcfa <= 0){ hint.style.display = 'none'; return; }
+  var eur = Math.round((montantFcfa / TAUX_FCFA_EUR) * 100) / 100;
+  hint.style.display = 'block';
+  hint.textContent = '≈ ' + eur + ' € (taux fixe 1 € = ' + TAUX_FCFA_EUR + ' FCFA)';
+};
+
+window.depAjouterVersementLivraison = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
+
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  if(!c.livraisonDakar){ toast('⚠️ Aucune livraison active pour ce client.'); return; }
+
+  var input = $('dep-fact-vers-liv-montant');
+  var saisie = parseFloat(input && input.value) || 0;
+  if(saisie <= 0){ toast('⚠️ Indiquez un montant supérieur à 0.'); return; }
+  if(!_depVersMethodeLivraison){ toast('⚠️ Choisissez le mode de paiement.'); return; }
+
+  var devise = _depVersDeviseLivraison;
+  var montant = devise === 'fcfa' ? Math.round((saisie / TAUX_FCFA_EUR) * 100) / 100 : saisie;
+
+  var u = window.currentUser || {};
+  var v = { montant: montant, le: Date.now(), par: u.name || u.id || '', methode: _depVersMethodeLivraison };
+  if(devise === 'fcfa'){ v.montantFCFA = saisie; v.tauxFCFA = TAUX_FCFA_EUR; }
+
+  var versementsLiv = Array.isArray(c.versementsLivraison) ? c.versementsLivraison : [];
+  versementsLiv.push(v);
+  c.versementsLivraison = versementsLiv;
+
+  if(ctx.depot){
+    db.ref('dct_depot/'+ctx.clientId).update({ versementsLivraison: versementsLiv });
+  } else {
+    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versementsLivraison: versementsLiv })
+      .catch(function(e){ console.error('departs: échec écriture versement livraison', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
+    try{ sauvegarder(); }catch(e){}
+  }
+
+  depActivite('&#128666;', 'a enregistr&eacute; un versement livraison de <strong>'+montant+' &euro;</strong>'
+    + (devise === 'fcfa' ? ' (' + saisie + ' FCFA)' : '') + ' pour <strong>'+esc(c.name||'')+'</strong>');
+
+  toast('✅ Versement livraison enregistré');
+  depRenderFacture(c);
+};
+
+window.depSupprimerVersementLivraison = function(idx){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c || !Array.isArray(c.versementsLivraison) || !c.versementsLivraison[idx]) return;
+
+  var v = c.versementsLivraison[idx];
+  if(!estDirection() && (Date.now() - (v.le||0)) > DEP_VERSEMENT_DELAI_SUPPR){
+    toast('🔒 Délai dépassé — ce versement est validé, contactez la direction pour le corriger.');
+    return;
+  }
+  if(!confirm('Supprimer ce versement livraison de ' + (parseFloat(v.montant)||0) + ' € ?')) return;
+
+  c.versementsLivraison.splice(idx, 1);
+
+  var u = window.currentUser || {};
+  var hist = Array.isArray(c.hist) ? c.hist : [];
+  hist.push({ q: u.name || u.id || '', a: 'a supprim&eacute; un versement livraison de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong>', ts: Date.now(), type: 'versement' });
+  c.hist = hist;
+
+  if(ctx.depot){
+    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update({ versementsLivraison: c.versementsLivraison, hist: hist });
+  } else {
+    if(window.db && window.firebaseReady){
+      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versementsLivraison: c.versementsLivraison, hist: hist })
+        .catch(function(e){ console.error('departs: échec suppression versement livraison', e); toast('❌ Échec de la suppression, réessayez.'); });
+    }
+    try{ sauvegarder(); }catch(e){}
+  }
+
+  depActivite('&#128465;', 'a supprim&eacute; un versement livraison de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong> pour <strong>'+esc(c.name||'')+'</strong>');
+
+  toast('🗑️ Versement livraison supprimé');
+  depRenderFacture(c);
+};
+
 function depRenderFacture(c){
   var pay = depCalculerPaiement(c);
   var prixIndefini = !!c.prixADefinir;
@@ -3359,9 +3567,24 @@ function depRenderFacture(c){
   if(c.destinataireNom || c.destinataireTel){
     h += kv('Destinataire', esc(c.destinataireNom || '—') + (c.destinataireTel ? (' &middot; ' + esc(c.destinataireTel)) : ''));
   }
-  if(c.livraisonDakar){
-    h += kv('Livraison &agrave; Dakar', esc(c.livraisonAdresse || '—'));
-  }
+
+  // v1.19.22 : livraison modifiable directement ici (avant, uniquement à
+  // l'inscription ou via "Modifier la fiche") — un client à la ramasse
+  // change parfois d'avis (retour d'Issyaka). "Livraison" tout court, pas
+  // "à Dakar" : le container arrive à Dakar, la livraison c'est vers une
+  // AUTRE ville (voir _depFactureLivraisonChoix, réinitialisé à chaque
+  // affichage sur l'état réel de la fiche).
+  _depFactureLivraisonChoix = !!c.livraisonDakar;
+  h += '<div class="dep-sec">Livraison</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
+    +   '<button type="button" class="dep-st' + (c.livraisonDakar ? '' : ' on') + '" id="dep-fact-liv-non" onclick="depToggleLivraisonFacture(false)" style="flex:1;">Non &middot; retrait sur place</button>'
+    +   '<button type="button" class="dep-st' + (c.livraisonDakar ? ' on' : '') + '" id="dep-fact-liv-oui" onclick="depToggleLivraisonFacture(true)" style="flex:1;">Oui &middot; livraison</button>'
+    + '</div>'
+    + '<div id="dep-fact-liv-bloc" style="display:' + (c.livraisonDakar ? 'block' : 'none') + ';">'
+    +   '<div class="fg"><label class="fl">Ville / adresse de livraison</label><input class="fi" id="dep-fact-liv-adresse" value="' + esc(c.livraisonAdresse || '') + '" placeholder="Thi&egrave;s, quartier..."></div>'
+    +   '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label><input class="fi" id="dep-fact-liv-prix" type="number" min="0" value="' + (c.prixLivraison ? esc(String(c.prixLivraison)) : '') + '" placeholder="0"></div>'
+    + '</div>'
+    + '<button type="button" class="dep-cli-btn" style="margin-bottom:16px;" onclick="depEnregistrerLivraison()">&#128190; Enregistrer la livraison</button>';
 
   // Le total colis est mis en avant (c'est ce qui compte pour la
   // compta DCT) ; la livraison reste visible mais secondaire. v1.17.0 :
@@ -3418,6 +3641,67 @@ function depRenderFacture(c){
         + '</div>';
     });
     h += '</div>';
+  }
+
+  // v1.19.22 : caisse livraison, séparée de celle du colis ci-dessus —
+  // son propre PAYÉ/RESTE, son propre détail de versements, son propre
+  // "Ajouter un versement" (voir depCalculerPaiementLivraison /
+  // depAjouterVersementLivraison). N'apparaît que si la livraison est
+  // active pour ce client — pas de bloc vide inutile sinon.
+  if(c.livraisonDakar){
+    var payLiv = depCalculerPaiementLivraison(c);
+    h += '<div class="dep-sec">Livraison &mdash; caisse s&eacute;par&eacute;e</div>'
+      + '<div style="display:flex;gap:10px;margin-bottom:16px;">'
+      + '<div style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px;text-align:center;">'
+        + '<div style="font-size:17px;font-weight:800;color:#006b2d;">' + payLiv.paye + ' &euro;</div>'
+        + '<div style="font-size:10px;color:var(--text3);font-weight:700;">PAY&Eacute; (livraison)</div></div>'
+      + '<div style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px;text-align:center;">'
+        + '<div style="font-size:17px;font-weight:800;color:#992020;">' + payLiv.reste + ' &euro;</div>'
+        + '<div style="font-size:10px;color:var(--text3);font-weight:700;">RESTE (livraison)</div></div>'
+      + '</div>';
+
+    var versementsLivFacture = Array.isArray(c.versementsLivraison) ? c.versementsLivraison.slice() : [];
+    if(versementsLivFacture.length){
+      versementsLivFacture.sort(function(a,b){ return (a.le||0) - (b.le||0); });
+      h += '<div style="background:#F9F9F7;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:16px;">'
+        + '<div style="font-size:10.5px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px;">D&eacute;tail des versements (livraison)</div>';
+      versementsLivFacture.forEach(function(v){
+        var idxOriginal = c.versementsLivraison.indexOf(v);
+        var meth = v.methode === 'virement' ? 'Virement' : (v.methode === 'especes' ? 'Esp&egrave;ces' : '');
+        var fcfa = v.montantFCFA ? (' (' + (parseFloat(v.montantFCFA)||0) + ' FCFA)') : '';
+        var supprimable = estDirection() || (Date.now() - (v.le||0)) <= DEP_VERSEMENT_DELAI_SUPPR;
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+          + '<div style="font-size:12px;color:var(--text2);line-height:1.6;">'
+          +   '&#128666; <strong>' + (parseFloat(v.montant)||0) + ' &euro;</strong>' + fcfa
+          +   (meth ? (' &middot; ' + meth) : '') + ' &middot; ' + esc(dateHeureFr(v.le))
+          +   (v.par ? (' &middot; ' + esc(v.par)) : '')
+          + '</div>'
+          + (supprimable
+              ? ('<button type="button" onclick="depSupprimerVersementLivraison(' + idxOriginal + ')" '
+                 + 'style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;border-radius:8px;width:26px;height:26px;'
+                 + 'font-size:12px;cursor:pointer;flex-shrink:0;line-height:1;">&#128465;</button>')
+              : '')
+          + '</div>';
+      });
+      h += '</div>';
+    }
+
+    _depVersDeviseLivraison = 'eur';
+    _depVersMethodeLivraison = '';
+    h += '<div class="dep-sec">Ajouter un versement (livraison)</div>'
+      + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
+      +   '<button type="button" class="dep-st on" id="dep-vers-liv-dev-eur" onclick="depVersDeviseLivraison(\'eur\')" style="flex:1;">&euro; Euros</button>'
+      +   '<button type="button" class="dep-st" id="dep-vers-liv-dev-fcfa" onclick="depVersDeviseLivraison(\'fcfa\')" style="flex:1;">FCFA</button>'
+      + '</div>'
+      + '<div class="fg"><label class="fl" id="dep-fact-vers-liv-lab">Montant (&euro;)</label>'
+      +   '<input class="fi" id="dep-fact-vers-liv-montant" type="number" min="0" step="1" placeholder="0" '
+      +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;" oninput="depVersMajFcfaLivraison()"></div>'
+      + '<div id="dep-vers-liv-fcfa-hint" style="display:none;font-size:11.5px;color:var(--text3);margin:-6px 0 10px;text-align:center;"></div>'
+      + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
+      +   '<button type="button" class="dep-st" id="dep-vers-liv-meth-esp" onclick="depVersMethodeLivraison(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
+      +   '<button type="button" class="dep-st" id="dep-vers-liv-meth-vir" onclick="depVersMethodeLivraison(\'virement\')" style="flex:1;">Virement</button>'
+      + '</div>'
+      + '<button class="btn btn-green" onclick="depAjouterVersementLivraison()">&#9989; Enregistrer le versement (livraison)</button>';
   }
 
   if(c.note){
