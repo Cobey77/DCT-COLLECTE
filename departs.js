@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.20';
+var DEP_VERSION = 'v1.19.21';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -381,6 +381,76 @@ function depPaysFiche(c){
     if(d) return depPaysDepart(d);
   }
   return DEP_PAYS_DEFAUT;
+}
+
+// v1.19.21 : RÉF. CLIENT — une référence permanente par personne (ex.
+// "CL-0247"), indépendante du pays ou de l'envoi, affichée sur la facture
+// et reprise dans le N° d'étiquette (voir depOuvrirEtiquette). Stockée à
+// part dans dctRefsClients (Firebase : dct_refs_clients), PAS directement
+// sur window.dctContacts — celui-ci est réécrit intégralement (sans fusion)
+// à plusieurs endroits natifs (saveClientConfirme, _versCarnet,
+// saveContactEdit...) : y ajouter refClient directement le ferait perdre à
+// chaque nouvelle inscription du même contact. En le gardant à part, la
+// réf survit à toutes ces réécritures tant que la clé du contact existe
+// toujours dans le carnet (voir _depSyncRefsClients, appelé à chaque
+// changement du carnet — backfill automatique des clients déjà existants
+// inclus, et nettoyage si un contact est supprimé du carnet).
+window.dctRefsClients = window.dctRefsClients || {};
+
+// Même formule de clé que le carnet natif (index.html : saveClientConfirme,
+// _versCarnet, saveContactEdit) et que departs.js (depEnregistrerDepot) —
+// doit rester identique partout pour retrouver le même contact.
+function _depCleContact(c){
+  var tel = (c && c.tel) ? String(c.tel).replace(/\s/g,'') : '';
+  if(tel) return tel;
+  var prenom = (c && c.prenom) || '';
+  var nom = (c && c.nom) || (c && c.name) || '';
+  return (prenom+'_'+nom).toLowerCase();
+}
+
+// Renvoie (et attribue si besoin) la réf. client pour une clé de contact.
+// Compteur simple = nombre de réfs déjà attribuées + 1 (pas de retour en
+// arrière si une réf est supprimée entretemps — les numéros ne sont pas
+// réutilisés, ce qui évite tout risque de collision).
+function depRefClientPour(cle){
+  if(!cle) return '';
+  var refs = window.dctRefsClients || (window.dctRefsClients = {});
+  if(refs[cle]) return refs[cle];
+  var compte = Object.keys(refs).length + 1;
+  var ref = 'CL-' + String(compte).padStart(4, '0');
+  refs[cle] = ref;
+  if(window.db && window.firebaseReady) db.ref('dct_refs_clients/'+cle).set(ref);
+  return ref;
+}
+
+// Synchronise dctRefsClients sur l'état actuel du carnet de contacts :
+// attribue une réf à tout contact qui n'en a pas encore (nouveaux ET
+// anciens clients, déjà inscrits avant ce chantier), et retire la réf
+// d'un contact qui n'est plus dans le carnet (supprimé). Appelée à chaque
+// mise à jour de dct/contacts (voir ecouterDeparts) — idempotente : ne
+// réécrit rien si tout est déjà à jour.
+function _depSyncRefsClients(contacts){
+  contacts = contacts || {};
+  var refs = window.dctRefsClients || (window.dctRefsClients = {});
+  var updates = {};
+  var dirty = false;
+
+  Object.keys(refs).forEach(function(k){
+    if(!contacts[k]){ delete refs[k]; updates['dct_refs_clients/'+k] = null; dirty = true; }
+  });
+
+  var compte = Object.keys(refs).length;
+  Object.keys(contacts).forEach(function(k){
+    if(contacts[k] && !refs[k]){
+      compte++;
+      var ref = 'CL-' + String(compte).padStart(4, '0');
+      refs[k] = ref;
+      updates['dct_refs_clients/'+k] = ref;
+      dirty = true;
+    }
+  });
+
+  if(dirty && window.db && window.firebaseReady) db.ref().update(updates);
 }
 
 // Sous-carré Sénégal/Mali actuellement ouvert dans l'espace DÉPARTS —
@@ -1078,6 +1148,58 @@ function injecterEcrans(){
   +   '</div>'
   + '</div>'
 
+  /* ---- ÉCRAN 7quater (v1.19.21) : étiquette(s) colis, imprimable au
+     format A5 (imprimante thermique) — une page par colis, voir
+     depOuvrirEtiquette/depRenderEtiquettes. Classes "etq-*" propres à cet
+     écran, mise en page inspirée de "fac-*" (facture) pour rester
+     cohérent visuellement. ---- */
+  + '<div class="screen" id="s-etiquette">'
+  +   '<style>'
+  +     '#s-etiquette{background:#e8e8e8;overflow-y:auto;-webkit-overflow-scrolling:touch;}'
+  +     '#s-etiquette .etq-wrap{max-width:420px;margin:0 auto;padding:16px 10px 30px;}'
+  +     '#s-etiquette .etq-actions{margin-bottom:14px;display:flex;flex-direction:column;gap:8px;}'
+  +     '#s-etiquette .etq-btn{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;}'
+  +     '#s-etiquette .etq-btn-print{background:#006b2d;color:#fff;}'
+  +     '#s-etiquette .etq-btn-retour{background:none;color:#666;text-decoration:underline;}'
+  +     '#s-etiquette .etq-page{margin-bottom:16px;}'
+  +     '#s-etiquette .etq-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);}'
+  +     '#s-etiquette .etq-topbar{height:8px;background:#006b2d;}'
+  +     '#s-etiquette .etq-body{padding:16px;}'
+  +     '#s-etiquette .etq-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}'
+  +     '#s-etiquette .etq-logo{width:36px;height:36px;border-radius:50%;flex-shrink:0;}'
+  +     '#s-etiquette .etq-marque{font-size:12px;font-weight:800;color:#006b2d;flex:1;}'
+  +     '#s-etiquette .etq-compte{font-size:13px;font-weight:800;background:#006b2d;color:#fff;padding:3px 9px;border-radius:20px;flex-shrink:0;}'
+  +     '#s-etiquette .etq-numero{font-size:19px;font-weight:800;letter-spacing:.02em;color:#111;text-align:center;background:#f7f7f7;border-radius:6px;padding:10px;margin-bottom:6px;}'
+  +     '#s-etiquette .etq-dest{text-align:center;font-size:13px;font-weight:700;color:#333;margin-bottom:10px;}'
+  +     '#s-etiquette .etq-sep{border:none;border-top:2px solid #006b2d;margin:8px 0 12px;}'
+  +     '#s-etiquette .etq-parties{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}'
+  +     '#s-etiquette .etq-partie-titre{font-size:10px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:3px;}'
+  +     '#s-etiquette .etq-partie-nom{font-size:12.5px;font-weight:700;color:#111;}'
+  +     '#s-etiquette .etq-partie-detail{font-size:11px;color:#555;line-height:1.45;}'
+  +     '#s-etiquette .etq-nature{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:6px;}'
+  +     '#s-etiquette .etq-refs{font-size:9.5px;color:#999;text-align:center;}'
+  +     '#s-etiquette .etq-footer{background:#006b2d;color:#fff;text-align:center;font-size:9.5px;padding:8px;}'
+  +     '@media print{'
+  +       '@page{size:A5;margin:8mm;}'
+  +       'html,body,.app{height:auto !important;overflow:visible !important;}'
+  +       '.app{max-width:100% !important;}'
+  +       '#s-etiquette{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
+  +       '#s-etiquette .no-print{display:none !important;}'
+  +       '#s-etiquette .etq-wrap{padding:0;max-width:100%;}'
+  +       '#s-etiquette .etq-doc{box-shadow:none;border-radius:0;}'
+  +       '#s-etiquette .etq-page{page-break-after:always;margin-bottom:0;}'
+  +       '#s-etiquette .etq-page:last-child{page-break-after:auto;}'
+  +     '}'
+  +   '</style>'
+  +   '<div class="etq-wrap">'
+  +     '<div class="etq-actions no-print">'
+  +       '<button type="button" class="etq-btn etq-btn-print" onclick="window.print()">&#128424;&#65039; Imprimer</button>'
+  +       '<button type="button" class="etq-btn etq-btn-retour" onclick="goTo(\'s-facture\')">&larr; Retour &agrave; la facture</button>'
+  +     '</div>'
+  +     '<div id="etq-contenu"></div>'
+  +   '</div>'
+  + '</div>'
+
   /* ---- ÉCRAN 7ter : lecteur QR interne (v1.16.2) — réservé aux employés
      DCT connectés. Le QR affiché sur la facture n'encode plus un lien
      (voir _depTokenQR) : un appareil photo externe le décode en texte
@@ -1210,6 +1332,23 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-pays-client\');goTo(\'s-collecte\');">Annuler</button>'
     + '</div></div></div>';
   document.body.appendChild(m4);
+
+  /* ---- Modale (v1.19.21) : nombre de colis avant de générer les
+     étiquettes — voir depOuvrirEtiquette/depGenererEtiquettes. Demandé à
+     chaque impression plutôt que stocké sur la fiche (voir section 10ter). ---- */
+  var m5 = document.createElement('div');
+  m5.className = 'modal-overlay';
+  m5.id = 'modal-dep-etiquette-nb';
+  m5.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#127991;&#65039;</div>'
+    + '<div class="modal-confirm-title">Combien de colis ?</div>'
+    + '<div style="font-size:13px;color:#555;margin:4px 0 14px;">Une &eacute;tiquette sera g&eacute;n&eacute;r&eacute;e pour chacun, num&eacute;rot&eacute;e (1/N, 2/N&hellip;).</div>'
+    + '<input class="fi" id="dep-etq-nb" type="number" min="1" max="50" value="1" style="font-size:22px;font-weight:800;text-align:center;padding:14px;margin-bottom:14px;">'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-etiquette-nb\')">Annuler</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depGenererEtiquettes()">G&eacute;n&eacute;rer</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m5);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -1346,6 +1485,21 @@ function ecouterDeparts(){
     try{
       if(_depDetailId && $('s-depart-detail') && $('s-depart-detail').classList.contains('active')) depDetail(_depDetailId);
     }catch(e){}
+  });
+
+  // v1.19.21 : Réf. client — voir dctRefsClients/depRefClientPour/
+  // _depSyncRefsClients plus haut. Deux écoutes indépendantes de celles du
+  // fichier natif (qu'on ne peut pas modifier) : l'une charge les réfs déjà
+  // attribuées, l'autre resynchronise (attribution + nettoyage) à chaque
+  // évolution du carnet, y compris au tout premier chargement (backfill des
+  // clients déjà existants avant ce chantier).
+  db.ref('dct_refs_clients').on('value', function(snap){
+    window.dctRefsClients = snap.val() || {};
+  });
+  db.ref('dct/contacts').on('value', function(snap){
+    setTimeout(function(){
+      try{ _depSyncRefsClients(snap.val()); }catch(e){ console.error('departs: sync réfs client', e); }
+    }, 300);
   });
 }
 
@@ -2428,9 +2582,10 @@ function depNumeroFacture(c, ctx){
   var d = (window.departsData || {})[c.departId];
   var num;
   if(!d){
-    // Pas (encore) de départ rattaché : on retombe sur l'ancien schéma,
-    // en attendant qu'un départ soit choisi pour ce client.
-    num = (ctx.depot ? 'D' : 'C') + '-' + ctx.clientId;
+    // Pas (encore) de départ rattaché : on retombe sur un schéma réduit
+    // (pays déjà connu dès l'inscription, même sans container), en
+    // attendant qu'un départ soit choisi pour ce client.
+    num = (ctx.depot ? 'D' : 'C') + '-' + depPaysClient(c) + '-' + ctx.clientId;
   } else {
     var ddmmyy = '';
     if(d.dateDepart){
@@ -2444,7 +2599,9 @@ function depNumeroFacture(c, ctx){
           return dc && dc.departId === c.departId && dc.numeroFacture;
         }).length
       + 1;
-    num = (ctx.depot ? 'D' : 'C') + '-' + (ddmmyy || 'XXXXXX') + '-' + (rang < 10 ? '0' + rang : rang);
+    // v1.19.21 : pays du départ inséré dans le numéro (ex: C-SN-130926-01)
+    // pour distinguer Sénégal/Mali d'un coup d'œil.
+    num = (ctx.depot ? 'D' : 'C') + '-' + depPaysDepart(d) + '-' + (ddmmyy || 'XXXXXX') + '-' + (rang < 10 ? '0' + rang : rang);
   }
 
   c.numeroFacture = num;
@@ -2749,6 +2906,10 @@ function depRenderFacturePublique(c, ctx){
   var totalGeneral = totalColis + totalLivraison;
   var totalGeneralTxt = prixIndefiniPub ? 'à définir' : (totalGeneral + ' €');
   var numero = depNumeroFacture(c, ctx);
+  // v1.19.21 : réf. client, permanente pour cette personne (voir
+  // depRefClientPour) — distincte du Numéro ci-dessus (propre à cette
+  // facture précise).
+  var refClientPub = depRefClientPour(_depCleContact(c));
   // v1.16.5 : le premier collaborateur à avoir encaissé ce client (son tout
   // premier versement enregistré), affiché à la place de l'ancienne ligne
   // "Référence" qui ferait maintenant doublon avec le Numéro ci-dessus.
@@ -2778,6 +2939,7 @@ function depRenderFacturePublique(c, ctx){
     +         '<div class="fac-info-box">'
     +           '<div class="fac-info-titre">FACTURE</div>'
     +           '<div class="fac-info-ligne"><span>Num&eacute;ro</span><strong>'+esc(numero)+'</strong></div>'
+    +           '<div class="fac-info-ligne"><span>R&eacute;f. client</span><strong>'+esc(refClientPub)+'</strong></div>'
     +           '<div class="fac-info-ligne"><span>Date</span><strong>'+esc(dateHeureFr(Date.now()))+'</strong></div>'
     +           (encaissePar ? ('<div class="fac-info-ligne"><span>Encaiss&eacute; par</span><strong>'+esc(encaissePar)+'</strong></div>') : '')
     +           '<div class="fac-info-ligne"><span>Statut</span><strong style="color:'+(st.color||'#555')+';">'+esc(st.label||pay.statut)+'</strong></div>'
@@ -2866,6 +3028,112 @@ window.depPartagerWhatsapp = function(){
   var msg = 'Salut ' + nom + ', accédez à votre facture sur ce lien : ' + depLienFacture(ctx);
   window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
 };
+
+/* ─────────────────────────────────────────────
+   10ter. ÉTIQUETTE COLIS (v1.19.21) — impression thermique A5, façon
+   CARGO 360 mais avec l'identité DCT (logo, couleurs). Une étiquette par
+   colis physique, chacune numérotée "x/N" pour voir d'un coup d'œil
+   combien de colis compte l'envoi. N° d'étiquette = réf. client + date du
+   départ container + n° du colis dans cet envoi (ex: CL-0247-130926-1) —
+   distinct du Numéro de facture (voir depNumeroFacture), pour ne pas
+   coupler les deux si la facture est un jour rééditée après impression.
+   Le nombre de colis n'est PAS un champ de la fiche : demandé à chaque
+   impression (modal-dep-etiquette-nb), car c'est une réalité physique du
+   moment de l'emballage, pas de l'inscription (décision de Cobey).
+   ───────────────────────────────────────────── */
+
+window._depEtiquetteCtx = null;
+
+window.depOuvrirEtiquette = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  if(!c.departId || !(window.departsData||{})[c.departId]){
+    toast('⚠️ Rattachez d\'abord ce client à un départ (container) avant de générer son étiquette.');
+    return;
+  }
+  window._depEtiquetteCtx = ctx;
+  var inp = $('dep-etq-nb'); if(inp) inp.value = '1';
+  openModal('modal-dep-etiquette-nb');
+};
+
+window.depGenererEtiquettes = function(){
+  var ctx = window._depEtiquetteCtx;
+  if(!ctx){ toast('⚠️ Étiquette introuvable.'); return; }
+  var c = ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  var inp = $('dep-etq-nb');
+  var n = parseInt(inp && inp.value, 10);
+  if(!n || n < 1) n = 1;
+  if(n > 50) n = 50; // garde-fou raisonnable
+
+  closeModal('modal-dep-etiquette-nb');
+  depRenderEtiquettes(c, ctx, n);
+  goTo('s-etiquette');
+};
+
+function depRenderEtiquettes(c, ctx, n){
+  var d = (window.departsData || {})[c.departId] || {};
+  var pInfo = DEP_PAYS_DEST[depPaysDepart(d)] || {};
+  var ddmmyy = '';
+  if(d.dateDepart){
+    var parts = String(d.dateDepart).split('-');
+    if(parts.length === 3) ddmmyy = parts[2] + parts[1] + parts[0].slice(2);
+  }
+  var refClient = depRefClientPour(_depCleContact(c));
+  var numeroFacture = depNumeroFacture(c, ctx);
+  var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+  var destBlock = c.destinataireNom
+    ? ('<div class="etq-partie-nom">'+esc(c.destinataireNom)+'</div>'
+       + '<div class="etq-partie-detail">'+esc(c.destinataireTel||'—')
+       + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(c.livraisonAdresse) : '')
+       + '</div>')
+    : '<div class="etq-partie-nom">—</div>';
+
+  var pages = '';
+  for(var i = 1; i <= n; i++){
+    var numEtq = refClient + '-' + (ddmmyy || 'XXXXXX') + '-' + i;
+    pages += ''
+      + '<div class="etq-page">'
+      +   '<div class="etq-doc">'
+      +     '<div class="etq-topbar"></div>'
+      +     '<div class="etq-body">'
+      +       '<div class="etq-header">'
+      +         '<img class="etq-logo" src="'+DEP_LOGO_B64+'" alt="Dakar City Transport">'
+      +         '<div class="etq-marque">DAKAR CITY TRANSPORT</div>'
+      +         '<div class="etq-compte">'+i+'/'+n+'</div>'
+      +       '</div>'
+      +       '<div class="etq-numero">'+esc(numEtq)+'</div>'
+      +       '<div class="etq-dest">'+(pInfo.drapeau||'')+' '+esc(pInfo.nom||'')+'</div>'
+      +       '<hr class="etq-sep">'
+      +       '<div class="etq-parties">'
+      +         '<div>'
+      +           '<div class="etq-partie-titre">EXP&Eacute;DITEUR</div>'
+      +           '<div class="etq-partie-nom">'+esc(nom)+'</div>'
+      +           '<div class="etq-partie-detail">'+esc(c.tel||'—')+'</div>'
+      +         '</div>'
+      +         '<div>'
+      +           '<div class="etq-partie-titre">DESTINATAIRE</div>'
+      +           destBlock
+      +         '</div>'
+      +       '</div>'
+      +       '<div class="etq-nature"><span>Nature</span><strong>'+esc(c.colis||'—')+'</strong></div>'
+      +       '<div class="etq-refs">R&eacute;f. client&nbsp;'+esc(refClient)+' &middot; Facture&nbsp;'+esc(numeroFacture)+'</div>'
+      +     '</div>'
+      +     '<div class="etq-footer">dakarcitytransport.com &middot; +33 6 69 18 30 01</div>'
+      +   '</div>'
+      + '</div>';
+  }
+
+  var box = $('etq-contenu');
+  if(box) box.innerHTML = pages;
+}
 
 // "1755701520000" → "20/08/2026 14:32"
 function dateHeureFr(ts){
@@ -3083,6 +3351,8 @@ function depRenderFacture(c){
   h += '<button type="button" class="btn btn-gray" style="margin:0 0 16px;" onclick="depOuvrirSuivi()">&#128203; Voir le suivi</button>';
 
   h += kv('Client', esc(nom));
+  // v1.19.21 : réf. client permanente (voir depRefClientPour).
+  h += kv('R&eacute;f. client', esc(depRefClientPour(_depCleContact(c))));
   h += kv('T&eacute;l&eacute;phone', esc(c.tel || '—'));
   h += kv('Colis', esc(c.colis || '—'));
 
@@ -3179,6 +3449,8 @@ function depRenderFacture(c){
   // changement" de Cobey : le QR est réservé aux employés DCT).
   h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
     +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
+    // v1.19.21 : étiquette(s) colis — voir depOuvrirEtiquette.
+    +   '<button class="btn" style="background:#111;color:#fff;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
     +   '<button class="btn" style="background:#25D366;color:#fff;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
     + '</div>';
 
