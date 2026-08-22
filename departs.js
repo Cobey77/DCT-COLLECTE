@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.26';
+var DEP_VERSION = 'v1.19.27';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1057,6 +1057,13 @@ function injecterEcrans(){
   +     '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
   +     '<button class="btn" style="background:#111;color:#fff;margin-top:10px;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
   +     '<button class="btn" style="background:#25D366;color:#fff;margin-top:10px;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
+  // v1.19.27 : copier le texte du message — certains clients n'ont pas
+  // WhatsApp (retour de Cobey du 22/08/2026).
+  +     '<button class="btn" style="background:#eee;color:#333;margin-top:10px;" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>'
+  // v1.19.27 : retour direct vers la tourn&eacute;e pour encha&icirc;ner sur
+  // le client suivant, sans repasser par la facture (retour de Cobey :
+  // "aucun moyen de revenir directement sur la dispatch").
+  +     '<button class="btn btn-gray" style="margin-top:18px;" onclick="goTo(\'s-camion\')">&#128666; Retour &agrave; la tourn&eacute;e</button>'
   +   '</div>'
   + '</div>'
 
@@ -1133,6 +1140,7 @@ function injecterEcrans(){
   +     '#s-facture-publique .fac-btn{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;}'
   +     '#s-facture-publique .fac-btn-print{background:#006b2d;color:#fff;}'
   +     '#s-facture-publique .fac-btn-whatsapp{background:#25D366;color:#fff;}'
+  +     '#s-facture-publique .fac-btn-copier{background:#111;color:#fff;}'
   +     '#s-facture-publique .fac-btn-retour{background:none;color:#666;text-decoration:underline;}'
   +     '@media (max-width:480px){'
   +       '#s-facture-publique .fac-parties{grid-template-columns:1fr;}'
@@ -2642,6 +2650,24 @@ function depCalculerPaiementLivraison(c){
   return depCalculerPaiementGenerique(c && c.livraisonDakar ? (parseFloat(c.prixLivraison) || 0) : 0, c && c.versementsLivraison);
 }
 
+// v1.19.27 : statut GLOBAL de la facture — combine colis ET livraison.
+// Avant, le badge "Payé"/"Partiellement payé" ne regardait que le colis
+// (depCalculerPaiement), donc une livraison pas encore réglée pouvait
+// quand même afficher "Payé" en vert, ce qui est faux (retour de Cobey
+// du 22/08/2026 : "une facture non payée totalement reste une facture
+// partiellement payée"). Les encarts "Total colis" / "Total livraison"
+// gardent chacun leur propre calcul (deux caisses séparées) — seul le
+// badge de statut global additionne les deux.
+function depCalculerPaiementCombine(c){
+  var payC = depCalculerPaiement(c);
+  var payL = depCalculerPaiementLivraison(c);
+  var total = depArrondi2(payC.total + payL.total);
+  var paye  = depArrondi2(payC.paye + payL.paye);
+  var reste = depArrondi2(payC.reste + payL.reste);
+  var statut = paye <= 0 ? 'non_paye' : (reste > 0 ? 'partiel' : 'paye');
+  return { total: total, paye: paye, reste: reste, statut: statut };
+}
+
 // v1.16.5 : numéro de facture lisible, lié au départ concerné plutôt qu'à
 // un identifiant technique sans rapport — ex. "D-210826-03" (D=dépôt ou
 // C=collecte, date du départ, position du client dans ce départ). Calculé
@@ -3094,8 +3120,14 @@ function depAfficherFacturePublique(ctx){
 
 function depRenderFacturePublique(c, ctx){
   var pay = depCalculerPaiement(c);
+  var payLivPub = depCalculerPaiementLivraison(c);
+  // v1.19.27 : statut global combiné colis+livraison (voir
+  // depCalculerPaiementCombine) — avant, ce badge ne regardait que le
+  // colis et pouvait afficher "Payé" alors que la livraison ne l'était
+  // pas (retour de Cobey du 22/08/2026).
+  var payCombinePub = depCalculerPaiementCombine(c);
   var prixIndefiniPub = !!c.prixADefinir;
-  var st = prixIndefiniPub ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : (STATUTS_PAIEMENT[pay.statut] || {});
+  var st = prixIndefiniPub ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : (STATUTS_PAIEMENT[payCombinePub.statut] || {});
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
   var totalColis = parseFloat(c.prix) || 0;
   var totalColisTxt = prixIndefiniPub ? 'à définir' : (totalColis + ' €');
@@ -3186,6 +3218,12 @@ function depRenderFacturePublique(c, ctx){
     +         (totalLivraison
                 ? ('<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
                    + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar</span><span>'+totalLivraison+' &euro;</span></div>'
+                   // v1.19.27 : payé/reste PROPRES à la livraison, affichés
+                   // explicitement — avant, rien ne l'indiquait ici, ce qui
+                   // laissait croire (avec le badge du haut) qu'elle était
+                   // déjà réglée (retour de Cobey du 22/08/2026).
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Pay&eacute; (livraison)</span><span>'+payLivPub.paye+' &euro;</span></div>'
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;'+(payLivPub.reste > 0 ? 'color:#992020;font-weight:700;' : 'color:#888;')+'"><span>Reste &agrave; payer (livraison)</span><span>'+payLivPub.reste+' &euro;</span></div>'
                    + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Total avec livraison</span><span>'+esc(totalGeneralTxt)+'</span></div>'
                    + '</div>')
                 : '')
@@ -3199,6 +3237,9 @@ function depRenderFacturePublique(c, ctx){
   h += '<div class="fac-actions no-print">'
     +    '<button type="button" class="fac-btn fac-btn-print" onclick="window.print()">&#128424;&#65039; Imprimer / PDF</button>'
     +    (connecte ? '<button type="button" class="fac-btn fac-btn-whatsapp" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>' : '')
+    // v1.19.27 : copier le texte du message — certains clients n'ont pas
+    // WhatsApp (retour de Cobey du 22/08/2026).
+    +    (connecte ? '<button type="button" class="fac-btn fac-btn-copier" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>' : '')
     +    (connecte ? '<button type="button" class="fac-btn fac-btn-retour" onclick="goTo(\'s-facture\')">&larr; Retour</button>' : '')
     +  '</div>'
 
@@ -3214,16 +3255,57 @@ function depRenderFacturePublique(c, ctx){
 // Message WhatsApp — v1.16.1 : texte + lien (comme CARGO360), le lien
 // pointe vers la facture en lecture seule, consultable sans connexion
 // (voir _depFactureDeepLink plus haut).
+// v1.19.27 : texte extrait dans une fonction à part, réutilisée par
+// depCopierMessageWhatsapp (bouton "Copier le message" — certains
+// clients n'ont pas WhatsApp, retour de Cobey du 22/08/2026).
+function _depTexteMessageFacture(c, ctx){
+  var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
+  return 'Salut ' + nom + ', accédez à votre facture sur ce lien : ' + depLienFacture(ctx);
+}
+
+function _depClientPourFacture(ctx){
+  return ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+}
+
 window.depPartagerWhatsapp = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientPourFacture(ctx);
   if(!c){ toast('⚠️ Client introuvable.'); return; }
-  var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
-  var msg = 'Salut ' + nom + ', accédez à votre facture sur ce lien : ' + depLienFacture(ctx);
+  var msg = _depTexteMessageFacture(c, ctx);
   window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+};
+
+window.depCopierMessageWhatsapp = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
+  var c = _depClientPourFacture(ctx);
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  var msg = _depTexteMessageFacture(c, ctx);
+
+  var reussi = function(){ toast('📋 Message copié'); };
+  var echoue = function(){ toast('⚠️ Copie impossible — sélectionnez le message manuellement.'); };
+  var repliManuel = function(){
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = msg;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if(ok) reussi(); else echoue();
+    }catch(e){ echoue(); }
+  };
+
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(reussi).catch(repliManuel);
+  } else {
+    repliManuel();
+  }
 };
 
 /* ─────────────────────────────────────────────
@@ -3642,7 +3724,13 @@ window.depSupprimerVersementLivraison = function(idx){
 function depRenderFacture(c){
   var pay = depCalculerPaiement(c);
   var prixIndefini = !!c.prixADefinir;
-  var st = prixIndefini ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : STATUTS_PAIEMENT[pay.statut];
+  // v1.19.27 : le badge de statut combine colis+livraison (voir
+  // depCalculerPaiementCombine) — avant il ne regardait que le colis et
+  // pouvait afficher "Payé" alors que la livraison ne l'était pas (retour
+  // de Cobey du 22/08/2026). Les encarts "Total colis" / PAYÉ / RESTE
+  // ci-dessous restent, eux, propres au colis (pay reste inchangé).
+  var payCombine = depCalculerPaiementCombine(c);
+  var st = prixIndefini ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : STATUTS_PAIEMENT[payCombine.statut];
   var prixLivraison = parseFloat(c.prixLivraison) || 0;
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
 
@@ -3667,6 +3755,16 @@ function depRenderFacture(c){
   // v1.18.1 : remonté en haut de la facture (juste sous le statut) — trop
   // long à atteindre tout en bas, retour de Cobey du 21/08/2026.
   h += '<button type="button" class="btn btn-gray" style="margin:0 0 16px;" onclick="depOuvrirSuivi()">&#128203; Voir le suivi</button>';
+
+  // v1.19.27 : la Note remonte tout en haut, juste après le statut/suivi —
+  // avant elle était tout en bas de la facture, pas assez visible à
+  // l'ouverture de l'écran (retour de Cobey du 22/08/2026).
+  if(c.note){
+    h += '<div style="background:#FFF9DB;border:1.5px solid #F0E4A0;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:16px;">'
+      + '<div style="font-size:10.5px;color:#8A7300;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Note</div>'
+      + '<div style="font-size:13px;color:var(--text2);">' + esc(c.note) + '</div>'
+      + '</div>';
+  }
 
   h += kv('Client', esc(nom));
   // v1.19.21 : réf. client permanente (voir depRefClientPour).
@@ -3832,9 +3930,14 @@ function depRenderFacture(c){
       + '</div>'; // fin de l'encart bleu "Livraison — caisse séparée"
   }
 
-  if(c.note){
-    h += kv('Note', esc(c.note));
-  }
+  // v1.19.27 : la Note est désormais affichée tout en haut de la facture
+  // (juste après le statut/suivi) — voir plus haut.
+
+  // v1.19.27 : distinct de gatePrint — précise si on est bien sur une
+  // collecte déjà validée pour de vrai (par opposition au dépôt direct,
+  // qui n'a pas de notion de validation camion et garde donc son
+  // comportement d'avant, boutons d'impression inclus).
+  var estCollecteValidee = !!(truckInfoFact && truckInfoFact.valide);
 
   // v1.16.0 : la facture "vrai document" (mise en page CARGO 360,
   // imprimable / PDF, partageable par WhatsApp) est désormais accessible
@@ -3846,17 +3949,30 @@ function depRenderFacture(c){
   // puis débloque l'impression (écran "Documents"). Retour de Cobey :
   // "on devrait valider la facture avant de pouvoir imprimer les
   // documents [...] les paiements ne sont pas forcément faits".
+  // v1.19.27 : une fois la collecte validée, cette facture ne sert plus
+  // qu'au paiement — plus de boutons d'impression/QR dupliqués ici (ils
+  // vivent désormais uniquement sur l'écran "Documents"). Retour de
+  // Cobey : "si on revient sur cette page, c'est pour modifier un
+  // paiement [...] pas logique de mélanger paiement et impression".
   if(gatePrint){
     h += '<div style="margin-top:18px;">'
       + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">La collecte n&rsquo;est pas encore valid&eacute;e &mdash; l&rsquo;impression des documents sera disponible juste apr&egrave;s.</div>'
       + '<button class="btn btn-green" onclick="depValiderFactureFinale()">&#9989; Valider la facture</button>'
       + '</div>';
+  } else if(estCollecteValidee){
+    h += '<div style="margin-top:18px;">'
+      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Facture d&eacute;j&agrave; valid&eacute;e. Modifiez un paiement si besoin, puis retrouvez les documents &agrave; imprimer.</div>'
+      + '<button class="btn btn-green" onclick="depValiderFactureFinale()">&#128196; Voir les documents</button>'
+      + '</div>';
   } else {
+    // Dépôt direct (pas de notion de validation camion) : comportement
+    // inchangé, impression accessible directement depuis la facture.
     h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
       +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
       // v1.19.21 : étiquette(s) colis — voir depOuvrirEtiquette.
       +   '<button class="btn" style="background:#111;color:#fff;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
       +   '<button class="btn" style="background:#25D366;color:#fff;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
+      +   '<button class="btn" style="background:#eee;color:#333;" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>'
       + '</div>';
   }
 
@@ -3870,7 +3986,11 @@ function depRenderFacture(c){
   // de pouvoir déjà scanner/retrouver une facture pas encore validée
   // (retour de Cobey). depGenererQR ne fait rien si le canvas n'existe
   // pas (voir plus bas), pas besoin de le conditionner en plus.
-  if(!gatePrint){
+  // v1.19.27 : également caché une fois la collecte validée — le QR vit
+  // désormais sur la facture imprimable (voir depRenderFacturePublique),
+  // pas ici (même logique que ci-dessus : plus de doublon paiement/
+  // impression sur cette page-là).
+  if(!gatePrint && !estCollecteValidee){
     h += '<div class="dep-sec">QR code (r&eacute;serv&eacute; aux employ&eacute;s DCT)</div>'
       + '<div style="text-align:center;padding:6px 0 10px;">'
       +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
@@ -5886,6 +6006,11 @@ function greffer(){
         if(neuf){
           var fiche = clientsParCollecte[colId][neuf];
           Object.keys(extras).forEach(function(k){ fiche[k] = extras[k]; });
+          // v1.19.27 : date/heure de création — le natif (saveClientConfirme)
+          // ne posait pas ce champ côté collecte, contrairement au dépôt
+          // direct, ce qui laissait le Suivi sans date pour "a créé la fiche
+          // client" (retour de Cobey du 22/08/2026).
+          fiche.creeLe = Date.now();
           // La photo du colis n'est plus prise ici : elle se prend au moment
           // de la validation de la collecte (voir depOuvrirPhotoValider).
           sauvegarder();
