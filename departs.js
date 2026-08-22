@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.11';
+var DEP_VERSION = 'v1.19.12';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -461,6 +461,14 @@ function dateCourte(iso){
   var p = String(iso).split('-');
   if(p.length!==3) return iso;
   return parseInt(p[2],10)+' '+MOIS[parseInt(p[1],10)-1];
+}
+
+// Parse sûr d'une date (au format natif "Dimanche 30 août 2026" via
+// parseDate, quand disponible) — ne lève jamais, renvoie une Date
+// invalide (NaN) en cas de souci plutôt que de faire planter l'appelant.
+function _depParseDateSure(s){
+  try{ return (typeof parseDate === 'function') ? parseDate(s) : new Date(NaN); }
+  catch(e){ return new Date(NaN); }
 }
 
 function estDirection(){
@@ -1273,10 +1281,6 @@ window.depRenderEspaces = function(){
     // premier élément du tableau (ordre de création Firebase, pas de
     // date), ce qui pouvait afficher une collecte plus lointaine que
     // d'autres déjà programmées avant elle.
-    function _depParseDateSure(s){
-      try{ return (typeof parseDate === 'function') ? parseDate(s) : new Date(NaN); }
-      catch(e){ return new Date(NaN); }
-    }
     var cols = (window.collectes || []).slice();
     var enCoursListe = cols.filter(function(x){ return x && x.statut === 'en_cours'; })
       .sort(function(a,b){ return _depParseDateSure(a.date) - _depParseDateSure(b.date); });
@@ -1455,26 +1459,56 @@ function _depFormatDuree(ms){
   return h + 'h' + (m < 10 ? '0' : '') + m;
 }
 
-function _depStatsCalculer(){
+// v1.19.12 : collaborateurs à ne jamais faire figurer dans le classement
+// (compte direction/admin, pas un collaborateur terrain à évaluer).
+var DEP_STATS_EXCLUS = ['Eric'];
+
+// v1.19.12 : classement filtrable par période — periode vaut :
+//   - null/undefined : tout l'historique (comportement précédent)
+//   - { annee: 2026 } : uniquement cette année-là
+//   - { annee: 2026, mois: 7 } : uniquement ce mois-là (0 = janvier)
+function _depStatsCalculer(periode){
   var stats = {};
+
+  // v1.19.12 : seuls les collaborateurs connus (liste COLLABS, hors
+  // exclusions) apparaissent — avant, un nom inattendu dans les données
+  // (ex. un compte "Administrateur" générique) créait sa propre ligne
+  // fantôme dans le classement.
+  var nomsValides = {};
+  (window.COLLABS || []).forEach(function(c){
+    if(c && c.name && DEP_STATS_EXCLUS.indexOf(c.name) === -1) nomsValides[c.name] = true;
+  });
+
+  function dansPeriode(date){
+    if(!periode) return true;
+    if(!date || isNaN(date.getTime())) return false;
+    if(date.getFullYear() !== periode.annee) return false;
+    if(periode.mois !== undefined && periode.mois !== null && date.getMonth() !== periode.mois) return false;
+    return true;
+  }
+
   function ligne(nom){
-    if(!nom) return null;
+    if(!nom || !nomsValides[nom]) return null;
     if(!stats[nom]) stats[nom] = { nom: nom, nbClients: 0, montantApporte: 0, montantEncaisse: 0, collectesSet: {}, nbValidations: 0, tourneesTs: {} };
     return stats[nom];
   }
-  // Roster de départ : tous les collaborateurs connus, même sans activité
-  // pour l'instant (dédoublonnés par nom — un même collaborateur peut
-  // avoir un profil "terrain" et un profil admin dans COLLABS).
-  (window.COLLABS || []).forEach(function(c){ if(c && c.name) ligne(c.name); });
+  // Roster de départ : tous les collaborateurs connus (et retenus),
+  // même sans activité pour l'instant.
+  Object.keys(nomsValides).forEach(function(n){ ligne(n); });
 
-  function traiterFiche(c, collecteId){
+  // dateInscription : date approximative d'entrée du client — la date de
+  // la collecte pour un client de collecte (pas d'horodatage fiable au
+  // niveau du client lui-même), ou sa vraie date de création pour un
+  // dépôt direct (creeLe existe pour ceux-là).
+  function traiterFiche(c, collecteId, dateInscription){
     if(!c) return;
     var l = ligne(c.by);
-    if(l){
+    if(l && dansPeriode(dateInscription)){
       l.nbClients++;
       l.montantApporte += (parseFloat(c.prix) || 0);
     }
     (Array.isArray(c.versements) ? c.versements : []).forEach(function(v){
+      if(!dansPeriode(v && v.le ? new Date(v.le) : null)) return;
       var lv = ligne(v && v.par);
       if(lv) lv.montantEncaisse += (parseFloat(v && v.montant) || 0);
     });
@@ -1487,6 +1521,7 @@ function _depStatsCalculer(){
     // et la dernière validation de ce collaborateur sur cette collecte).
     (Array.isArray(c.hist) ? c.hist : []).forEach(function(h){
       if(h && h.type === 'validation'){
+        if(!dansPeriode(h.ts ? new Date(h.ts) : null)) return;
         var lh = ligne(h.q);
         if(lh){
           lh.nbValidations++;
@@ -1501,10 +1536,16 @@ function _depStatsCalculer(){
   }
 
   Object.keys(window.clientsParCollecte || {}).forEach(function(collecteId){
+    var col = (window.collectes || []).filter(function(x){ return x && x.id === collecteId; })[0];
+    var dateCol = col ? _depParseDateSure(col.date) : null;
     var cls = window.clientsParCollecte[collecteId] || {};
-    Object.keys(cls).forEach(function(clientId){ traiterFiche(cls[clientId], collecteId); });
+    Object.keys(cls).forEach(function(clientId){ traiterFiche(cls[clientId], collecteId, dateCol); });
   });
-  Object.keys(window.depotClients || {}).forEach(function(id){ traiterFiche(window.depotClients[id], null); });
+  Object.keys(window.depotClients || {}).forEach(function(id){
+    var c = window.depotClients[id];
+    var dateDepot = (c && c.creeLe) ? new Date(c.creeLe) : null;
+    traiterFiche(c, null, dateDepot);
+  });
 
   var liste = Object.keys(stats).map(function(n){
     var s = stats[n];
@@ -1541,17 +1582,49 @@ function _depStatsCalculer(){
   return liste;
 }
 
+// v1.19.12 : filtre de période du classement — 'tout' (par défaut),
+// 'annee' (année en cours) ou 'mois' (mois en cours).
+var _depStatsPeriodeType = 'tout';
+
+function _depStatsPeriodeActuelle(){
+  var maintenant = new Date();
+  if(_depStatsPeriodeType === 'mois') return { annee: maintenant.getFullYear(), mois: maintenant.getMonth() };
+  if(_depStatsPeriodeType === 'annee') return { annee: maintenant.getFullYear() };
+  return null;
+}
+
 window.depOuvrirEspaceStats = function(){
+  _depStatsPeriodeType = 'tout';
   goTo('s-stats');
+  depRenderStats();
+};
+
+window.depStatsChoisirPeriode = function(type){
+  _depStatsPeriodeType = type;
   depRenderStats();
 };
 
 window.depRenderStats = function(){
   var box = $('dep-stats-content');
   if(!box) return;
-  var liste = _depStatsCalculer();
+  var liste = _depStatsCalculer(_depStatsPeriodeActuelle());
+
+  var options = [
+    { type: 'tout',  libelle: 'Tout' },
+    { type: 'annee', libelle: 'Cette ann&eacute;e' },
+    { type: 'mois',  libelle: 'Ce mois' }
+  ];
+  var toolbar = '<div style="display:flex;gap:8px;margin-bottom:14px;">'
+    + options.map(function(o){
+        var actif = (_depStatsPeriodeType === o.type);
+        return '<button type="button" class="dep-cli-btn" '
+          + (actif ? 'style="background:#B8860B;border-color:#96690a;color:#fff;" ' : '')
+          + 'onclick="depStatsChoisirPeriode(\''+o.type+'\')">'+o.libelle+'</button>';
+      }).join('')
+    + '</div>';
+
   if(!liste.length){
-    box.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune donn&eacute;e pour l\'instant.</div>';
+    box.innerHTML = toolbar + '<div class="dep-vide" style="padding:20px 16px;">Aucune donn&eacute;e pour cette p&eacute;riode.</div>';
     return;
   }
   var medailles = ['&#129351;','&#129352;','&#129353;'];
@@ -1563,16 +1636,16 @@ window.depRenderStats = function(){
       +     '<div class="dep-nom">'+medaille+' '+esc(s.nom)+'</div>'
       +   '</div>'
       +   '<div class="dep-meta">'
-      +     '<span>&#128100; <b>'+s.nbClients+'</b> client'+(s.nbClients>1?'s':'')+'</span>'
+      +     '<span>&#128100; <b>'+s.nbClients+'</b> client'+(s.nbClients>1?'s':'')+' inscrit'+(s.nbClients>1?'s':'')+'</span>'
       +     '<span>&#128176; <b>'+s.montantApporte+'</b> &euro; apport&eacute;s</span>'
       +     '<span>&#128179; <b>'+s.montantEncaisse+'</b> &euro; encaiss&eacute;s</span>'
-      +     '<span>&#128197; <b>'+s.nbCollectes+'</b> collecte'+(s.nbCollectes>1?'s':'')+' valid&eacute;e'+(s.nbCollectes>1?'s':'')+'</span>'
-      +     '<span>&#9989; <b>'+s.nbValidations+'</b> validation'+(s.nbValidations>1?'s':'')+'</span>'
+      +     '<span>&#128230; <b>'+s.nbValidations+'</b> colis valid&eacute;'+(s.nbValidations>1?'s':'')+'</span>'
+      +     '<span>&#128197; <b>'+s.nbCollectes+'</b> jour'+(s.nbCollectes>1?'s':'')+' de collecte</span>'
       +     '<span>&#9203; <b>'+_depFormatDuree(s.dureeTourneeMoyenneMs)+'</b> tourn&eacute;e moyenne</span>'
       +   '</div>'
       + '</div>';
   });
-  box.innerHTML = h;
+  box.innerHTML = toolbar + h;
 };
 
 // v1.19.0 : carré ARCHIVAGE — consultation en lecture seule des départs
