@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.14';
+var DEP_VERSION = 'v1.19.15';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -810,7 +810,7 @@ function injecterEcrans(){
   +   '<div class="content">'
   +     '<div class="dep-alert">&#127970; Ce client ne passe pas par une collecte du dimanche : il s\'inscrit directement, ici, dans ce d&eacute;part.</div>'
   +     '<div class="fg"><label class="fl">Civilit&eacute;</label><div id="dp-civ" style="display:flex;gap:6px;"></div></div>'
-  +     '<div class="form-row">'
+  +     '<div class="form-row" id="dp-ligne-nom">'
   +       '<div class="fg" id="dp-bloc-prenom"><label class="fl">Pr&eacute;nom</label><input class="fi" id="dp-prenom" placeholder="Fatou"></div>'
   +       '<div class="fg"><label class="fl" id="dp-lab-nom">Nom</label><input class="fi" id="dp-nom" placeholder="Diallo"></div>'
   +     '</div>'
@@ -3270,6 +3270,14 @@ window.depOuvrirDepotForm = function(departId, clientId){
     }
   }
 
+  // v1.19.15 : suggestions de contact déjà connu + autocomplete d'adresse —
+  // voir section 12bis. Câblage idempotent, sans effet si déjà branché.
+  try{
+    _depSuggestionsInit('dp', 'dp-ligne-nom');
+    _depAdresseAutocompleteInit('dp', 'dp-adresse');
+    _depCpVilleInit('dp');
+  }catch(e){ console.error('departs: autocomplete dépôt', e); }
+
   goTo('s-depot-form');
 };
 
@@ -4527,6 +4535,253 @@ window.depValiderConfirmer = function(){
 };
 
 /* ─────────────────────────────────────────────
+   12bis. AUTOCOMPLETE — suggestions de contact déjà connu + adresse (v1.19.15)
+   ─────────────────────────────────────────────
+   Jusqu'ici, seul le formulaire natif "f-" (inscription collecte, index.html)
+   proposait des suggestions de contact déjà enregistré en tapant le début du
+   nom/prénom/téléphone (_showSuggestionsCombo, showSuggestions,
+   fillClientFromSug — natifs, inchangés). Cobey a demandé d'étendre ce même
+   principe aux deux autres endroits où un client est inscrit : le dépôt
+   direct ("dp-", écran propre à departs.js) et France & Europe ("fa-",
+   natif). Ces fonctions génériques, paramétrées par préfixe de champs,
+   couvrent les deux — le formulaire "f-" garde son mécanisme natif tel quel.
+
+   Deuxième volet : autocomplete d'adresse française complète en tapant
+   (ex. "4 allée des...") et réconciliation code postal ↔ ville — via les API
+   publiques gratuites data.gouv.fr (Base Adresse Nationale + geo API),
+   sans clé, sans dépendance. Ajouté aux TROIS formulaires ("f-", "dp-",
+   "fa-"). Limite assumée et signalée à Cobey : ces API ne couvrent que la
+   France — sur France & Europe, un client dans un autre pays européen ne
+   verra simplement aucune suggestion d'adresse (le champ reste utilisable
+   à la main, comme avant), et la réconciliation CP↔ville ne se déclenche
+   que sur un code postal à 5 chiffres. */
+
+function _depChampsForm(prefixe){
+  return {
+    prenom: prefixe+'-prenom', nom: prefixe+'-nom', tel: prefixe+'-tel',
+    tel2: prefixe+'-tel2', adresse: prefixe+'-adresse', infos: prefixe+'-infos',
+    cp: prefixe+'-cp', ville: prefixe+'-ville'
+  };
+}
+
+// Insère un nouveau bloc juste après le groupe de champ (.fg) contenant
+// l'élément visé — ou juste après l'élément lui-même s'il n'est pas dans
+// un .fg (cas des lignes prénom/nom, déjà des form-row entières).
+function _depApresBloc(elId){
+  var el = $(elId);
+  if(!el) return null;
+  var bloc = (el.closest && el.closest('.fg')) || el;
+  return bloc;
+}
+
+function _depSuggDivId(prefixe){ return 'dep-sugg-'+prefixe; }
+
+function _depSuggAssurerDiv(prefixe, apresId){
+  var divId = _depSuggDivId(prefixe);
+  var deja = $(divId);
+  if(deja) return deja;
+  var apres = _depApresBloc(apresId);
+  if(!apres || !apres.parentNode) return null;
+  var div = document.createElement('div');
+  div.className = 'suggestions';
+  div.id = divId;
+  apres.parentNode.insertBefore(div, apres.nextSibling);
+  return div;
+}
+
+function _depSuggFiltrer(prefixe){
+  var ch = _depChampsForm(prefixe);
+  var prenom = (($(ch.prenom)||{}).value || '').trim();
+  var nom    = (($(ch.nom)||{}).value || '').trim();
+  var tel    = (($(ch.tel)||{}).value || '').trim();
+  var contacts = (typeof getAllContacts === 'function') ? getAllContacts() : [];
+  var liste;
+  if(tel.replace(/ /g,'').length >= 2){
+    var q = tel.toLowerCase().replace(/ /g,'');
+    liste = contacts.filter(function(c){ return (c.tel||'').replace(/ /g,'').indexOf(q) === 0; });
+  } else if(prenom && nom){
+    var pLow = prenom.toLowerCase(), nLow = nom.toLowerCase();
+    liste = contacts.filter(function(c){
+      return (c.prenom||'').toLowerCase().indexOf(pLow) === 0 && (c.nom||'').toLowerCase().indexOf(nLow) === 0;
+    });
+  } else {
+    var combo = (prenom+' '+nom).trim() || prenom || nom;
+    if(combo.length < 2) return [];
+    var cLow = combo.toLowerCase();
+    liste = contacts.filter(function(c){
+      return (c.prenom||'').toLowerCase().indexOf(cLow) === 0
+        || (c.nom||'').toLowerCase().indexOf(cLow) === 0
+        || (c.name||'').toLowerCase().indexOf(cLow) >= 0;
+    });
+  }
+  var seen = {};
+  liste = liste.filter(function(c){
+    var k = (c.name||'')+'_'+(c.tel||'');
+    if(seen[k]) return false;
+    seen[k] = true;
+    return true;
+  });
+  return liste.slice(0,5);
+}
+
+function _depSuggRemplir(prefixe, c){
+  var ch = _depChampsForm(prefixe);
+  ['prenom','nom','tel','tel2','adresse','infos','cp','ville'].forEach(function(k){
+    var el = $(ch[k]);
+    if(el) el.value = c[k] || '';
+  });
+  var div = $(_depSuggDivId(prefixe));
+  if(div) div.classList.remove('show');
+  if(prefixe === 'fa' && typeof majZoneFrance === 'function'){ try{ majZoneFrance(); }catch(e){} }
+}
+
+function _depSuggAfficher(prefixe){
+  var div = $(_depSuggDivId(prefixe));
+  if(!div) return;
+  var liste = _depSuggFiltrer(prefixe);
+  if(!liste.length){ div.classList.remove('show'); return; }
+  div.innerHTML = '';
+  liste.forEach(function(c){
+    var item = document.createElement('div');
+    item.className = 'sug-item';
+    item.innerHTML = '<div class="sug-name">'+esc(c.name||'')+'</div><div class="sug-sub">'+esc(c.ville||'')+' &middot; '+esc(c.tel||'')+'</div>';
+    item.onclick = function(){ _depSuggRemplir(prefixe, c); };
+    div.appendChild(item);
+  });
+  div.classList.add('show');
+}
+
+// prefixe : 'dp' ou 'fa' — pas 'f', qui garde son mécanisme natif dédié.
+function _depSuggestionsInit(prefixe, apresId){
+  var ch = _depChampsForm(prefixe);
+  var div = _depSuggAssurerDiv(prefixe, apresId);
+  if(!div) return;
+  [ch.prenom, ch.nom, ch.tel].forEach(function(id){
+    var el = $(id);
+    if(el && !el._depSuggWired){
+      el.addEventListener('input', function(){ _depSuggAfficher(prefixe); });
+      el._depSuggWired = true;
+    }
+  });
+}
+
+// ── Adresse complète en tapant (api-adresse.data.gouv.fr, France) ──
+var _depAdrTimer = {};
+function _depAdresseDivId(prefixe){ return 'dep-adr-'+prefixe; }
+
+function _depAdresseAssurerDiv(prefixe, apresId){
+  var divId = _depAdresseDivId(prefixe);
+  var deja = $(divId);
+  if(deja) return deja;
+  var apres = _depApresBloc(apresId);
+  if(!apres || !apres.parentNode) return null;
+  var div = document.createElement('div');
+  div.className = 'suggestions';
+  div.id = divId;
+  apres.parentNode.insertBefore(div, apres.nextSibling);
+  return div;
+}
+
+function _depAdresseRemplir(prefixe, feature){
+  var p = (feature && feature.properties) || {};
+  var ch = _depChampsForm(prefixe);
+  var elAdr = $(ch.adresse); if(elAdr) elAdr.value = (p.name || '').trim();
+  var elCp = $(ch.cp);       if(elCp) elCp.value = p.postcode || '';
+  var elVille = $(ch.ville); if(elVille) elVille.value = p.city || '';
+  var div = $(_depAdresseDivId(prefixe));
+  if(div) div.classList.remove('show');
+  if(prefixe === 'fa' && typeof majZoneFrance === 'function'){ try{ majZoneFrance(); }catch(e){} }
+}
+
+function _depAdresseChercher(prefixe){
+  var ch = _depChampsForm(prefixe);
+  var q = (($(ch.adresse)||{}).value || '').trim();
+  var div = $(_depAdresseDivId(prefixe));
+  if(!div) return;
+  if(q.length < 4){ div.classList.remove('show'); return; }
+  clearTimeout(_depAdrTimer[prefixe]);
+  _depAdrTimer[prefixe] = setTimeout(function(){
+    fetch('https://api-adresse.data.gouv.fr/search/?q='+encodeURIComponent(q)+'&limit=5')
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        var feats = (data && data.features) || [];
+        if(!feats.length){ div.classList.remove('show'); return; }
+        div.innerHTML = '';
+        feats.forEach(function(f){
+          var p = f.properties || {};
+          var item = document.createElement('div');
+          item.className = 'sug-item';
+          item.innerHTML = '<div class="sug-name">'+esc(p.name||'')+'</div><div class="sug-sub">'+esc(p.postcode||'')+' '+esc(p.city||'')+'</div>';
+          item.onclick = function(){ _depAdresseRemplir(prefixe, f); };
+          div.appendChild(item);
+        });
+        div.classList.add('show');
+      })
+      .catch(function(){ /* API indisponible / hors ligne : le champ reste utilisable à la main, comme avant */ });
+  }, 300);
+}
+
+function _depAdresseAutocompleteInit(prefixe, apresId){
+  var div = _depAdresseAssurerDiv(prefixe, apresId);
+  if(!div) return;
+  var ch = _depChampsForm(prefixe);
+  var el = $(ch.adresse);
+  if(el && !el._depAdrWired){
+    el.addEventListener('input', function(){ _depAdresseChercher(prefixe); });
+    el._depAdrWired = true;
+  }
+}
+
+// ── Réconciliation code postal ↔ ville (geo.api.gouv.fr, France) ──
+var _depCpTimer = {};
+function _depCpVilleChercherParCP(prefixe){
+  var ch = _depChampsForm(prefixe);
+  var cp = (($(ch.cp)||{}).value || '').trim();
+  var elVille = $(ch.ville);
+  if(!elVille || !/^\d{5}$/.test(cp)) return;
+  clearTimeout(_depCpTimer[prefixe+'-cp']);
+  _depCpTimer[prefixe+'-cp'] = setTimeout(function(){
+    fetch('https://geo.api.gouv.fr/communes?codePostal='+cp+'&fields=nom&limit=1')
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(Array.isArray(data) && data[0] && data[0].nom && !elVille.value.trim()) elVille.value = data[0].nom;
+      })
+      .catch(function(){});
+  }, 400);
+}
+
+function _depCpVilleChercherParVille(prefixe){
+  var ch = _depChampsForm(prefixe);
+  var ville = (($(ch.ville)||{}).value || '').trim();
+  var elCp = $(ch.cp);
+  if(!elCp || ville.length < 3 || elCp.value.trim()) return;
+  clearTimeout(_depCpTimer[prefixe+'-ville']);
+  _depCpTimer[prefixe+'-ville'] = setTimeout(function(){
+    fetch('https://geo.api.gouv.fr/communes?nom='+encodeURIComponent(ville)+'&fields=codesPostaux&boost=population&limit=1')
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if(Array.isArray(data) && data[0] && Array.isArray(data[0].codesPostaux) && data[0].codesPostaux[0] && !elCp.value.trim()){
+          elCp.value = data[0].codesPostaux[0];
+        }
+      })
+      .catch(function(){});
+  }, 400);
+}
+
+function _depCpVilleInit(prefixe){
+  var ch = _depChampsForm(prefixe);
+  var elCp = $(ch.cp), elVille = $(ch.ville);
+  if(elCp && !elCp._depCpWired){
+    elCp.addEventListener('input', function(){ _depCpVilleChercherParCP(prefixe); });
+    elCp._depCpWired = true;
+  }
+  if(elVille && !elVille._depCpWired){
+    elVille.addEventListener('input', function(){ _depCpVilleChercherParVille(prefixe); });
+    elVille._depCpWired = true;
+  }
+}
+
+/* ─────────────────────────────────────────────
    13. LES GREFFES SUR LE CODE EXISTANT
    ───────────────────────────────────────────── */
 
@@ -4578,6 +4833,13 @@ function greffer(){
     window.ouvrirAjoutClient = function(){
       origOuvrir.apply(this, arguments);
       try{ reinitialiserNouveauxChamps(); }catch(e){}
+      // v1.19.15 : les suggestions de contact existent déjà nativement sur ce
+      // formulaire (f-prenom/f-nom/f-tel → _showSuggestionsCombo) — on ajoute
+      // ici seulement l'autocomplete d'adresse et la réconciliation CP↔ville.
+      try{
+        _depAdresseAutocompleteInit('f', 'f-adresse');
+        _depCpVilleInit('f');
+      }catch(e){ console.error('departs: autocomplete adresse f-', e); }
     };
     window.ouvrirAjoutClient._depPatch = true;
   }
@@ -4977,6 +5239,36 @@ function greffer(){
       }catch(e){ console.error('departs: retrait historique accueil', e); }
     };
     window.renderCollectesList._depPatch = true;
+  }
+
+  /* --- N. Formulaire France & Europe ("fa-") : suggestions de contact
+     déjà connu + autocomplete d'adresse + réconciliation CP↔ville
+     (v1.19.15, section 12bis) — jusqu'ici absents de ce formulaire.
+     "fa-ligne-nom" est déjà l'id natif de la ligne prénom/nom (index.html),
+     pas besoin d'y toucher. Branché sur les deux fonctions d'ouverture
+     (nouveau client ET modification), le câblage étant idempotent. --- */
+  if(typeof window.ouvrirAjoutFrance === 'function' && !window.ouvrirAjoutFrance._depPatch){
+    var origOuvrirFrance = window.ouvrirAjoutFrance;
+    window.ouvrirAjoutFrance = function(){
+      origOuvrirFrance.apply(this, arguments);
+      try{
+        _depSuggestionsInit('fa', 'fa-ligne-nom');
+        _depAdresseAutocompleteInit('fa', 'fa-adresse');
+        _depCpVilleInit('fa');
+      }catch(e){ console.error('departs: autocomplete fa- (ajout)', e); }
+    };
+    window.ouvrirAjoutFrance._depPatch = true;
+  }
+  if(typeof window.modifierClientFrance === 'function' && !window.modifierClientFrance._depPatch){
+    var origModifierFrance = window.modifierClientFrance;
+    window.modifierClientFrance = function(){
+      origModifierFrance.apply(this, arguments);
+      try{
+        _depAdresseAutocompleteInit('fa', 'fa-adresse');
+        _depCpVilleInit('fa');
+      }catch(e){ console.error('departs: autocomplete fa- (modif)', e); }
+    };
+    window.modifierClientFrance._depPatch = true;
   }
 }
 
