@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.8';
+var DEP_VERSION = 'v1.19.11';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -696,6 +696,14 @@ function injecterEcrans(){
   +         '<div class="dep-case-tit" style="color:#455A64;">R&Eacute;GLAGES</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-regl">—</div>'
   +       '</div>'
+  // v1.19.9 : nouveau carré STATISTIQUES, réservé à la direction — classement
+  // des collaborateurs (clients inscrits, argent apporté/encaissé, collectes
+  // travaillées, validations effectuées).
+  +       '<div class="dep-case" id="dep-case-stats" style="border-color:#B8860B;" onclick="depOuvrirEspaceStats()">'
+  +         '<div class="dep-case-ico">&#128202;</div>'
+  +         '<div class="dep-case-tit" style="color:#B8860B;">STATISTIQUES</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-stats">—</div>'
+  +       '</div>'
   +     '</div>'
   +     '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:22px;">Module départs '+DEP_VERSION+'</div>'
   +   '</div>'
@@ -712,6 +720,19 @@ function injecterEcrans(){
   +   '</div>'
   +   '<div class="content">'
   +     '<div id="dep-archive-content"></div>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 1ter (v1.19.9) : STATISTIQUES — classement des
+     collaborateurs, réservé à la direction. ---- */
+  + '<div class="screen" id="s-stats">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
+  +     '<div class="h-title">Statistiques</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div id="dep-stats-content"></div>'
   +   '</div>'
   + '</div>'
 
@@ -1309,6 +1330,20 @@ window.depRenderEspaces = function(){
         : '&Eacute;quipe, acc&egrave;s, donn&eacute;es&hellip;';
     }
   }
+
+  // Case STATISTIQUES (v1.19.9) — réservée à la direction.
+  var cst = $('dep-case-stats');
+  if(cst) cst.style.display = estDirection() ? '' : 'none';
+  if(estDirection()){
+    var sst = $('dep-case-sub-stats');
+    if(sst){
+      var classement = _depStatsCalculer();
+      var enTete = classement[0];
+      sst.innerHTML = (enTete && enTete.montantEncaisse > 0)
+        ? '&#127942; <b style="color:#B8860B;">'+esc(enTete.nom)+'</b> en t&ecirc;te'
+        : 'Performance de l&rsquo;&eacute;quipe';
+    }
+  }
 };
 
 window.depOuvrirEspaceClient = function(){
@@ -1404,6 +1439,141 @@ function _depReglagesAfficherGrille(){
   if(grille) grille.style.display = '';
   _depReglagesMajBoutonRetour();
 }
+
+// v1.19.9 : carré STATISTIQUES — classement des collaborateurs (nb clients
+// inscrits, argent apporté/encaissé, collectes travaillées, validations
+// effectuées), calculé à partir des fiches déjà présentes dans les
+// données, sans aucun nouveau champ à saisir.
+// v1.19.11 : formatte une durée en millisecondes en "Xh XX" (ou "XX min"
+// si moins d'une heure), pour la durée moyenne de tournée.
+function _depFormatDuree(ms){
+  if(ms === null || ms === undefined || isNaN(ms)) return '—';
+  var totalMin = Math.round(ms / 60000);
+  var h = Math.floor(totalMin / 60);
+  var m = totalMin % 60;
+  if(h <= 0) return m + ' min';
+  return h + 'h' + (m < 10 ? '0' : '') + m;
+}
+
+function _depStatsCalculer(){
+  var stats = {};
+  function ligne(nom){
+    if(!nom) return null;
+    if(!stats[nom]) stats[nom] = { nom: nom, nbClients: 0, montantApporte: 0, montantEncaisse: 0, collectesSet: {}, nbValidations: 0, tourneesTs: {} };
+    return stats[nom];
+  }
+  // Roster de départ : tous les collaborateurs connus, même sans activité
+  // pour l'instant (dédoublonnés par nom — un même collaborateur peut
+  // avoir un profil "terrain" et un profil admin dans COLLABS).
+  (window.COLLABS || []).forEach(function(c){ if(c && c.name) ligne(c.name); });
+
+  function traiterFiche(c, collecteId){
+    if(!c) return;
+    var l = ligne(c.by);
+    if(l){
+      l.nbClients++;
+      l.montantApporte += (parseFloat(c.prix) || 0);
+    }
+    (Array.isArray(c.versements) ? c.versements : []).forEach(function(v){
+      var lv = ligne(v && v.par);
+      if(lv) lv.montantEncaisse += (parseFloat(v && v.montant) || 0);
+    });
+    // v1.19.10 : "collectes travaillées" se compte désormais sur qui a
+    // VALIDÉ (confirmé la ramasse sur le terrain, photo à l'appui), pas
+    // sur qui a inscrit le client — l'inscription peut se faire à
+    // distance, la validation non.
+    // v1.19.11 : on garde aussi l'horodatage de chaque validation, par
+    // collecte, pour en déduire la durée de la tournée (entre la première
+    // et la dernière validation de ce collaborateur sur cette collecte).
+    (Array.isArray(c.hist) ? c.hist : []).forEach(function(h){
+      if(h && h.type === 'validation'){
+        var lh = ligne(h.q);
+        if(lh){
+          lh.nbValidations++;
+          if(collecteId){
+            lh.collectesSet[collecteId] = true;
+            if(!lh.tourneesTs[collecteId]) lh.tourneesTs[collecteId] = [];
+            lh.tourneesTs[collecteId].push(h.ts || 0);
+          }
+        }
+      }
+    });
+  }
+
+  Object.keys(window.clientsParCollecte || {}).forEach(function(collecteId){
+    var cls = window.clientsParCollecte[collecteId] || {};
+    Object.keys(cls).forEach(function(clientId){ traiterFiche(cls[clientId], collecteId); });
+  });
+  Object.keys(window.depotClients || {}).forEach(function(id){ traiterFiche(window.depotClients[id], null); });
+
+  var liste = Object.keys(stats).map(function(n){
+    var s = stats[n];
+    // v1.19.11 : durée moyenne d'une tournée — moyenne, sur toutes les
+    // collectes où ce collaborateur a validé au moins 2 clients (il faut
+    // au moins 2 points pour mesurer une durée), de (dernière validation
+    // − première validation) sur cette collecte.
+    var durees = [];
+    Object.keys(s.tourneesTs).forEach(function(colId){
+      var arr = s.tourneesTs[colId];
+      if(arr.length >= 2){
+        durees.push(Math.max.apply(null, arr) - Math.min.apply(null, arr));
+      }
+    });
+    var dureeMoyenneMs = durees.length
+      ? (durees.reduce(function(a,b){ return a+b; }, 0) / durees.length)
+      : null;
+    return {
+      nom: s.nom,
+      nbClients: s.nbClients,
+      montantApporte: Math.round(s.montantApporte * 100) / 100,
+      montantEncaisse: Math.round(s.montantEncaisse * 100) / 100,
+      nbCollectes: Object.keys(s.collectesSet).length,
+      nbValidations: s.nbValidations,
+      dureeTourneeMoyenneMs: dureeMoyenneMs
+    };
+  });
+  // Ne garder que les collaborateurs ayant au moins une activité —
+  // sinon le classement affiche tout le monde à 0, peu utile.
+  liste = liste.filter(function(s){
+    return s.nbClients > 0 || s.montantEncaisse > 0 || s.nbValidations > 0;
+  });
+  liste.sort(function(a,b){ return b.montantEncaisse - a.montantEncaisse; });
+  return liste;
+}
+
+window.depOuvrirEspaceStats = function(){
+  goTo('s-stats');
+  depRenderStats();
+};
+
+window.depRenderStats = function(){
+  var box = $('dep-stats-content');
+  if(!box) return;
+  var liste = _depStatsCalculer();
+  if(!liste.length){
+    box.innerHTML = '<div class="dep-vide" style="padding:20px 16px;">Aucune donn&eacute;e pour l\'instant.</div>';
+    return;
+  }
+  var medailles = ['&#129351;','&#129352;','&#129353;'];
+  var h = '';
+  liste.forEach(function(s, i){
+    var medaille = medailles[i] || ('#'+(i+1));
+    h += '<div class="dep-card" style="border-left-color:#B8860B;">'
+      +   '<div class="dep-card-top">'
+      +     '<div class="dep-nom">'+medaille+' '+esc(s.nom)+'</div>'
+      +   '</div>'
+      +   '<div class="dep-meta">'
+      +     '<span>&#128100; <b>'+s.nbClients+'</b> client'+(s.nbClients>1?'s':'')+'</span>'
+      +     '<span>&#128176; <b>'+s.montantApporte+'</b> &euro; apport&eacute;s</span>'
+      +     '<span>&#128179; <b>'+s.montantEncaisse+'</b> &euro; encaiss&eacute;s</span>'
+      +     '<span>&#128197; <b>'+s.nbCollectes+'</b> collecte'+(s.nbCollectes>1?'s':'')+' valid&eacute;e'+(s.nbCollectes>1?'s':'')+'</span>'
+      +     '<span>&#9989; <b>'+s.nbValidations+'</b> validation'+(s.nbValidations>1?'s':'')+'</span>'
+      +     '<span>&#9203; <b>'+_depFormatDuree(s.dureeTourneeMoyenneMs)+'</b> tourn&eacute;e moyenne</span>'
+      +   '</div>'
+      + '</div>';
+  });
+  box.innerHTML = h;
+};
 
 // v1.19.0 : carré ARCHIVAGE — consultation en lecture seule des départs
 // clôturés et des collectes terminées, regroupés au même endroit.
