@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.25';
+var DEP_VERSION = 'v1.19.26';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1387,6 +1387,24 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-green-sm" onclick="depGenererEtiquettes()">G&eacute;n&eacute;rer</button>'
     + '</div></div></div>';
   document.body.appendChild(m5);
+
+  /* ---- Modale (v1.19.26) : rappel de paiement manquant à la validation
+     finale de la facture — voir depValiderFactureFinale/
+     depValiderFactureFinaleExecuter. Ne bloque pas (le client peut payer
+     plus tard, à la remise avec Modou) : juste une confirmation explicite,
+     remplace un toast jugé trop rapide à lire par Cobey. ---- */
+  var m6 = document.createElement('div');
+  m6.className = 'modal-overlay';
+  m6.id = 'modal-dep-valider-reste';
+  m6.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#9888;&#65039;</div>'
+    + '<div class="modal-confirm-title">Paiement incomplet</div>'
+    + '<div id="dep-valider-reste-msg" style="font-size:13px;color:#555;margin:4px 0 16px;"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-valider-reste\')">Non, revenir</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depValiderFactureFinaleExecuter()">Oui, valider</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m6);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -2745,6 +2763,55 @@ window.depValiderFactureFinale = function(){
   var info = _depTruckEtStatut(ctx.collecteId, ctx.clientId);
   if(!info){ toast('⚠️ Camion introuvable pour ce client.'); return; }
 
+  // Déjà validée (ex. ré-appel de sécurité) : rien à confirmer, on
+  // avance directement — pas de modale à afficher pour rien.
+  if(info.valide){
+    var fiche0 = (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+    if(fiche0) depRenderFacture(fiche0);
+    goTo('s-dep-impression');
+    return;
+  }
+
+  // v1.19.26 : rappel non bloquant si un paiement manque encore — le
+  // client peut toujours régler plus tard, à la remise avec Modou, mais
+  // retour de Cobey : « il faut un rappel quand même », sous forme de
+  // modale plutôt qu'un toast (« y'a eu un message qui est apparu 2
+  // secondes », trop rapide à lire). "Non" laisse la facture telle
+  // quelle, "Oui" exécute la validation (voir
+  // depValiderFactureFinaleExecuter).
+  var fiche = (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var resteMsg = '';
+  if(fiche){
+    var payC = depCalculerPaiement(fiche);
+    if(payC.reste > 0) resteMsg += payC.reste + ' € (colis)';
+    if(fiche.livraisonDakar){
+      var payLivC = depCalculerPaiementLivraison(fiche);
+      if(payLivC.reste > 0) resteMsg += (resteMsg ? ' + ' : '') + payLivC.reste + ' € (livraison)';
+    }
+  }
+
+  if(resteMsg){
+    var msgEl = $('dep-valider-reste-msg');
+    if(msgEl) msgEl.textContent = 'Il manque ' + resteMsg + '. Le client pourra régler à la remise (Modou) — voulez-vous valider quand même ?';
+    openModal('modal-dep-valider-reste');
+    return;
+  }
+
+  depValiderFactureFinaleExecuter();
+};
+
+// v1.19.26 : exécute la validation réelle de la collecte (trks[tk].validated,
+// via confirmValider() d'origine) — appelée directement par
+// depValiderFactureFinale si tout est payé, ou depuis la modale
+// "Paiement incomplet" sinon (bouton "Oui, valider").
+window.depValiderFactureFinaleExecuter = function(){
+  closeModal('modal-dep-valider-reste');
+
+  var ctx = _depFactureCtx;
+  if(!ctx || ctx.depot) return;
+  var info = _depTruckEtStatut(ctx.collecteId, ctx.clientId);
+  if(!info) return;
+
   var fiche = (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
 
   if(!info.valide){
@@ -2758,20 +2825,7 @@ window.depValiderFactureFinale = function(){
     curValiderId = ctx.clientId;
     curValiderTk = info.tk;
     try{ confirmValider(); }catch(e){ console.error('departs: confirmValider (validation finale facture)', e); }
-
-    // v1.19.25 : rappel (non bloquant) si un paiement manque encore à la
-    // validation — le client peut toujours régler plus tard, à la remise
-    // avec Modou, mais retour de Cobey : « il faut un rappel quand même ».
-    var resteMsg = '';
-    if(fiche){
-      var payC = depCalculerPaiement(fiche);
-      if(payC.reste > 0) resteMsg += payC.reste + ' € (colis)';
-      if(fiche.livraisonDakar){
-        var payLivC = depCalculerPaiementLivraison(fiche);
-        if(payLivC.reste > 0) resteMsg += (resteMsg ? ' + ' : '') + payLivC.reste + ' € (livraison)';
-      }
-    }
-    toast(resteMsg ? ('✅ Collecte validée — ⚠️ reste ' + resteMsg + ' à payer') : '✅ Collecte validée');
+    toast('✅ Collecte validée');
   }
 
   if(fiche) depRenderFacture(fiche); // débloque immédiatement les boutons si on revient sur s-facture
