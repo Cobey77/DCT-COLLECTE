@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.13';
+var DEP_VERSION = 'v1.19.14';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1340,13 +1340,9 @@ window.depRenderEspaces = function(){
   if(cst) cst.style.display = estDirection() ? '' : 'none';
   if(estDirection()){
     var sst = $('dep-case-sub-stats');
-    if(sst){
-      var classement = _depStatsCalculer();
-      var enTete = classement[0];
-      sst.innerHTML = (enTete && enTete.montantEncaisse > 0)
-        ? '&#127942; <b style="color:#B8860B;">'+esc(enTete.nom)+'</b> en t&ecirc;te'
-        : 'Performance de l&rsquo;&eacute;quipe';
-    }
+    // v1.19.14 : plus d'aperçu "tout l'historique" ici (retiré du classement
+    // lui-même) — juste un texte fixe, le détail se choisit à l'intérieur.
+    if(sst) sst.innerHTML = 'Par ann&eacute;e, par mois&hellip;';
   }
 };
 
@@ -1654,16 +1650,33 @@ window.depRenderStats = function(){
   var box = $('dep-stats-content');
   if(!box) return;
 
-  var periode = (_depStatsNav.annee === null) ? null
-    : { annee: _depStatsNav.annee, mois: (_depStatsNav.mois === null ? undefined : _depStatsNav.mois) };
+  // v1.19.14 : le "Tout l'historique" est retiré — pas assez pertinent
+  // (mélange des années entières de données). Le niveau racine ne montre
+  // plus que les dossiers Année ; le classement lui-même n'apparaît qu'à
+  // partir du moment où une année (ou un mois) est choisie.
+  if(_depStatsNav.annee === null){
+    var h0 = '<div style="font-size:12.5px;color:var(--text3);font-weight:700;margin-bottom:12px;">Choisir une ann&eacute;e</div>';
+    var annees = _depStatsAnneesDisponibles();
+    if(!annees.length){
+      h0 += '<div class="dep-vide" style="padding:16px;">Aucune donn&eacute;e pour l\'instant.</div>';
+    } else {
+      annees.forEach(function(a){
+        h0 += '<div class="dep-card" style="border-left-color:#B8860B;cursor:pointer;" onclick="depStatsOuvrirAnnee('+a+')">'
+          +   '<div class="dep-card-top"><div class="dep-nom">&#128193; '+a+'</div></div>'
+          + '</div>';
+      });
+    }
+    box.innerHTML = h0;
+    _depStatsMajBoutonRetour();
+    return;
+  }
+
+  var periode = { annee: _depStatsNav.annee, mois: (_depStatsNav.mois === null ? undefined : _depStatsNav.mois) };
   var liste = _depStatsCalculer(periode);
 
-  var titrePeriode = 'Tout l\'historique';
-  if(_depStatsNav.annee !== null){
-    titrePeriode = (_depStatsNav.mois !== null)
-      ? (DEP_MOIS_NOMS[_depStatsNav.mois] + ' ' + _depStatsNav.annee)
-      : ('Ann&eacute;e ' + _depStatsNav.annee);
-  }
+  var titrePeriode = (_depStatsNav.mois !== null)
+    ? (DEP_MOIS_NOMS[_depStatsNav.mois] + ' ' + _depStatsNav.annee)
+    : ('Ann&eacute;e ' + _depStatsNav.annee);
   var h = '<div style="font-size:12.5px;color:var(--text3);font-weight:700;margin-bottom:12px;">'+titrePeriode+'</div>';
 
   if(!liste.length){
@@ -1689,17 +1702,7 @@ window.depRenderStats = function(){
   }
 
   // Dossiers pour affiner la période, juste sous le classement.
-  if(_depStatsNav.annee === null){
-    var annees = _depStatsAnneesDisponibles();
-    if(annees.length){
-      h += '<div class="dep-sec">Voir par ann&eacute;e</div>';
-      annees.forEach(function(a){
-        h += '<div class="dep-card" style="border-left-color:#B8860B;cursor:pointer;" onclick="depStatsOuvrirAnnee('+a+')">'
-          +   '<div class="dep-card-top"><div class="dep-nom">&#128193; '+a+'</div></div>'
-          + '</div>';
-      });
-    }
-  } else if(_depStatsNav.mois === null){
+  if(_depStatsNav.mois === null){
     var moisDispo = _depStatsMoisDisponibles(_depStatsNav.annee);
     if(moisDispo.length){
       h += '<div class="dep-sec">Voir par mois</div>';
