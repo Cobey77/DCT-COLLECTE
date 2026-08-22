@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.15';
+var DEP_VERSION = 'v1.19.20';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -350,6 +350,47 @@ var DEP_MOIS_NOMS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet',
 // v1.19.8 : sous-carré actuellement ouvert dans RÉGLAGES ('equipe',
 // 'partenaires', 'acces', 'donnees', 'message') — null = grille de choix.
 var _depReglagesTab = null;
+
+// v1.19.16 : DCT envoie aussi vers le Mali maintenant, avec ses propres
+// containers, séparés de ceux du Sénégal (demande de Cobey du 22/08/2026).
+// Chaque départ (container) porte désormais un champ "pays" — les départs
+// créés avant ce chantier n'ont pas ce champ : on les considère Sénégal
+// par défaut (DEP_PAYS_DEFAUT), seule destination qui existait jusqu'ici.
+var DEP_PAYS_DEST = {
+  SN: { code:'SN', nom:'S&eacute;n&eacute;gal', drapeau:'&#127480;&#127475;' },
+  ML: { code:'ML', nom:'Mali',                   drapeau:'&#127474;&#127473;' }
+};
+// Version en texte brut (pas d'entités HTML) — pour un usage via
+// .textContent, où les entités ne seraient pas décodées et s'afficheraient
+// telles quelles ("S&eacute;n&eacute;gal" au lieu de "Sénégal").
+var DEP_PAYS_NOM_PLAIN = { SN:'Sénégal', ML:'Mali' };
+var DEP_PAYS_DEFAUT = 'SN';
+function depPaysDepart(d){ return (d && d.pays) || DEP_PAYS_DEFAUT; }
+function depPaysClient(c){ return (c && c.paysDestination) || DEP_PAYS_DEFAUT; }
+
+// v1.19.17 : pour une fiche quelconque (collecte OU dépôt direct), le pays
+// le plus fiable qu'on connaisse : le champ explicite s'il existe (fiches
+// collecte depuis v1.19.16), sinon celui du container déjà attribué (dépôt
+// direct — le départ est toujours connu dès la création, voir
+// depOuvrirDepotForm), sinon Sénégal par défaut (fiche antérieure aux deux).
+function depPaysFiche(c){
+  if(!c) return DEP_PAYS_DEFAUT;
+  if(c.paysDestination) return c.paysDestination;
+  if(c.departId){
+    var d = (window.departsData||{})[c.departId];
+    if(d) return depPaysDepart(d);
+  }
+  return DEP_PAYS_DEFAUT;
+}
+
+// Sous-carré Sénégal/Mali actuellement ouvert dans l'espace DÉPARTS —
+// null = grille de choix (voir _depArchiveEtat/_depReglagesTab, même principe).
+var _depDepartsPays = null;
+
+// Pays choisi pour le client en cours d'inscription (écran natif s-add) —
+// remis à null à chaque ouverture du formulaire (voir greffe ouvrirAjoutClient),
+// pour forcer un choix explicite à chaque nouvelle fiche.
+window._depClientPaysChoisi = null;
 
 // v1.17.0 : prix "à définir sur place" — bascules des formulaires
 // d'inscription (collecte et dépôt), remises à zéro à chaque ouverture.
@@ -531,19 +572,23 @@ function compteursDepart(departId){
 }
 
 // Les départs proposés aux collaborateurs à l'inscription
-function departsDisponibles(){
+// v1.19.16 : filtre optionnel par pays ('SN'|'ML') — un départ sans champ
+// "pays" (créé avant ce chantier) compte comme Sénégal (voir depPaysDepart).
+function departsDisponibles(pays){
   var d = window.departsData || {};
   return Object.keys(d)
     .map(function(k){ var o = Object.assign({}, d[k]); o._id = k; return o; })
     .filter(function(o){ return o.ouvertInscription === true && o.statut === 'preparation'; })
+    .filter(function(o){ return !pays || depPaysDepart(o) === pays; })
     .sort(function(a,b){ return String(a.dateDepart||'').localeCompare(String(b.dateDepart||'')); });
 }
 
-// Tous les départs, du plus récent au plus ancien
-function tousLesDeparts(){
+// Tous les départs, du plus récent au plus ancien — filtre optionnel par pays.
+function tousLesDeparts(pays){
   var d = window.departsData || {};
   return Object.keys(d)
     .map(function(k){ var o = Object.assign({}, d[k]); o._id = k; return o; })
+    .filter(function(o){ return !pays || depPaysDepart(o) === pays; })
     .sort(function(a,b){ return String(b.dateDepart||'').localeCompare(String(a.dateDepart||'')); });
 }
 
@@ -744,11 +789,24 @@ function injecterEcrans(){
   +   '</div>'
   + '</div>'
 
-  /* ---- ÉCRAN 2 : liste des départs ---- */
-  + '<div class="screen" id="s-departs">'
+  /* ---- ÉCRAN 1quater (v1.19.16) : choix du pays de destination —
+     Sénégal ou Mali, chacun avec ses propres containers. ---- */
+  + '<div class="screen" id="s-departs-pays">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
   +     '<div class="h-title">D&eacute;parts</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div id="dep-departs-pays-content"></div>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 2 : liste des départs (d'un pays donné) ---- */
+  + '<div class="screen" id="s-departs">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depDepartsPaysRetour()">&larr; D&eacute;parts</button>'
+  +     '<div class="h-title" id="dep-departs-titre">D&eacute;parts</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
@@ -1132,6 +1190,44 @@ function injecterEcrans(){
     +   '<span class="dep-menu-tag">&Agrave; venir</span></span></button>'
     + '</div>';
   document.body.appendChild(m3);
+
+  /* ---- Modale (v1.19.16) : pays de destination du client, demandée
+     avant même de commencer à remplir sa fiche (inscription collecte) —
+     voir greffe sur ouvrirAjoutClient. Pas de clic en dehors pour fermer
+     (choix obligatoire), seul "Annuler" quitte, vers la collecte. ---- */
+  var m4 = document.createElement('div');
+  m4.className = 'modal-overlay';
+  m4.id = 'modal-dep-pays-client';
+  m4.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#127760;</div>'
+    + '<div class="modal-confirm-title">Ce client part pour&hellip;</div>'
+    + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Le choix d&eacute;termine les containers propos&eacute;s ensuite pour ce client.</div>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;">'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depChoisirPaysClient(\'SN\')">&#127480;&#127475; S&eacute;n&eacute;gal</button>'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depChoisirPaysClient(\'ML\')">&#127474;&#127473; Mali</button>'
+    + '</div>'
+    + '<div class="modal-confirm-btns" style="margin-top:14px;">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-pays-client\');goTo(\'s-collecte\');">Annuler</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m4);
+}
+
+// v1.19.16 : choix du pays de destination à l'inscription collecte —
+// voir modal-dep-pays-client et la greffe sur ouvrirAjoutClient.
+window.depChoisirPaysClient = function(pays){
+  window._depClientPaysChoisi = pays;
+  closeModal('modal-dep-pays-client');
+  _depAfficherBadgePaysClient();
+};
+
+function _depAfficherBadgePaysClient(){
+  var badge = $('dep-pays-client-badge');
+  if(!badge) return;
+  var p = DEP_PAYS_DEST[window._depClientPaysChoisi] || null;
+  badge.innerHTML = p
+    ? ('Destination : <b>'+p.drapeau+' '+p.nom+'</b> &middot; <a href="#" onclick="event.preventDefault();openModal(\'modal-dep-pays-client\');">changer</a>')
+    : '';
+  badge.style.display = p ? 'block' : 'none';
 }
 
 // petit pont pour le bouton "Modifier" de l'en-tête
@@ -1149,6 +1245,16 @@ function injecterChampsClient(){
   if(!ecran || $('f-dest-nom')) return;
   var content = ecran.querySelector('.content');
   if(!content) return;
+
+  // v1.19.16 : petit bandeau rappelant le pays choisi en amont (modale
+  // modal-dep-pays-client, ouverte dès le clic sur "+ Nouveau client" —
+  // voir greffe sur ouvrirAjoutClient) — permet de vérifier/corriger sans
+  // recommencer toute la fiche.
+  var badgePays = document.createElement('div');
+  badgePays.id = 'dep-pays-client-badge';
+  badgePays.style.cssText = 'display:none;font-size:12.5px;font-weight:600;color:#252599;'
+    + 'background:#EEEEF9;border:1.5px solid #C7C7F0;border-radius:10px;padding:9px 12px;margin-bottom:12px;';
+  content.insertBefore(badgePays, content.firstChild);
 
   // v1.17.0 : bascule "prix à définir sur place", insérée juste après le
   // champ Prix d'origine (index.html) — pas de vrai prix connu tant que le
@@ -1351,9 +1457,46 @@ window.depOuvrirEspaceClient = function(){
   try{ renderContacts(); }catch(e){}
 };
 
+// v1.19.16 : la case DÉPARTS ouvre désormais d'abord le choix du pays
+// (Sénégal/Mali) — la vraie liste de containers (s-departs) ne s'ouvre
+// qu'après avoir choisi lequel, via depOuvrirDepartsPays(pays) plus bas.
 window.depOuvrirEspaceDeparts = function(){
+  goTo('s-departs-pays');
+  depRenderDepartsPaysChoix();
+};
+
+function depRenderDepartsPaysChoix(){
+  var box = $('dep-departs-pays-content');
+  if(!box) return;
+  var h = '';
+  ['SN','ML'].forEach(function(code){
+    var p = DEP_PAYS_DEST[code];
+    var total = tousLesDeparts(code).length;
+    var ouverts = departsDisponibles(code).length;
+    var sousTitre = total === 0
+      ? 'Aucun d&eacute;part'
+      : ouverts + ' ouvert' + (ouverts>1?'s':'') + ' &middot; ' + total + ' au total';
+    h += '<div class="dep-card" style="border-left-color:#252599;cursor:pointer;" onclick="depOuvrirDepartsPays(\''+code+'\')">'
+      +   '<div class="dep-card-top">'
+      +     '<div class="dep-nom">'+p.drapeau+' '+p.nom+'</div>'
+      +   '</div>'
+      +   '<div class="dep-meta"><span>'+sousTitre+'</span></div>'
+      + '</div>';
+  });
+  box.innerHTML = h;
+}
+
+window.depOuvrirDepartsPays = function(pays){
+  _depDepartsPays = pays;
+  var p = DEP_PAYS_DEST[pays] || {};
+  var t = $('dep-departs-titre'); if(t) t.innerHTML = p.drapeau+' '+p.nom;
   goTo('s-departs');
   depRenderListe();
+};
+
+window.depDepartsPaysRetour = function(){
+  goTo('s-departs-pays');
+  depRenderDepartsPaysChoix();
 };
 
 // v1.19.8 : carré RÉGLAGES — reprend ce qui était derrière la molette ⚙️
@@ -1485,7 +1628,7 @@ function _depStatsCalculer(periode){
 
   function ligne(nom){
     if(!nom || !nomsValides[nom]) return null;
-    if(!stats[nom]) stats[nom] = { nom: nom, nbClients: 0, montantApporte: 0, montantEncaisse: 0, collectesSet: {}, nbValidations: 0, tourneesTs: {} };
+    if(!stats[nom]) stats[nom] = { nom: nom, nbClients: 0, nbClientsMali: 0, montantApporte: 0, montantEncaisse: 0, collectesSet: {}, nbValidations: 0, tourneesTs: {} };
     return stats[nom];
   }
   // Roster de départ : tous les collaborateurs connus (et retenus),
@@ -1501,6 +1644,10 @@ function _depStatsCalculer(periode){
     var l = ligne(c.by);
     if(l && dansPeriode(dateInscription)){
       l.nbClients++;
+      // v1.19.17 : Cobey n'a pas besoin de tout le classement séparé par
+      // pays — juste, en plus des stats existantes, combien de clients
+      // Mali chaque collaborateur a apportés.
+      if(depPaysFiche(c) === 'ML') l.nbClientsMali++;
       l.montantApporte += (parseFloat(c.prix) || 0);
     }
     (Array.isArray(c.versements) ? c.versements : []).forEach(function(v){
@@ -1562,6 +1709,7 @@ function _depStatsCalculer(periode){
     return {
       nom: s.nom,
       nbClients: s.nbClients,
+      nbClientsMali: s.nbClientsMali,
       montantApporte: Math.round(s.montantApporte * 100) / 100,
       montantEncaisse: Math.round(s.montantEncaisse * 100) / 100,
       nbCollectes: Object.keys(s.collectesSet).length,
@@ -1691,6 +1839,9 @@ window.depRenderStats = function(){
         +   '</div>'
         +   '<div class="dep-meta">'
         +     '<span>&#128100; <b>'+s.nbClients+'</b> client'+(s.nbClients>1?'s':'')+' inscrit'+(s.nbClients>1?'s':'')+'</span>'
+        // v1.19.17 : dont combien pour le Mali — pas de classement séparé
+        // par pays (pas utile selon Cobey), juste ce chiffre en plus.
+        +     '<span>&#127474;&#127473; <b>'+s.nbClientsMali+'</b> client'+(s.nbClientsMali>1?'s':'')+' Mali</span>'
         +     '<span>&#128176; <b>'+s.montantApporte+'</b> &euro; apport&eacute;s</span>'
         +     '<span>&#128179; <b>'+s.montantEncaisse+'</b> &euro; encaiss&eacute;s</span>'
         +     '<span>&#128230; <b>'+s.nbValidations+'</b> colis valid&eacute;'+(s.nbValidations>1?'s':'')+'</span>'
@@ -1783,9 +1934,14 @@ function _depArchiveCarteDossier(icone, titre, sousTitre, onclick){
 
 function _depArchiveCarteDepart(d){
   var cp = compteursDepart(d._id);
+  // v1.19.18 : petit repère 🇸🇳/🇲🇱 sur chaque départ archivé — un départ
+  // (container) a toujours un seul pays, contrairement à une collecte qui
+  // peut mélanger des clients des deux (voir _depArchiveCarteCollecte,
+  // laissée sans repère pour cette raison).
+  var pArch = DEP_PAYS_DEST[depPaysDepart(d)] || {};
   return '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="depDetail(\''+d._id+'\')">'
     +   '<div class="dep-card-top">'
-    +     '<div class="dep-nom">'+esc(d.nom||'Sans nom')+'</div>'
+    +     '<div class="dep-nom">'+pArch.drapeau+' '+esc(d.nom||'Sans nom')+'</div>'
     +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Cl&ocirc;tur&eacute;</div>'
     +   '</div>'
     +   '<div class="dep-meta">'
@@ -1960,7 +2116,11 @@ window.depDeconnexion = function(){
 window.depRenderListe = function(){
   var box = $('dep-liste');
   if(!box) return;
-  var liste = tousLesDeparts();
+  // v1.19.16 : filtré par le pays actuellement ouvert (voir
+  // depOuvrirDepartsPays) — repli sur Sénégal si jamais on arrivait ici
+  // sans être passé par le choix du pays (ex. lien direct/rafraîchissement).
+  var pays = _depDepartsPays || DEP_PAYS_DEFAUT;
+  var liste = tousLesDeparts(pays);
 
   if(!liste.length){
     box.innerHTML = '<div class="dep-vide"><div style="font-size:34px;margin-bottom:10px;">&#128230;</div>'
@@ -2003,7 +2163,11 @@ window.depNouveau = function(){
   _depEditId = null;
   _depFormOuvert = false;
   _depFormStatut = 'preparation';
-  var t = $('dep-form-titre'); if(t) t.innerHTML = 'Nouveau d&eacute;part';
+  // v1.19.16 : le pays du nouveau container est celui du sous-carré dans
+  // lequel on se trouve déjà (voir depOuvrirDepartsPays) — pas de choix
+  // supplémentaire à ce niveau, juste un rappel visuel dans le titre.
+  var p = DEP_PAYS_DEST[_depDepartsPays || DEP_PAYS_DEFAUT] || {};
+  var t = $('dep-form-titre'); if(t) t.innerHTML = 'Nouveau d&eacute;part &middot; ' + p.drapeau + ' ' + p.nom;
   ['dep-f-nom','dep-f-date','dep-f-arrivee'].forEach(function(id){ var e=$(id); if(e) e.value=''; });
   var bs = $('dep-f-bloc-statut'); if(bs) bs.style.display = 'none';
   var sp = $('dep-f-suppr');       if(sp) sp.style.display = 'none';
@@ -2017,7 +2181,8 @@ window.depModifier = function(id){
   _depEditId = id;
   _depFormOuvert = (d.ouvertInscription === true);
   _depFormStatut = d.statut || 'preparation';
-  var t = $('dep-form-titre'); if(t) t.innerHTML = 'Modifier le d&eacute;part';
+  var pM = DEP_PAYS_DEST[depPaysDepart(d)] || {};
+  var t = $('dep-form-titre'); if(t) t.innerHTML = 'Modifier le d&eacute;part &middot; ' + pM.drapeau + ' ' + pM.nom;
   var e;
   e = $('dep-f-nom');     if(e) e.value = d.nom || '';
   e = $('dep-f-date');    if(e) e.value = d.dateDepart || '';
@@ -2112,6 +2277,9 @@ window.depEnregistrer = function(){
   } else {
     obj.creeLe  = Date.now();
     obj.creePar = u.id || '';
+    // v1.19.16 : le pays est celui du sous-carré Départs actif — jamais
+    // redemandé à la création (voir depOuvrirDepartsPays/depNouveau).
+    obj.pays    = _depDepartsPays || DEP_PAYS_DEFAUT;
     db.ref('departs').push(obj).then(function(){
       toast('✅ Départ créé');
       depActivite('&#128230;', 'a cr&eacute;&eacute; le d&eacute;part <strong>'+esc(nom)+'</strong>');
@@ -2148,7 +2316,10 @@ window.depDetail = function(id){
   if(!d){ toast('⚠️ Départ introuvable.'); return; }
 
   var t = $('dep-d-nom'); if(t) t.textContent = d.nom || 'Départ';
-  var s = $('dep-d-sub'); if(s) s.textContent = 'Part le ' + dateFr(d.dateDepart);
+  // v1.19.16 : petit rappel du pays (🇸🇳/🇲🇱) à côté de la date, utile une
+  // fois qu'il existe deux flux de containers distincts.
+  var nomPaysDet = DEP_PAYS_NOM_PLAIN[depPaysDepart(d)] || '';
+  var s = $('dep-d-sub'); if(s) s.textContent = nomPaysDet + ' · Part le ' + dateFr(d.dateDepart);
 
   var st = STATUTS_DEPART[d.statut] || STATUTS_DEPART.preparation;
   var cp = compteursDepart(id);
@@ -4352,7 +4523,9 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   var dn = $('dv-dest-nom'); if(dn) dn.value = fiche.destinataireNom || '';
   var dt = $('dv-dest-tel'); if(dt) dt.value = fiche.destinataireTel || '';
 
-  depValiderRemplirDepart(fiche.departId || '');
+  // v1.19.16 : ne proposer que les containers du pays déclaré à l'inscription
+  // de ce client (Sénégal par défaut pour une fiche créée avant ce chantier).
+  depValiderRemplirDepart(fiche.departId || '', depPaysClient(fiche));
 
   goTo('s-dep-valider');
 };
@@ -4375,17 +4548,20 @@ window.depValiderPrixChange = function(){
   if(_depValiderCtx) _depValiderCtx.prixModifie = isNaN(v) ? 0 : v;
 };
 
-function depValiderRemplirDepart(departIdActuel){
+// v1.19.16 : "pays" filtre la liste aux containers de la destination
+// déclarée à l'inscription du client (voir depOuvrirValidation/depPaysClient).
+function depValiderRemplirDepart(departIdActuel, pays){
   var sel = $('dv-depart'), msg = $('dv-depart-msg'), btn = $('dv-btn-valider');
   if(!sel) return;
-  var opts = (typeof departsDisponibles === 'function') ? departsDisponibles() : [];
+  var opts = (typeof departsDisponibles === 'function') ? departsDisponibles(pays) : [];
 
   if(!opts.length){
+    var pInfo = DEP_PAYS_DEST[pays] || {};
     sel.innerHTML = '<option value="">Aucun d&eacute;part ouvert</option>';
     sel.disabled = true;
     if(msg){
       msg.style.display = 'block';
-      msg.innerHTML = '&#128274; Aucun d&eacute;part ouvert. Contactez Issyaka avant de valider cette collecte.';
+      msg.innerHTML = '&#128274; Aucun d&eacute;part ' + pInfo.drapeau + ' ' + pInfo.nom + ' ouvert. Contactez Issyaka avant de valider cette collecte.';
     }
     if(btn) btn.disabled = true;
     return;
@@ -4781,6 +4957,42 @@ function _depCpVilleInit(prefixe){
   }
 }
 
+// v1.19.19 : petit drapeau 🇲🇱 devant le nom des clients Mali, dans la
+// liste "Clients" d'une collecte (renderClientsTab, natif) — voir greffe O.
+// renderClientsTab n'attache aucun identifiant aux lignes qu'elle construit :
+// on reconstruit ici le même regroupement/tri par département (deptMap,
+// Object.keys().sort()) que l'original pour faire correspondre chaque ligne
+// du DOM au bon client, dans le même ordre — même principe déjà utilisé
+// ailleurs dans le module pour le camion (voir _depAjouterFactureCamionValide).
+function _depAjouterDrapeauxCollecte(){
+  var container = document.getElementById('collecte-content');
+  if(!container) return;
+  var cls = (typeof getClients === 'function') ? getClients() : {};
+  var filtre = window.activeFilter || '';
+  var deptMap = {};
+  Object.entries(cls).forEach(function(e){
+    var id = e[0], c = e[1];
+    if(filtre && c.by !== filtre) return;
+    var dept = c.dept || (c.cp ? c.cp.substring(0,2) : '??');
+    if(!deptMap[dept]) deptMap[dept] = [];
+    deptMap[dept].push(c);
+  });
+  var ordre = [];
+  Object.keys(deptMap).sort().forEach(function(dept){
+    deptMap[dept].forEach(function(c){ ordre.push(c); });
+  });
+  var rows = container.querySelectorAll('.client-row');
+  for(var i = 0; i < rows.length && i < ordre.length; i++){
+    var c = ordre[i];
+    if(depPaysFiche(c) !== 'ML') continue;
+    var nameEl = rows[i].querySelector('.client-name');
+    if(nameEl && !nameEl._depDrapeauAjoute){
+      nameEl.textContent = (c.name || '') + ' 🇲🇱';
+      nameEl._depDrapeauAjoute = true;
+    }
+  }
+}
+
 /* ─────────────────────────────────────────────
    13. LES GREFFES SUR LE CODE EXISTANT
    ───────────────────────────────────────────── */
@@ -4840,6 +5052,15 @@ function greffer(){
         _depAdresseAutocompleteInit('f', 'f-adresse');
         _depCpVilleInit('f');
       }catch(e){ console.error('departs: autocomplete adresse f-', e); }
+      // v1.19.16 : DCT envoie maintenant aussi vers le Mali — le pays de
+      // destination doit être choisi avant même de remplir la fiche, pour
+      // proposer ensuite les bons containers à la validation. Remis à zéro
+      // et redemandé à chaque nouvelle ouverture du formulaire.
+      try{
+        window._depClientPaysChoisi = null;
+        _depAfficherBadgePaysClient();
+        openModal('modal-dep-pays-client');
+      }catch(e){ console.error('departs: modale pays client', e); }
     };
     window.ouvrirAjoutClient._depPatch = true;
   }
@@ -4855,6 +5076,16 @@ function greffer(){
       var prenom = (($('f-prenom')||{}).value || '').trim();
       var nom    = (($('f-nom')||{}).value || '').trim();
       var cp     = (($('f-cp')||{}).value || '').trim();
+
+      // v1.19.16 : garde-fou — le pays devrait déjà être choisi (modale
+      // ouverte dès l'entrée sur ce formulaire), mais si jamais on arrive
+      // ici sans (ex. modale fermée autrement), on bloque plutôt que de
+      // créer une fiche sans destination.
+      if(!window._depClientPaysChoisi){
+        toast('⚠️ Choisissez d\'abord le pays de destination.');
+        openModal('modal-dep-pays-client');
+        return;
+      }
 
       if(!prenom && !nom){
         toast('⚠️ Indiquez au moins le nom ou le prénom.');
@@ -4912,7 +5143,11 @@ function greffer(){
         note             : (($('f-note')||{}).value || '').trim(),
         livraisonDakar   : !!window._depLivraison,
         livraisonAdresse : window._depLivraison ? (($('f-liv-adresse')||{}).value || '').trim() : '',
-        prixLivraison    : window._depLivraison ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0
+        prixLivraison    : window._depLivraison ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0,
+        // v1.19.16 : pays choisi dans la modale modal-dep-pays-client, avant
+        // même de remplir la fiche — détermine les containers proposés
+        // ensuite à la validation (voir depValiderRemplirDepart).
+        paysDestination  : window._depClientPaysChoisi || DEP_PAYS_DEFAUT
       };
       var venantDuCarre = _depAjoutClientCarre;
       _depAjoutClientCarre = false;
@@ -5269,6 +5504,20 @@ function greffer(){
       }catch(e){ console.error('departs: autocomplete fa- (modif)', e); }
     };
     window.modifierClientFrance._depPatch = true;
+  }
+
+  /* --- O. Liste des clients d'une collecte (onglet "Clients", écran
+     Collecte) : petit drapeau 🇲🇱 devant le nom des clients Mali — pour
+     les repérer d'un coup d'œil vu qu'ils sont pour l'instant minoritaires
+     (demande de Cobey du 22/08/2026). Rien pour les clients Sénégal
+     (majoritaires, pas besoin de les marquer). --- */
+  if(typeof window.renderClientsTab === 'function' && !window.renderClientsTab._depPatch){
+    var origRenderClientsTab = window.renderClientsTab;
+    window.renderClientsTab = function(){
+      origRenderClientsTab.apply(this, arguments);
+      try{ _depAjouterDrapeauxCollecte(); }catch(e){ console.error('departs: drapeaux clients collecte', e); }
+    };
+    window.renderClientsTab._depPatch = true;
   }
 }
 
