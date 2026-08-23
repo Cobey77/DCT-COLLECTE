@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.44';
+var DEP_VERSION = 'v1.19.45';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -2910,8 +2910,13 @@ window.depDetail = function(id, gardeFiltres){
       // près des boutons juste en dessous, risque de mauvaise
       // manipulation — retour de Cobey du 24/08/2026) mais en pastille
       // ronde à droite, avec sa propre zone de tap.
+      // v1.19.45 : drapeau pays (déjà dans l'onglet Clients d'une
+      // collecte, voir _depAjouterDrapeauxCollecte) manquait ici — retour
+      // de Cobey du 24/08/2026 : "il devrait être partout où un parcours
+      // est ouvert pour un client".
+      var drapeauCli = (DEP_PAYS_DEST[depPaysFiche(c)] || {}).drapeau || '';
       h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
-        +   '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
+        +   '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+' '+drapeauCli
         +     (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
         +   '<div class="dep-cli-s" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;">'
         +     '<span>'+(c.prixADefinir ? '&agrave; d&eacute;finir' : ((parseFloat(c.prix)||0)+' &euro;'))
@@ -4816,7 +4821,11 @@ function depRenderFicheLecture(colId, clientId){
   var box = $('dep-ficheL-content');
   var titre = $('dep-ficheL-nom');
   if(!c || !box) return;
-  if(titre) titre.textContent = c.name || 'Client';
+  // v1.19.45 : drapeau pays sur la fiche aussi (voir dep-cli-n, même
+  // demande de Cobey).
+  var drapeauTitre = '';
+  try{ drapeauTitre = (DEP_PAYS_DEST[depPaysFiche(c)] || {}).drapeau ? ' ' + (DEP_PAYS_DEST[depPaysFiche(c)] || {}).drapeau : ''; }catch(e){}
+  if(titre) titre.innerHTML = esc(c.name || 'Client') + drapeauTitre;
 
   var kv = function(k, v){
     return '<div class="dep-kv"><span class="dep-kv-k">'+k+'</span><span class="dep-kv-v">'+v+'</span></div>';
