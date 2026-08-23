@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.27';
+var DEP_VERSION = 'v1.19.28';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -3485,11 +3485,24 @@ window.depVersMajFcfa = function(){
 // bas), utilisée aussi pour le prix et pourra resservir ensuite.
 function _depEcrireClient(ctx, champs){
   if(!(window.db && window.firebaseReady)) return;
+  // v1.19.28 : Firebase (update) rejette toute valeur `undefined` avec une
+  // exception SYNCHRONE, pas une simple rejection de promesse — un seul
+  // champ undefined dans l'objet fait planter l'appel entier, y compris
+  // tout ce qui suit dans la fonction appelante (le .catch() plus bas ne
+  // rattrape rien dans ce cas). Repéré via le bug de Cobey du 23/08/2026 :
+  // "Continuer vers la facture" ne faisait plus rien du tout, à cause de
+  // champs.hist undefined sur une fiche neuve/inchangée (voir
+  // depValiderConfirmer). On neutralise ça une fois pour toutes ici, pour
+  // tous les appels : tout champ undefined devient null avant l'envoi.
+  var champsSurs = {};
+  Object.keys(champs || {}).forEach(function(k){
+    champsSurs[k] = (champs[k] === undefined) ? null : champs[k];
+  });
   if(ctx.depot){
-    db.ref('dct_depot/'+ctx.clientId).update(champs)
+    db.ref('dct_depot/'+ctx.clientId).update(champsSurs)
       .catch(function(e){ console.error('departs: échec écriture client (dépôt)', e); });
   } else {
-    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update(champs)
+    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update(champsSurs)
       .catch(function(e){ console.error('departs: échec écriture client (collecte)', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
   }
 }
