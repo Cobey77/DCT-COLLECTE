@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.41';
+var DEP_VERSION = 'v1.19.44';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -403,6 +403,17 @@ var DEP_PAYS_DEST = {
 // telles quelles ("S&eacute;n&eacute;gal" au lieu de "Sénégal").
 var DEP_PAYS_NOM_PLAIN = { SN:'Sénégal', ML:'Mali' };
 var DEP_PAYS_DEFAUT = 'SN';
+// v1.19.44 : "Dépôt (en attente)" — un container virtuel, jamais stocké
+// côté Firebase (voir son injection dans window.departsData plus bas),
+// qui accueille les clients détachés d'un vrai départ tant qu'ils ne
+// repartent pas ailleurs (retour de Cobey du 24/08/2026 : "il faudrait
+// le placer quelque part qui symbolise qu'il est au dépôt [...] et
+// imaginons dans un mois le client nous redit qu'il veut le faire
+// partir, bah on le redéplace dans un autre container"). Mélange
+// volontairement Sénégal et Mali : c'est un stockage physique unique
+// (le client garde son propre pays sur sa fiche, indépendamment du
+// container où il se trouve — voir depPaysClient).
+var DEP_ID_DEPOT = 'DEPOT';
 function depPaysDepart(d){ return (d && d.pays) || DEP_PAYS_DEFAUT; }
 function depPaysClient(c){ return (c && c.paysDestination) || DEP_PAYS_DEFAUT; }
 
@@ -615,6 +626,21 @@ function _depLienTel(tel, texteAffiche){
     + '&#128222; ' + esc(texte) + '</a>';
 }
 
+// v1.19.43 : variante en pastille ronde (icône seule, sans le numéro en
+// clair) — retour de Cobey du 24/08/2026 : sur la liste des clients d'un
+// container, le numéro cliquable était collé aux boutons d'action juste
+// en dessous, avec un risque de mauvaise manipulation (appeler par
+// erreur). Séparée à droite de la ligne plutôt que dans le texte, avec
+// sa propre zone de tap ronde.
+function _depLienTelIcone(tel){
+  var brut = String(tel || '').trim();
+  var numero = brut.replace(/[^\d+]/g, '');
+  if(!numero) return '';
+  return '<a href="tel:'+numero+'" onclick="event.stopPropagation()" title="Appeler ' + esc(brut) + '" '
+    + 'style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:#FDEDED;color:#992020;'
+    + 'display:flex;align-items:center;justify-content:center;text-decoration:none;font-size:13px;">&#128222;</a>';
+}
+
 // "2026-09-13" → "13/09/2026"
 function dateFr(iso){
   if(!iso) return '—';
@@ -706,6 +732,10 @@ function departsDisponibles(pays){
   var d = window.departsData || {};
   return Object.keys(d)
     .map(function(k){ var o = Object.assign({}, d[k]); o._id = k; return o; })
+    // v1.19.44 : le Dépôt (en attente) n'est jamais un choix — ni à
+    // l'inscription, ni comme destination de "Déplacer"/"Valider" — on
+    // n'y arrive que via "Détacher" (voir DEP_ID_DEPOT).
+    .filter(function(o){ return o.special !== 'depot'; })
     .filter(function(o){ return o.ouvertInscription === true && o.statut === 'preparation'; })
     .filter(function(o){ return !pays || depPaysDepart(o) === pays; })
     .sort(function(a,b){ return String(a.dateDepart||'').localeCompare(String(b.dateDepart||'')); });
@@ -716,6 +746,7 @@ function tousLesDeparts(pays){
   var d = window.departsData || {};
   return Object.keys(d)
     .map(function(k){ var o = Object.assign({}, d[k]); o._id = k; return o; })
+    .filter(function(o){ return o.special !== 'depot'; }) // v1.19.44
     .filter(function(o){ return !pays || depPaysDepart(o) === pays; })
     .sort(function(a,b){ return String(b.dateDepart||'').localeCompare(String(a.dateDepart||'')); });
 }
@@ -829,7 +860,17 @@ function injecterStyles(){
     + '#dep-scan-msg{position:absolute;left:0;right:0;bottom:26px;text-align:center;color:#fff;'
     +   'font-size:13px;font-weight:600;padding:0 24px;text-shadow:0 1px 3px rgba(0,0,0,.6);}'
     + '#dep-scan-cadre{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);'
-    +   'width:64%;aspect-ratio:1/1;border:3px solid #fff;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.35);}';
+    +   'width:64%;aspect-ratio:1/1;border:3px solid #fff;border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.35);}'
+    // v1.19.43 : les 20px de marge basse d'origine (.content, index.html)
+    // ne suffisaient pas sur nos propres écrans — la dernière carte/le
+    // dernier bouton touchait le bas de l'écran, vu sur plusieurs fenêtres
+    // (retour de Cobey du 24/08/2026). Marge généreuse sur tous les écrans
+    // ajoutés par departs.js.
+    + '#s-departs .content, #s-departs-pays .content, #s-depart-form .content, #s-depart-detail .content, '
+    +   '#s-depot-form .content, #s-facture .content, #s-dep-suivi .content, #s-dep-valider .content, '
+    +   '#s-dep-fiche-lecture .content, #s-client-fiche .content, #s-dep-historique-contact .content, '
+    +   '#s-dep-impression .content, #s-espaces .content, #s-etiquette .content, #s-archive .content, '
+    +   '#s-stats .content { padding-bottom: 90px; }';
   document.head.appendChild(s);
 }
 
@@ -1004,10 +1045,10 @@ function injecterEcrans(){
   /* ---- ÉCRAN 4 : détail d'un départ ---- */
   + '<div class="screen" id="s-depart-detail">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="goTo(\'s-departs\');depRenderListe();">&larr; D&eacute;parts</button>'
+  +     '<button class="btn-back" onclick="depDetailRetour()">&larr; D&eacute;parts</button>'
   +     '<div style="text-align:center;"><div class="h-title" id="dep-d-nom">D&eacute;part</div>'
   +     '<div class="h-sub" id="dep-d-sub"></div></div>'
-  +     '<button class="btn-back" onclick="depModifier(_depDetailIdPublic())">Modifier</button>'
+  +     '<button class="btn-back" id="dep-d-btn-modifier" onclick="depModifier(_depDetailIdPublic())">Modifier</button>'
   +   '</div>'
   +   '<div class="content" id="dep-d-content"></div>'
   + '</div>'
@@ -1723,6 +1764,8 @@ function ecouterDeparts(){
 
   db.ref('departs').on('value', function(snap){
     window.departsData = snap.val() || {};
+    // v1.19.44 : réinjecté à chaque mise à jour temps réel — voir DEP_ID_DEPOT.
+    window.departsData[DEP_ID_DEPOT] = { nom: 'Dépôt (en attente)', statut: 'preparation', special: 'depot' };
     _depPret = true;
     try{ if($('s-departs') && $('s-departs').classList.contains('active')) depRenderListe(); }catch(e){}
     try{ if($('s-espaces') && $('s-espaces').classList.contains('active')) depRenderEspaces(); }catch(e){}
@@ -1887,6 +1930,16 @@ function depRenderDepartsPaysChoix(){
       +   '<div class="dep-meta"><span>'+sousTitre+'</span></div>'
       + '</div>';
   });
+  // v1.19.44 : le Dépôt (en attente) — clients détachés d'un container,
+  // en attente d'en reprendre un (voir DEP_ID_DEPOT). À part des pays
+  // puisqu'il mélange Sénégal et Mali.
+  var nbDepot = compteursDepart(DEP_ID_DEPOT).clients;
+  h += '<div class="dep-card" style="border-left-color:#B8860B;cursor:pointer;" onclick="depDetail(\''+DEP_ID_DEPOT+'\')">'
+    +   '<div class="dep-card-top">'
+    +     '<div class="dep-nom">&#127970; D&eacute;p&ocirc;t</div>'
+    +   '</div>'
+    +   '<div class="dep-meta"><span>'+nbDepot+' client'+(nbDepot>1?'s':'')+' en attente</span></div>'
+    + '</div>';
   box.innerHTML = h;
 }
 
@@ -2714,6 +2767,15 @@ window.depSupprimer = function(){
    10. DÉTAIL D'UN DÉPART
    ───────────────────────────────────────────── */
 
+// v1.19.44 : le Dépôt ne s'atteint pas via le choix du pays (s-departs)
+// mais directement depuis s-departs-pays — le retour doit donc suivre le
+// même chemin en sens inverse, sinon on se retrouve sur la liste des
+// containers d'un pays au hasard.
+window.depDetailRetour = function(){
+  if(_depDetailId === DEP_ID_DEPOT){ goTo('s-departs-pays'); depRenderDepartsPaysChoix(); return; }
+  goTo('s-departs'); depRenderListe();
+};
+
 window.depDetail = function(id, gardeFiltres){
   // v1.19.41 : les filtres (voir _depFiltrePaye/_depFiltreLivraison) ne se
   // réinitialisent que sur une VRAIE nouvelle ouverture du départ — pas
@@ -2723,24 +2785,46 @@ window.depDetail = function(id, gardeFiltres){
   _depDetailId = id;
   var d = (window.departsData||{})[id];
   if(!d){ toast('⚠️ Départ introuvable.'); return; }
+  var estDepot = (id === DEP_ID_DEPOT); // v1.19.44
 
   var t = $('dep-d-nom'); if(t) t.textContent = d.nom || 'Départ';
-  // v1.19.16 : petit rappel du pays (🇸🇳/🇲🇱) à côté de la date, utile une
-  // fois qu'il existe deux flux de containers distincts.
-  var nomPaysDet = DEP_PAYS_NOM_PLAIN[depPaysDepart(d)] || '';
-  var s = $('dep-d-sub'); if(s) s.textContent = nomPaysDet + ' · Part le ' + dateFr(d.dateDepart);
+  var s = $('dep-d-sub');
+  if(estDepot){
+    if(s) s.textContent = 'En attente d\'un nouveau départ';
+  } else {
+    // v1.19.16 : petit rappel du pays (🇸🇳/🇲🇱) à côté de la date, utile une
+    // fois qu'il existe deux flux de containers distincts.
+    var nomPaysDet = DEP_PAYS_NOM_PLAIN[depPaysDepart(d)] || '';
+    if(s) s.textContent = nomPaysDet + ' · Part le ' + dateFr(d.dateDepart);
+  }
+  // Le Dépôt n'est pas une fiche "départ" éditable (pas de nom/date/pays
+  // en base) : pas de bouton "Modifier" dessus.
+  var btnMod = $('dep-d-btn-modifier'); if(btnMod) btnMod.style.display = estDepot ? 'none' : '';
 
   var st = STATUTS_DEPART[d.statut] || STATUTS_DEPART.preparation;
   var cp = compteursDepart(id);
   var ouvert = (d.ouvertInscription === true && d.statut === 'preparation');
 
-  var h = ''
-    + '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">'
-    +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
-    +     '<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';">'+st.label+'</div>'
-    +     (ouvert ? '<div class="dep-badge" style="background:var(--green-light);color:var(--green-dark);">&#9679; Ouvert &agrave; l\'inscription</div>'
-                  : '<div class="dep-badge" style="background:#EDEDED;color:#777;">Ferm&eacute; &agrave; l\'inscription</div>')
-    +   '</div>'
+  var h = '';
+  if(estDepot){
+    h += '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">'
+      +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
+      +     '<div class="dep-badge" style="background:#FFF3D6;color:#8A6100;">&#127970; Stockage &mdash; hors container</div>'
+      +   '</div>'
+      +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;text-align:center;">'
+      +     '<div><div style="font-size:20px;font-weight:800;color:#252599;">'+cp.clients+'</div>'
+      +       '<div style="font-size:10.5px;color:var(--text3);font-weight:700;">CLIENT'+(cp.clients>1?'S':'')+'</div></div>'
+      +     '<div><div style="font-size:20px;font-weight:800;color:#006b2d;">'+cp.euros+'</div>'
+      +       '<div style="font-size:10.5px;color:var(--text3);font-weight:700;">EUROS</div></div>'
+      +   '</div>'
+      + '</div>';
+  } else {
+    h += '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;">'
+      +   '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">'
+      +     '<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';">'+st.label+'</div>'
+      +     (ouvert ? '<div class="dep-badge" style="background:var(--green-light);color:var(--green-dark);">&#9679; Ouvert &agrave; l\'inscription</div>'
+                    : '<div class="dep-badge" style="background:#EDEDED;color:#777;">Ferm&eacute; &agrave; l\'inscription</div>')
+      +   '</div>'
     +   '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center;">'
     +     '<div><div style="font-size:20px;font-weight:800;color:#252599;">'+cp.clients+'</div>'
     +       '<div style="font-size:10.5px;color:var(--text3);font-weight:700;">CLIENT'+(cp.clients>1?'S':'')+'</div></div>'
@@ -2750,6 +2834,7 @@ window.depDetail = function(id, gardeFiltres){
     +       '<div style="font-size:10.5px;color:var(--text3);font-weight:700;">ARRIV&Eacute;E</div></div>'
     +   '</div>'
     + '</div>';
+  }
 
   // Les clients rattachés : ceux venus d'une collecte + ceux inscrits
   // directement au dépôt (hors collecte)
@@ -2758,11 +2843,15 @@ window.depDetail = function(id, gardeFiltres){
     .filter(function(k){ return window.depotClients[k] && window.depotClients[k].departId === id; })
     .map(function(k){ return { depot:true, clientId:k, c: window.depotClients[k] }; });
 
-  if(d.statut === 'preparation' && estDirection()){
+  // v1.19.44 : "Inscrire un client au dépôt direct" (feature existante,
+  // sans rapport avec le Dépôt d'attente) n'a pas de sens ici — ça
+  // attacherait un client directement à ce container virtuel, sans vrai
+  // départ ni pays pour la facture.
+  if(d.statut === 'preparation' && estDirection() && !estDepot){
     h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#C8E6D0;background:#EAF7EE;color:#006b2d;" '
       +  'onclick="depOuvrirDepotForm(\''+id+'\')">&#127970; Inscrire un client au d&eacute;p&ocirc;t</button>';
   }
-  h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:4px;">Clients de ce d&eacute;part</div>';
+  h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:4px;">'+(estDepot ? 'Clients en attente' : 'Clients de ce d&eacute;part')+'</div>';
 
   var tousAffiches = clients.concat(clientsDepot);
 
@@ -2810,15 +2899,26 @@ window.depDetail = function(id, gardeFiltres){
     affiches.forEach(function(x){
       var c = x.c;
       var peutBouger = (d.statut === 'preparation') && !x.depot;
+      // v1.19.44 : "Détacher" n'a pas de sens depuis le Dépôt lui-même —
+      // le client y est déjà "détaché", seul "Déplacer" (vers un vrai
+      // container) reste utile ici.
+      var peutDetacher = peutBouger && !estDepot;
       var clic = x.depot
         ? "depOuvrirDepotForm('"+id+"','"+x.clientId+"')"
         : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"')";
+      // v1.19.43 : le numéro n'est plus dans le texte de la ligne (trop
+      // près des boutons juste en dessous, risque de mauvaise
+      // manipulation — retour de Cobey du 24/08/2026) mais en pastille
+      // ronde à droite, avec sa propre zone de tap.
       h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
         +   '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
         +     (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
-        +   '<div class="dep-cli-s">'+_depLienTel(c.tel, c.tel||'—')+' &middot; '+(c.prixADefinir ? '&agrave; d&eacute;finir' : ((parseFloat(c.prix)||0)+' &euro;'))
-        +     (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
-        +   '<div class="dep-cli-btns">'
+        +   '<div class="dep-cli-s" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;">'
+        +     '<span>'+(c.prixADefinir ? '&agrave; d&eacute;finir' : ((parseFloat(c.prix)||0)+' &euro;'))
+        +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</span>'
+        +     _depLienTelIcone(c.tel)
+        +   '</div>'
+        +   '<div class="dep-cli-btns" style="margin-top:12px;">'
               + '<button class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
                 + 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#129534; Facture</button>'
               // v1.19.41 : le bouton "Suivi" ne servait à rien à cet endroit
@@ -2828,7 +2928,9 @@ window.depDetail = function(id, gardeFiltres){
                 + 'onclick="event.stopPropagation();depOuvrirPhotosRapide(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#128247; Photos</button>'
               + (peutBouger
                 ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
-                  + '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
+                : '')
+              + (peutDetacher
+                ? '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
                   + 'onclick="event.stopPropagation();depDetacherClient(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;tacher</button>'
                 : '')
             + '</div>'
@@ -3764,7 +3866,10 @@ window.depOuvrirEtiquette = function(){
     ? (window.depotClients || {})[ctx.clientId]
     : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
-  if(!c.departId || !(window.departsData||{})[c.departId]){
+  // v1.19.44 : le Dépôt n'est pas un vrai container (pas de date de
+  // départ) — pas d'étiquette tant que le client n'est pas replacé dans
+  // un vrai départ (voir DEP_ID_DEPOT).
+  if(!c.departId || c.departId === DEP_ID_DEPOT || !(window.departsData||{})[c.departId]){
     toast('⚠️ Rattachez d\'abord ce client à un départ (container) avant de générer son étiquette.');
     return;
   }
@@ -4283,15 +4388,10 @@ function depRenderFacture(c){
   // long à atteindre tout en bas, retour de Cobey du 21/08/2026.
   h += '<button type="button" class="btn btn-gray" style="margin:0 0 16px;" onclick="depOuvrirSuivi()">&#128203; Voir le suivi</button>';
 
-  // v1.19.27 : la Note remonte tout en haut, juste après le statut/suivi —
-  // avant elle était tout en bas de la facture, pas assez visible à
-  // l'ouverture de l'écran (retour de Cobey du 22/08/2026).
-  if(c.note){
-    h += '<div style="background:#FFF9DB;border:1.5px solid #F0E4A0;border-radius:var(--radius-sm);padding:10px 12px;margin-bottom:16px;">'
-      + '<div style="font-size:10.5px;color:#8A7300;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px;">Note</div>'
-      + '<div style="font-size:13px;color:var(--text2);">' + esc(c.note) + '</div>'
-      + '</div>';
-  }
+  // v1.19.43 : la case "Note" a disparu de la facture (retour de Cobey du
+  // 24/08/2026) — les notes s'ajoutent désormais depuis l'écran de lecture
+  // de la fiche (bouton "📝 Ajouter une note") et vivent dans le Suivi,
+  // juste au-dessus ("Voir le suivi"), ce qui faisait doublon ici.
 
   h += kv('Client', esc(nom));
   // v1.19.21 : réf. client permanente (voir depRefClientPour).
@@ -5027,11 +5127,15 @@ function _depRenderPhotosLecture(box, photos){
     box.innerHTML = '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucune photo pour ce colis.</div>';
     return;
   }
+  // v1.19.42 : horodatage (date + heure de la prise) affiché sous chaque
+  // photo — retour de Cobey du 24/08/2026. La date était déjà enregistrée
+  // (`p.ts`) à la prise, simplement jamais montrée jusqu'ici.
   var h = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;">';
   photos.forEach(function(p, idx){
     h += '<div onclick="_depAgrandirPhoto(' + idx + ')" style="border-radius:10px;overflow:hidden;'
       +   'border:1.5px solid var(--border);background:#fff;cursor:pointer;">'
       +   '<img src="' + p.d + '" style="width:100%;height:80px;object-fit:cover;display:block;">'
+      +   '<div style="font-size:9.5px;color:var(--text3);text-align:center;padding:3px 2px;line-height:1.3;">' + esc(dateHeureFr(p.ts||0)) + '</div>'
       + '</div>';
   });
   h += '</div>';
@@ -5045,9 +5149,10 @@ window._depAgrandirPhoto = function(idx){
   if(!p) return;
   var m = document.createElement('div');
   m.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.9);'
-    + 'display:flex;align-items:center;justify-content:center;padding:20px;';
+    + 'display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
   m.onclick = function(){ document.body.removeChild(m); };
-  m.innerHTML = '<img src="' + p.d + '" style="max-width:100%;max-height:100%;border-radius:8px;object-fit:contain;">';
+  m.innerHTML = '<img src="' + p.d + '" style="max-width:100%;max-height:85%;border-radius:8px;object-fit:contain;">'
+    + '<div style="color:#fff;font-size:13px;font-weight:700;margin-top:12px;">&#128337; ' + esc(dateHeureFr(p.ts||0)) + '</div>';
   document.body.appendChild(m);
 };
 
@@ -5366,8 +5471,12 @@ window.depDetacherClient = function(collecteId, clientId){
   _depDetachClient = { collecteId:collecteId, clientId:clientId, nom:(c.name||''), departId:(c.departId||'') };
 
   var info = $('dep-dc-info');
+  // v1.19.44 : le client ne redevient plus "sans départ" (nulle part,
+  // aucun moyen de le retrouver) — il est placé dans le Dépôt (en
+  // attente), en attente d'un nouveau container (retour de Cobey du
+  // 24/08/2026, voir DEP_ID_DEPOT).
   if(info) info.innerHTML = '<b>'+esc(c.name||'')+'</b> sera retir&eacute; de <b>'+esc(nomDepart(c.departId))+'</b> '
-    + 'et redeviendra &laquo;&nbsp;sans d&eacute;part&nbsp;&raquo;.';
+    + 'et plac&eacute; au <b>D&eacute;p&ocirc;t</b>, en attente d\'un nouveau d&eacute;part.';
 
   openModal('modal-dep-detach-client');
 };
@@ -5381,14 +5490,14 @@ window.depConfirmerDetacherClient = function(){
 
   var u = window.currentUser || {};
   var hist = c.historiqueDepart || [];
-  hist.push({ de: c.departId || '', vers: '', par: u.id || '', le: Date.now() });
+  hist.push({ de: c.departId || '', vers: DEP_ID_DEPOT, par: u.id || '', le: Date.now() });
 
   var ancienDepart = c.departId;
-  c.departId = '';
+  c.departId = DEP_ID_DEPOT; // v1.19.44 : au Dépôt, plus "nulle part"
   c.historiqueDepart = hist;
 
   try{ sauvegarder(); }catch(e){}
-  depActivite('&#8617;', 'a d&eacute;tach&eacute; <strong>'+esc(c.name||'')+'</strong> du d&eacute;part <strong>'+esc(nomDepart(ancienDepart))+'</strong>');
+  depActivite('&#8617;', 'a d&eacute;tach&eacute; <strong>'+esc(c.name||'')+'</strong> du d&eacute;part <strong>'+esc(nomDepart(ancienDepart))+'</strong> (plac&eacute; au D&eacute;p&ocirc;t)');
 
   closeModal('modal-dep-detach-client');
   toast('✅ Client détaché');
@@ -6623,8 +6732,11 @@ function _depCpVilleInit(prefixe){
   }
 }
 
-// v1.19.19 : petit drapeau 🇲🇱 devant le nom des clients Mali, dans la
+// v1.19.19 : petit drapeau 🇲🇱/🇸🇳 devant le nom de chaque client, dans la
 // liste "Clients" d'une collecte (renderClientsTab, natif) — voir greffe O.
+// v1.19.44 : le drapeau Sénégal a rejoint celui du Mali (au départ réservé
+// au Mali, minoritaire — retour de Cobey du 24/08/2026 : les deux pays
+// doivent maintenant se distinguer d'un coup d'œil, pas seulement le Mali).
 // renderClientsTab n'attache aucun identifiant aux lignes qu'elle construit :
 // on reconstruit ici le même regroupement/tri par département (deptMap,
 // Object.keys().sort()) que l'original pour faire correspondre chaque ligne
@@ -6650,10 +6762,10 @@ function _depAjouterDrapeauxCollecte(){
   var rows = container.querySelectorAll('.client-row');
   for(var i = 0; i < rows.length && i < ordre.length; i++){
     var c = ordre[i];
-    if(depPaysFiche(c) !== 'ML') continue;
+    var drapeau = depPaysFiche(c) === 'ML' ? ' 🇲🇱' : ' 🇸🇳';
     var nameEl = rows[i].querySelector('.client-name');
     if(nameEl && !nameEl._depDrapeauAjoute){
-      nameEl.textContent = (c.name || '') + ' 🇲🇱';
+      nameEl.textContent = (c.name || '') + drapeau;
       nameEl._depDrapeauAjoute = true;
     }
   }
@@ -7233,10 +7345,10 @@ function greffer(){
   }
 
   /* --- O. Liste des clients d'une collecte (onglet "Clients", écran
-     Collecte) : petit drapeau 🇲🇱 devant le nom des clients Mali — pour
-     les repérer d'un coup d'œil vu qu'ils sont pour l'instant minoritaires
-     (demande de Cobey du 22/08/2026). Rien pour les clients Sénégal
-     (majoritaires, pas besoin de les marquer). --- */
+     Collecte) : petit drapeau 🇲🇱/🇸🇳 devant le nom de chaque client, pour
+     distinguer les deux pays d'un coup d'œil (demande de Cobey du
+     22/08/2026, étendue au Sénégal le 24/08/2026 — voir
+     _depAjouterDrapeauxCollecte). --- */
   if(typeof window.renderClientsTab === 'function' && !window.renderClientsTab._depPatch){
     var origRenderClientsTab = window.renderClientsTab;
     window.renderClientsTab = function(){
