@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.31';
+var DEP_VERSION = 'v1.19.32';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -2951,7 +2951,7 @@ function _depChargerQR(cb){
 // immédiatement si rien à dessiner) et `taille` (résolution du QR, voir
 // depRenderFacturePublique — QR agrandi sur la facture publique pour
 // rester scannable facilement, retour de Cobey du 23/08/2026) — nécessaire
-// pour l'export PDF (voir _depExporterPDFDepuisElement) : il faut être sûr
+// pour l'export PDF (voir _depExporterFacturePDFViaCanvas / _depExporterEtiquettesPDFViaCanvas) : il faut être sûr
 // que le QR est bien dessiné dans le canvas AVANT de capturer la page,
 // sinon il ressort vide sur le PDF.
 function depGenererQR(ctx, canvasId, cb, taille){
@@ -2978,57 +2978,167 @@ function depGenererQR(ctx, canvasId, cb, taille){
    du 23/08/2026 : "je veux que ça génère directement la facture pdf...
    propre comme la photo 3".
    ───────────────────────────────────────────── */
-var _depHtml2pdfEnCours = false;
-function _depChargerHtml2pdf(cb){
-  if(window.html2pdf){ cb(); return; }
-  if(_depHtml2pdfEnCours){ setTimeout(function(){ _depChargerHtml2pdf(cb); }, 200); return; }
-  _depHtml2pdfEnCours = true;
-  var s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
-  s.onload = function(){ _depHtml2pdfEnCours = false; cb(); };
-  s.onerror = function(){
-    _depHtml2pdfEnCours = false;
-    console.error('departs: échec chargement PDF (connexion internet ?)');
-    toast('⚠️ Impossible de générer le PDF (connexion internet ?).');
-  };
-  document.head.appendChild(s);
+// v1.19.32 : abandon de html2pdf.js — sa pagination interne ("autoPaging")
+// est opaque et imprévisible (c'est elle qui coupait la facture n'importe
+// où), et pour la contourner la v1.19.30/31 utilisait une page de taille
+// non-standard (210x400mm), suspectée d'être la cause du PDF qui ressort
+// blanc une fois téléchargé sur PC (retour de Cobey du 23/08/2026). On
+// charge maintenant html2canvas + jsPDF séparément et on place nous-mêmes
+// l'image capturée sur des pages A4/A5 STANDARD, avec un calcul simple et
+// prévisible (voir _depExporterFacturePDFViaCanvas / _depExporterEtiquettesPDFViaCanvas
+// ci-dessous) au lieu de dépendre du système interne de la librairie.
+var _depHtml2canvasEnCours = false;
+function _depChargerHtml2canvasEtJsPDF(cb){
+  if(window.html2canvas && window.jspdf && window.jspdf.jsPDF){ cb(); return; }
+  if(_depHtml2canvasEnCours){ setTimeout(function(){ _depChargerHtml2canvasEtJsPDF(cb); }, 200); return; }
+  _depHtml2canvasEnCours = true;
+  function chargerScript(src, suite){
+    var s = document.createElement('script');
+    s.src = src;
+    s.onload = suite;
+    s.onerror = function(){
+      _depHtml2canvasEnCours = false;
+      console.error('departs: échec chargement PDF (connexion internet ?)');
+      toast('⚠️ Impossible de générer le PDF (connexion internet ?).');
+    };
+    document.head.appendChild(s);
+  }
+  chargerScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', function(){
+    chargerScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', function(){
+      _depHtml2canvasEnCours = false;
+      cb();
+    });
+  });
 }
 
-// Génère un PDF à partir d'un élément précis du DOM (jamais toute la
-// page) — c'est ce qui évite tout mélange avec un autre écran resté en
-// mémoire (voir le bug facture+étiquette mélangées de Cobey du
-// 23/08/2026). `ignoreElements` retire aussi les boutons ("no-print")
-// du rendu, comme le faisait avant le CSS d'impression.
-// `optsExtra` peut contenir margin / jsPDF / pagebreak — fusionné par
-// dessus les réglages par défaut ci-dessous (pas de dépendance à
-// Object.assign, pour rester cohérent avec le reste du fichier).
-function _depExporterPDFDepuisElement(el, nomFichier, optsExtra){
-  if(!el){ toast('⚠️ Contenu introuvable.'); return; }
+// Facteur de résolution de capture — 2x l'écran, comme avant. Utilisé à la
+// fois par html2canvas (option `scale`) et pour convertir la taille du
+// canvas obtenu (en px "physiques") vers des mm (96px CSS = 25.4mm).
+var DEP_PDF_SCALE_CAPTURE = 2;
+
+// Génère le PDF de la facture (A4, potentiellement plusieurs pages) —
+// remplace l'ancien _depExporterPDFDepuisElement pour ce cas précis. On
+// capture le document une seule fois, puis on le découpe nous-mêmes en
+// pages A4 pleine largeur : le point de coupure recule automatiquement
+// jusqu'au début de la ligne de tableau / du bloc en cours s'il tombe en
+// plein milieu (jamais de ligne coupée en deux). `ignoreElements` retire
+// les boutons ("no-print", qui sont bien à l'intérieur de .fac-doc).
+function _depExporterFacturePDFViaCanvas(el, nomFichier){
+  if(!el){ toast('⚠️ Facture introuvable.'); return; }
   toast('⏳ Génération du PDF…');
-  _depChargerHtml2pdf(function(){
-    if(!window.html2pdf) return;
-    var extra = optsExtra || {};
-    var opts = {
-      margin: (extra.margin !== undefined) ? extra.margin : 10,
-      filename: nomFichier || 'document.pdf',
-      image: { type: 'jpeg', quality: 0.95 },
-      html2canvas: {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        foreignObjectRendering: true,
-        ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
-      },
-      jsPDF: extra.jsPDF || { unit: 'mm', format: 'a4', orientation: 'portrait' }
-    };
-    if(extra.pagebreak) opts.pagebreak = extra.pagebreak;
-    if(extra.autoPaging !== undefined) opts.autoPaging = extra.autoPaging;
-    try{
-      window.html2pdf().set(opts).from(el).save();
-    }catch(e){
-      console.error('departs: échec génération PDF', e);
+  _depChargerHtml2canvasEtJsPDF(function(){
+    if(!window.html2canvas || !window.jspdf) return;
+    var pageW = 210, pageH = 297, marge = 6;
+    var largeurUtile = pageW - marge*2, hauteurUtile = pageH - marge*2;
+    window.html2canvas(el, {
+      scale: DEP_PDF_SCALE_CAPTURE,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
+    }).then(function(canvas){
+      try{
+        var mmParPx = largeurUtile / canvas.width;
+        var pageHpx = Math.round(hauteurUtile / mmParPx);
+        var scaleCapture = canvas.width / el.scrollWidth;
+
+        // Zones "à ne pas couper" (en px canvas, relatif au coin
+        // haut-gauche de `el`) : lignes de tableau + blocs de section.
+        var docTop = el.getBoundingClientRect().top;
+        var zones = [];
+        el.querySelectorAll('tr, .fac-info, .fac-parties, .fac-bas, .fac-hist-titre, .fac-footer').forEach(function(zoneEl){
+          var r = zoneEl.getBoundingClientRect();
+          zones.push({ top: (r.top - docTop) * scaleCapture, bottom: (r.bottom - docTop) * scaleCapture });
+        });
+        function ajusterCoupure(yIdeal){
+          for (var i = 0; i < zones.length; i++){
+            var z = zones[i];
+            if (yIdeal > z.top && yIdeal < z.bottom) return z.top;
+          }
+          return yIdeal;
+        }
+
+        var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: [pageW, pageH], orientation: 'portrait' });
+        var y = 0, page = 0;
+        while (y < canvas.height - 1) {
+          var yFin = Math.min(y + pageHpx, canvas.height);
+          if (yFin < canvas.height) {
+            var yAjuste = ajusterCoupure(yFin);
+            // Filet de sécurité : si le recul renvoie une valeur avant `y`
+            // (ne devrait jamais arriver), on ignore la zone protégée
+            // plutôt que de bloquer la boucle sur une page de hauteur nulle.
+            if (yAjuste > y) yFin = yAjuste;
+          }
+          var h = Math.round(yFin - y);
+          if (h <= 0) h = pageHpx;
+          var c = document.createElement('canvas');
+          c.width = canvas.width; c.height = h;
+          c.getContext('2d').drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+          if (page > 0) pdf.addPage([pageW, pageH], 'portrait');
+          pdf.addImage(c.toDataURL('image/jpeg', 0.95), 'JPEG', marge, marge, largeurUtile, h * mmParPx);
+          y += h; page++;
+        }
+        pdf.save(nomFichier || 'Facture.pdf');
+      }catch(e){
+        console.error('departs: échec génération PDF facture', e);
+        toast('❌ Échec de la génération du PDF, réessayez.');
+      }
+    }).catch(function(e){
+      console.error('departs: échec capture facture', e);
       toast('❌ Échec de la génération du PDF, réessayez.');
+    });
+  });
+}
+
+// Génère le PDF des étiquettes (A5, une page par étiquette) — remplace
+// l'ancien _depExporterPDFDepuisElement pour ce cas précis. Chaque
+// étiquette (.etq-doc) est capturée séparément puis recalée ("contain")
+// sur sa propre page A5 en choisissant l'axe le plus contraignant (largeur
+// ou hauteur), centrée : la page A5 est remplie au mieux, et il est
+// mathématiquement impossible que ça déborde sur une 2e page physique
+// (étiquettes A5 pré-découpées, confirmé par Cobey du 23/08/2026 — un
+// débordement serait inutilisable). Capture séquentielle (une étiquette
+// après l'autre) plutôt qu'en parallèle, pour rester simple et fiable.
+function _depExporterEtiquettesPDFViaCanvas(conteneur, nomFichier){
+  if(!conteneur){ toast('⚠️ Étiquette introuvable.'); return; }
+  var docs = conteneur.querySelectorAll('.etq-page .etq-doc');
+  if(!docs.length){ toast('⚠️ Étiquette introuvable.'); return; }
+  toast('⏳ Génération du PDF…');
+  _depChargerHtml2canvasEtJsPDF(function(){
+    if(!window.html2canvas || !window.jspdf) return;
+    var pageW = 148, pageH = 210, marge = 6; // A5 portrait, mm
+    var largeurUtile = pageW - marge*2, hauteurUtile = pageH - marge*2;
+    var docsArr = Array.prototype.slice.call(docs);
+    var pdf = null;
+
+    function capturerSuivant(i){
+      if (i >= docsArr.length){
+        if (pdf) pdf.save(nomFichier || 'Etiquettes.pdf');
+        return;
+      }
+      window.html2canvas(docsArr[i], {
+        scale: DEP_PDF_SCALE_CAPTURE,
+        useCORS: true,
+        backgroundColor: '#ffffff'
+      }).then(function(canvas){
+        var imgWmm = (canvas.width / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
+        var imgHmm = (canvas.height / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
+        var ratio = Math.min(largeurUtile / imgWmm, hauteurUtile / imgHmm);
+        var wMm = imgWmm * ratio, hMm = imgHmm * ratio;
+        var xMm = marge + (largeurUtile - wMm) / 2;
+        var yMm = marge + (hauteurUtile - hMm) / 2;
+        if (!pdf){
+          pdf = new window.jspdf.jsPDF({ unit: 'mm', format: [pageW, pageH], orientation: 'portrait' });
+        } else {
+          pdf.addPage([pageW, pageH], 'portrait');
+        }
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', xMm, yMm, wMm, hMm);
+        capturerSuivant(i + 1);
+      }).catch(function(e){
+        console.error('departs: échec capture étiquette', e);
+        toast('❌ Échec de la génération du PDF, réessayez.');
+      });
     }
+    capturerSuivant(0);
   });
 }
 
@@ -3212,7 +3322,7 @@ window.depOuvrirFacturePDF = function(){
 // Bouton "Imprimer / PDF" resté sur l'écran Facture publique lui-même
 // (arrivée directe via un lien WhatsApp, sans passer par depOuvrirFacturePDF
 // ci-dessus). Capture uniquement le document (.fac-doc), jamais le reste
-// de la page — voir _depExporterPDFDepuisElement, c'est ce qui évite tout
+// de la page — voir _depExporterFacturePDFViaCanvas, c'est ce qui évite tout
 // mélange avec un autre écran resté en mémoire (bug étiquette+facture).
 window.depExporterFacturePDF = function(){
   var conteneur = $('pub-contenu');
@@ -3220,11 +3330,7 @@ window.depExporterFacturePDF = function(){
   if(!doc){ toast('⚠️ Facture introuvable.'); return; }
   var infos = _depPubFactureCtx || {};
   var nomFichier = 'Facture-' + (infos.c ? depNumeroFacture(infos.c, infos.ctx) : Date.now()) + '.pdf';
-  _depExporterPDFDepuisElement(doc, nomFichier, {
-    margin: 6,
-    autoPaging: false,
-    jsPDF: { unit: 'mm', format: [210, 400], orientation: 'portrait' }
-  });
+  _depExporterFacturePDFViaCanvas(doc, nomFichier);
 };
 
 function depAfficherFacturePublique(ctx, cbApresQR){
@@ -3498,11 +3604,7 @@ window.depExporterEtiquettesPDF = function(){
   if(!conteneur || !conteneur.children.length){ toast('⚠️ Étiquette introuvable.'); return; }
   var ctx = window._depEtiquetteCtx;
   var nomFichier = 'Etiquettes-' + (ctx && ctx.clientId ? ctx.clientId : Date.now()) + '.pdf';
-  _depExporterPDFDepuisElement(conteneur, nomFichier, {
-    margin: 6,
-    jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' },
-    pagebreak: { mode: ['css', 'legacy'], before: '.etq-page:not(:first-child)' }
-  });
+  _depExporterEtiquettesPDFViaCanvas(conteneur, nomFichier);
 };
 
 // v1.19.22 : téléphone/adresse partiellement masqués sur l'étiquette — elle
