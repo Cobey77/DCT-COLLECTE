@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.30';
+var DEP_VERSION = 'v1.19.31';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1208,9 +1208,9 @@ function injecterEcrans(){
   +     '.etq-btn-print{background:#006b2d;color:#fff;}'
   +     '.etq-btn-retour{background:none;color:#666;text-decoration:underline;}'
   +     '.etq-page{margin-bottom:16px;}'
-  +     '.etq-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);}'
-  +     '.etq-topbar{height:8px;background:#006b2d;}'
-  +     '.etq-body{padding:16px;}'
+  +     '.etq-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);display:flex;flex-direction:column;}'
+  +     '.etq-topbar{height:8px;background:#006b2d;flex-shrink:0;}'
+  +     '.etq-body{padding:16px;flex:1;display:flex;flex-direction:column;}'
   +     '.etq-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}'
   +     '.etq-logo{width:36px;height:36px;border-radius:50%;flex-shrink:0;}'
   +     '.etq-marque{font-size:12px;font-weight:800;color:#006b2d;flex:1;}'
@@ -1220,7 +1220,7 @@ function injecterEcrans(){
   // v1.19.29 : QR sur l'étiquette (voir depRenderEtiquettes) — absent
   // avant, retour de Cobey du 23/08/2026.
   +     '.etq-qr-wrap{text-align:center;margin-bottom:10px;}'
-  +     '.etq-qr-wrap canvas{width:90px;height:90px;border:1.5px solid var(--border);border-radius:6px;}'
+  +     '.etq-qr-wrap canvas{width:100px;height:100px;border:1.5px solid var(--border);border-radius:6px;}'
   +     '.etq-sep{border:none;border-top:2px solid #006b2d;margin:8px 0 12px;}'
   +     '.etq-parties{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}'
   +     '.etq-partie-titre{font-size:10px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:3px;}'
