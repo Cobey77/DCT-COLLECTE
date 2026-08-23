@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.39';
+var DEP_VERSION = 'v1.19.40';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -4550,10 +4550,18 @@ function depRenderSuivi(c, collecteId, boxId){
 
   evts.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
 
+  // v1.19.39 : présentation en frise verticale (ligne + pastilles), reprise
+  // du carré France & Europe (retour de Cobey du 24/08/2026 : "t'as pas
+  // repris le même visuel de suivi que France Europe ?") — chaque
+  // événement garde son code couleur par type (voir DEP_SUIVI_THEMES),
+  // simplement affiché sous forme de pastille sur la frise plutôt qu'en
+  // carte pleine largeur.
   var h = '';
   if(!evts.length){
     h = '<div class="dep-vide" style="padding:28px 16px;">Aucun &eacute;v&eacute;nement enregistr&eacute; pour l\'instant.</div>';
   } else {
+    h = '<div style="position:relative;padding-left:28px;">'
+      + '<div style="position:absolute;left:9px;top:6px;bottom:18px;width:2px;background:var(--border);"></div>';
     evts.forEach(function(x){
       var theme = DEP_SUIVI_THEMES[x.type] || DEP_SUIVI_THEMES.modif;
       // v1.18.6 : plus de suppression de versement depuis le Suivi, même
@@ -4561,17 +4569,17 @@ function depRenderSuivi(c, collecteId, boxId){
       // désormais un historique en lecture seule ; la correction (encore
       // possible dans les 30 min, ou sans limite pour la direction) reste
       // uniquement sur la facture (voir depRenderFacture).
-      h += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;'
-        + 'border-left:4px solid '+theme.color+';background:'+theme.bg+';border-radius:8px;'
-        + 'margin-bottom:8px;padding:10px 12px;">'
-        + '<div style="display:flex;gap:9px;align-items:flex-start;">'
-        +   '<div style="font-size:16px;line-height:1.4;flex-shrink:0;">'+theme.icon+'</div>'
-        +   '<div style="font-size:12.5px;color:var(--text2);line-height:1.5;">'
-        +     esc(dateHeureFr(x.ts)) + ' &mdash; <b style="color:'+theme.color+';">' + esc(x.q||'—') + '</b><br>' + x.a
-        +   '</div>'
+      h += '<div data-suivi-item="1" style="position:relative;padding-bottom:17px;">'
+        + '<div style="position:absolute;left:-28px;top:0;width:20px;height:20px;border-radius:50%;'
+        +   'border:2px solid '+theme.color+';background:'+theme.bg+';font-size:10.5px;'
+        +   'display:flex;align-items:center;justify-content:center;">'+theme.icon+'</div>'
+        + '<div style="font-size:12.5px;color:var(--text2);line-height:1.5;">'
+        +   '<b style="color:'+theme.color+';">' + esc(x.q||'—') + '</b> ' + x.a
         + '</div>'
+        + '<div style="font-size:11px;color:var(--text3);margin-top:2px;">' + esc(dateHeureFr(x.ts)) + '</div>'
         + '</div>';
     });
+    h += '</div>';
   }
 
   var box = $(boxId || 'dep-suivi-content');
