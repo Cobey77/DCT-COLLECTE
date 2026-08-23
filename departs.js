@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.46';
+var DEP_VERSION = 'v1.19.47';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1378,7 +1378,7 @@ function injecterEcrans(){
   +   '<div class="etq-wrap">'
   +     '<div class="etq-actions no-print">'
   +       '<button type="button" class="etq-btn etq-btn-print" onclick="depExporterEtiquettesPDF()">&#128424;&#65039; Imprimer</button>'
-  +       '<button type="button" class="etq-btn etq-btn-retour" onclick="goTo(\'s-facture\')">&larr; Retour &agrave; la facture</button>'
+  +       '<button type="button" class="etq-btn etq-btn-retour" onclick="depRetourEtiquette()">&larr; Retour</button>'
   +     '</div>'
   +     '<div id="etq-contenu"></div>'
   +   '</div>'
@@ -3361,12 +3361,32 @@ function _depExporterFacturePDFViaCanvas(el, nomFichier){
     if(!window.html2canvas || !window.jspdf) return;
     var pageW = 210, pageH = 297, marge = 6;
     var largeurUtile = pageW - marge*2, hauteurUtile = pageH - marge*2;
+
+    // v1.19.47 : .app (le cadre "téléphone", voir index.html) plafonne à
+    // 430px de large en permanence — la facture était donc TOUJOURS
+    // capturée dans sa mise en page mobile empilée (en-tête et parties
+    // l'un sous l'autre), bien plus haute que large. Une fois "contenue"
+    // sur une page A4 en préservant ces proportions, elle ressortait
+    // écrasée en bande étroite (retour de Cobey du 24/08/2026 : "trop
+    // allongée [...] fait que tout rentre et que ça soit professionnel").
+    // On élargit .app juste le temps de la capture (comme le fait déjà
+    // @media print, qui ne s'applique pas ici puisqu'on ne passe pas par
+    // window.print()), pour que .pub-wrap{max-width:720px} et les
+    // colonnes côte à côte (.fac-header, .fac-parties) aient enfin la
+    // place de s'afficher comme prévu — puis on remet tout en l'état.
+    var appEl = document.querySelector('.app');
+    var appPrevMaxWidth = appEl ? appEl.style.maxWidth : '';
+    if(appEl) appEl.style.maxWidth = '780px';
+    var restaurerLargeur = function(){ if(appEl) appEl.style.maxWidth = appPrevMaxWidth; };
+
     window.html2canvas(el, {
       scale: DEP_PDF_SCALE_CAPTURE,
       useCORS: true,
       backgroundColor: '#ffffff',
+      windowWidth: 800, // cohérent avec .app élargi ci-dessus
       ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
     }).then(function(canvas){
+      restaurerLargeur();
       try{
         var imgWmm = (canvas.width / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
         var imgHmm = (canvas.height / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
@@ -3383,6 +3403,7 @@ function _depExporterFacturePDFViaCanvas(el, nomFichier){
         toast('❌ Échec de la génération du PDF, réessayez.');
       }
     }).catch(function(e){
+      restaurerLargeur();
       console.error('departs: échec capture facture', e);
       toast('❌ Échec de la génération du PDF, réessayez.');
     });
@@ -3887,8 +3908,20 @@ window.depOuvrirEtiquette = function(){
     return;
   }
   window._depEtiquetteCtx = ctx;
+  // v1.19.47 : retenir d'où on vient (écran "Documents" post-validation,
+  // voir s-dep-impression, OU directement depuis la facture interne) pour
+  // que "← Retour" reparte au bon endroit (voir depRetourEtiquette) —
+  // retour de Cobey du 24/08/2026 : après avoir imprimé une étiquette,
+  // "on devrait revenir normalement à l'écran [Documents] pour imprimer
+  // autre chose ou retourner sur sa dispatch".
+  var ecranDoc = $('s-dep-impression');
+  window._depEtqVientImpression = !!(ecranDoc && ecranDoc.classList.contains('active'));
   var inp = $('dep-etq-nb'); if(inp) inp.value = '1';
   openModal('modal-dep-etiquette-nb');
+};
+
+window.depRetourEtiquette = function(){
+  goTo(window._depEtqVientImpression ? 's-dep-impression' : 's-facture');
 };
 
 window.depGenererEtiquettes = function(){
