@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.35';
+var DEP_VERSION = 'v1.19.38';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -361,6 +361,13 @@ var _depVersDeviseLivraison  = 'eur';
 // v1.19.35 : versement (colis ou livraison) en attente de confirmation —
 // voir _depOuvrirConfirmationVersement / depConfirmerVersement.
 var _depVersPending = null; // { type: 'colis'|'livraison', ctx, c, montant, devise, saisie, methode }
+
+// v1.19.38 : modification de fiche client en attente de confirmation —
+// voir _depOuvrirConfirmationFiche / depConfirmerModifFiche. Sécurise
+// l'écriture (retour de Cobey du 23/08/2026 : "avant de pouvoir modifier
+// une fiche il faudrait un bouton ou un modal de proposition de
+// modification").
+var _depFichePending = null; // { colId, id, avant, extras, nom }
 
 // v1.19.2 : navigation en dossiers cliquables de l'écran ARCHIVAGE
 // (Année > Mois > Semaine > liste). null = niveau non choisi.
@@ -578,6 +585,25 @@ function toast(m){
   try{ showToastNew(m); }catch(e){ try{ alert(m); }catch(e2){} }
 }
 
+// v1.19.37 : numéro cliquable ("tel:") pour appeler un client directement
+// depuis un écran d'AFFICHAGE (facture, fiche client, liste des clients
+// d'un départ...) — retour de Cobey du 23/08/2026. Explicitement réservé
+// aux écrans d'affichage : ne jamais l'utiliser sur un champ de SAISIE
+// (inscription, "Modifier la fiche"...), où le numéro reste un simple
+// texte éditable, pas un lien d'appel. `event.stopPropagation()` : la
+// plupart de ces numéros sont affichés sur des blocs eux-mêmes cliquables
+// (ouvrent la fiche client) — l'appel ne doit pas aussi déclencher ce clic
+// parent.
+function _depLienTel(tel, texteAffiche){
+  var brut = String(tel || '').trim();
+  var texte = (texteAffiche != null && texteAffiche !== '') ? texteAffiche : (brut || '—');
+  if(!brut) return esc(texte);
+  var numero = brut.replace(/[^\d+]/g, '');
+  if(!numero) return esc(texte);
+  return '<a href="tel:'+numero+'" onclick="event.stopPropagation()" style="color:inherit;text-decoration:underline;">'
+    + '&#128222; ' + esc(texte) + '</a>';
+}
+
 // "2026-09-13" → "13/09/2026"
 function dateFr(iso){
   if(!iso) return '—';
@@ -733,11 +759,20 @@ function injecterStyles(){
     +   'background:#fff;font-size:10.5px;font-weight:700;text-align:center;cursor:pointer;font-family:var(--font);color:var(--text3);}'
     + '.dep-st.on{border-color:var(--green);background:var(--green-light);color:var(--green-dark);}'
     + '.dep-cli{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);'
-    +   'padding:11px 13px;margin-bottom:9px;display:flex;align-items:center;gap:10px;}'
+    +   'padding:11px 13px;margin-bottom:9px;}'
     + '.dep-cli-n{font-size:13.5px;font-weight:700;color:var(--text);}'
     + '.dep-cli-s{font-size:11.5px;color:var(--text3);margin-top:2px;}'
+    // v1.19.36 : la ligne nom/tél/prix et la rangée de boutons étaient côte
+    // à côte sur UNE seule ligne flex ; avec un nom long (3 lignes) et 4
+    // boutons (Facture/Suivi/Déplacer/Détacher), les boutons — figés en
+    // largeur (flex-shrink:0) — écrasaient la colonne de texte, qui se
+    // retrouvait quasi nulle et illisible (retour de Cobey du 23/08/2026,
+    // capture à l'appui). Boutons désormais sur leur propre rangée, sous le
+    // texte, jamais en concurrence de largeur avec lui.
+    + '.dep-cli-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}'
     + '.dep-cli-btn{background:#EEF0FA;border:1.5px solid #C5CAE9;color:#252599;border-radius:8px;'
-    +   'padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;}'
+    +   'padding:7px 6px;font-size:11px;font-weight:700;cursor:pointer;font-family:var(--font);'
+    +   'flex:1 1 auto;min-width:72px;text-align:center;}'
     + '.dep-alert{background:#FFF4E0;border:1.5px solid #E58A00;color:#8a4a00;border-radius:10px;'
     +   'padding:11px 13px;font-size:12.5px;font-weight:600;line-height:1.5;margin-bottom:13px;}'
     + '.dep-photo-box{border:2px dashed var(--border);border-radius:var(--radius-sm);padding:14px;'
@@ -1466,6 +1501,25 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-green-sm" onclick="depConfirmerVersement()">&#9989; Confirmer</button>'
     + '</div></div></div>';
   document.body.appendChild(m7);
+
+  /* ---- Modale (v1.19.38) : confirmation avant enregistrement des
+     modifications d'une fiche client — retour de Cobey du 23/08/2026 :
+     "avant de pouvoir modifier une fiche il faudrait un bouton ou un
+     modal de proposition de modification". Concerne tout le monde, y
+     compris la direction (voir _depOuvrirConfirmationFiche /
+     depConfirmerModifFiche). ---- */
+  var m8 = document.createElement('div');
+  m8.className = 'modal-overlay';
+  m8.id = 'modal-dep-fiche-confirm';
+  m8.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#9999;&#65039;</div>'
+    + '<div class="modal-confirm-title">Confirmer les modifications</div>'
+    + '<div id="dep-fiche-confirm-texte" style="font-size:14px;color:#333;margin:4px 0 16px;line-height:1.5;"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-fiche-confirm\')">Annuler</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depConfirmerModifFiche()">&#9989; Confirmer</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m8);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -2638,13 +2692,11 @@ window.depDetail = function(id){
         ? "depOuvrirDepotForm('"+id+"','"+x.clientId+"')"
         : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"')";
       h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
-        +   '<div style="flex:1;min-width:0;">'
-        +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
-        +       (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
-        +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(c.prixADefinir ? '&agrave; d&eacute;finir' : ((parseFloat(c.prix)||0)+' &euro;'))
-        +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
-        +   '</div>'
-        +   '<div style="display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;">'
+        +   '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
+        +     (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
+        +   '<div class="dep-cli-s">'+_depLienTel(c.tel, c.tel||'—')+' &middot; '+(c.prixADefinir ? '&agrave; d&eacute;finir' : ((parseFloat(c.prix)||0)+' &euro;'))
+        +     (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
+        +   '<div class="dep-cli-btns">'
               + '<button class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
                 + 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#129534; Facture</button>'
               + '<button class="dep-cli-btn" style="background:#E0E9FF;border-color:#C3CFFA;color:#252599;" '
@@ -3396,7 +3448,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
   var encaissePar = versementsTries.length ? (versementsTries[0].par || '') : '';
   var destBlock = c.destinataireNom
     ? ('<div class="fac-partie-nom">'+esc(c.destinataireNom)+'</div>'
-       + '<div class="fac-partie-detail">'+esc(c.destinataireTel||'—')
+       + '<div class="fac-partie-detail">'+_depLienTel(c.destinataireTel, c.destinataireTel||'—')
        + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(c.livraisonAdresse) : '')
        + '</div>')
     : '<div class="fac-partie-nom">—</div>';
@@ -3433,7 +3485,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     +       '<div>'
     +         '<div class="fac-partie-titre">EXP&Eacute;DITEUR</div>'
     +         '<div class="fac-partie-nom">'+esc(nom)+'</div>'
-    +         '<div class="fac-partie-detail">'+esc(c.tel||'—')
+    +         '<div class="fac-partie-detail">'+_depLienTel(c.tel, c.tel||'—')
     +           (c.adresse ? '<br>'+esc(c.adresse) : '')
     +           '<br>'+esc(((c.cp||'')+' '+(c.ville||'')).trim() || '—')
     +         '</div>'
@@ -3928,7 +3980,7 @@ window.depSupprimerVersement = function(idx){
   toast('🗑️ Versement supprimé');
   // Rafraîchit l'écran actuellement affiché (Suivi ou Facture directement).
   var ecranSuivi = $('s-dep-suivi');
-  if(ecranSuivi && ecranSuivi.classList.contains('active')) depRenderSuivi(c);
+  if(ecranSuivi && ecranSuivi.classList.contains('active')) depRenderSuivi(c, ctx.depot ? '' : ctx.collecteId);
   else depRenderFacture(c);
 };
 
@@ -4112,11 +4164,11 @@ function depRenderFacture(c){
   h += kv('Client', esc(nom));
   // v1.19.21 : réf. client permanente (voir depRefClientPour).
   h += kv('R&eacute;f. client', esc(depRefClientPour(_depCleContact(c))));
-  h += kv('T&eacute;l&eacute;phone', esc(c.tel || '—'));
+  h += kv('T&eacute;l&eacute;phone', _depLienTel(c.tel, c.tel || '—'));
   h += kv('Colis', esc(c.colis || '—'));
 
   if(c.destinataireNom || c.destinataireTel){
-    h += kv('Destinataire', esc(c.destinataireNom || '—') + (c.destinataireTel ? (' &middot; ' + esc(c.destinataireTel)) : ''));
+    h += kv('Destinataire', esc(c.destinataireNom || '—') + (c.destinataireTel ? (' &middot; ' + _depLienTel(c.destinataireTel, c.destinataireTel)) : ''));
   }
 
   // v1.19.23 : la livraison (Oui/Non + ville/adresse + prix) ne se
@@ -4364,7 +4416,7 @@ window.depOuvrirSuivi = function(){
   var bk = $('dep-suivi-back');
   if(bk){ bk.innerHTML = '&larr; Facture'; bk.onclick = function(){ goTo('s-facture'); }; }
 
-  depRenderSuivi(c);
+  depRenderSuivi(c, ctx.depot ? '' : ctx.collecteId);
   goTo('s-dep-suivi');
 };
 
@@ -4384,7 +4436,7 @@ window.depOuvrirSuiviDirect = function(collecteId, clientId, depot, departId){
   var bk = $('dep-suivi-back');
   if(bk){ bk.innerHTML = '&larr; D&eacute;part'; bk.onclick = function(){ depDetail(departId); }; }
 
-  depRenderSuivi(c);
+  depRenderSuivi(c, depot ? '' : collecteId);
   goTo('s-dep-suivi');
 };
 
@@ -4401,7 +4453,7 @@ window.depOuvrirSuiviCamion = function(collecteId, clientId){
   var bk2 = $('dep-suivi-back');
   if(bk2){ bk2.innerHTML = '&larr; Tourn&eacute;e'; bk2.onclick = function(){ goTo('s-camion'); }; }
 
-  depRenderSuivi(c);
+  depRenderSuivi(c, collecteId);
   goTo('s-dep-suivi');
 };
 
@@ -4422,10 +4474,19 @@ var DEP_SUIVI_THEMES = {
   modif:        { icon:'&#9999;&#65039;', color:'#555555', bg:'#F0F0F0' }
 };
 
-function depRenderSuivi(c){
+// v1.19.36 : `collecteId` (optionnel — absent pour un client dépôt direct)
+// permet d'indiquer dans quelle collecte le client a été inscrit à
+// l'origine (retour de Cobey du 23/08/2026 : "dans quel collecte le
+// client a etait mis"), affiché sur la ligne de création ci-dessous.
+function depRenderSuivi(c, collecteId){
   var evts = [];
 
-  evts.push({ ts: c.creeLe || 0, q: c.by || '', a: 'a cr&eacute;&eacute; la fiche client', type: 'creation' });
+  var collecteLabel = '';
+  if(collecteId){
+    var col = (window.collectes || []).filter(function(x){ return x && x.id === collecteId; })[0];
+    if(col) collecteLabel = ' &mdash; collecte du <strong>' + esc(col.date || collecteId) + '</strong>';
+  }
+  evts.push({ ts: c.creeLe || 0, q: c.by || '', a: 'a cr&eacute;&eacute; la fiche client' + collecteLabel, type: 'creation' });
 
   (Array.isArray(c.hist) ? c.hist : []).forEach(function(x){
     evts.push({ ts: x.ts || 0, q: x.q || '', a: x.a || '', type: x.type || 'modif' });
@@ -5152,10 +5213,10 @@ window.depOuvrirFicheContact = function(contactKey){
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
   var titre = $('dep-fc-titre'); if(titre) titre.textContent = nom;
   var nomH  = $('dep-fc-nom');   if(nomH)  nomH.textContent  = nom;
-  var tel = $('dep-fc-tel'); if(tel) tel.textContent = c.tel || '—';
+  var tel = $('dep-fc-tel'); if(tel) tel.innerHTML = _depLienTel(c.tel, c.tel || '—');
 
   var bt2 = $('dep-fc-bloc-tel2'), t2 = $('dep-fc-tel2');
-  if(c.tel2){ if(bt2) bt2.style.display=''; if(t2) t2.textContent = c.tel2; }
+  if(c.tel2){ if(bt2) bt2.style.display=''; if(t2) t2.innerHTML = _depLienTel(c.tel2, c.tel2); }
   else if(bt2) bt2.style.display = 'none';
 
   var adr = $('dep-fc-adresse'); if(adr) adr.textContent = c.adresse || '—';
@@ -5526,6 +5587,83 @@ function remplirFiche(clientId){
 }
 
 /* ─────────────────────────────────────────────
+   11 quater. GARDE DE LA FICHE CLIENT (v1.19.38)
+   ─────────────────────────────────────────────
+   Retour de Cobey du 23/08/2026 : en tapant un client depuis le listing
+   d'un container, on tombait directement sur sa fiche entièrement
+   modifiable, sans aucune sécurité. Il faut désormais un bouton "✏️
+   Modifier" avant de pouvoir toucher aux champs, ET une confirmation
+   avant l'enregistrement réel (voir saveClientEdit plus bas). S'applique
+   à tout le monde, direction comprise (confirmé explicitement par
+   Cobey — pas d'exception de rôle).
+
+   Ce verrouillage "à l'ouverture" est distinct de isLocked() (collecte
+   réellement terminée) : quand isLocked() est vrai, le comportement
+   d'origine de l'appli (bannière "collecte terminée", champs et actions
+   désactivés) prime toujours et notre bannière "Modifier" ne s'affiche
+   pas — il n'y a rien à déverrouiller sur une collecte fermée. */
+
+function _depChampsGardeFiche(){
+  return ['e-prenom','e-nom','e-tel','e-tel2','e-adresse','e-infos','e-cp','e-ville','e-colis',
+          'e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix','e-note'];
+}
+
+// Injecte une fois la bannière "Fiche en lecture seule" + bouton
+// "Modifier", juste après la bannière native de collecte terminée.
+function _depInjecterBanniereFiche(){
+  if($('dep-fiche-modif-banner')) return;
+  var lb = $('client-locked-banner');
+  var actions = $('client-actions');
+  var ban = document.createElement('div');
+  ban.id = 'dep-fiche-modif-banner';
+  ban.className = 'warn-banner';
+  ban.style.cssText = 'display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;';
+  ban.innerHTML = '<span>🔒 Fiche en lecture seule, pour éviter les modifications accidentelles.</span>'
+    + '<button type="button" class="btn-sm btn-green-sm" style="white-space:nowrap;" onclick="depDeverouillerFiche()">✏️ Modifier</button>';
+  if(lb && lb.parentNode) lb.parentNode.insertBefore(ban, lb.nextSibling);
+  else if(actions && actions.parentNode) actions.parentNode.insertBefore(ban, actions);
+}
+
+// Applique (verrouille=true) ou lève (verrouille=false) la garde : champs
+// désactivés, boutons Enregistrer/Supprimer masqués, bannière affichée.
+// N'est jamais appelée quand isLocked() est vrai (voir plus haut).
+function _depAppliquerGardeFiche(verrouille){
+  _depChampsGardeFiche().forEach(function(id){
+    var el = $(id); if(!el) return;
+    el.disabled = verrouille;
+    el.style.background = verrouille ? '#f5f5f5' : '';
+    el.style.color = verrouille ? '#999' : '';
+  });
+  var bOui = $('e-liv-oui'), bNon = $('e-liv-non');
+  if(bOui) bOui.disabled = verrouille;
+  if(bNon) bNon.disabled = verrouille;
+  var civ = $('e-civ');
+  if(civ){
+    Array.prototype.forEach.call(civ.querySelectorAll('button'), function(b){
+      b.disabled = verrouille;
+      b.style.opacity = verrouille ? '0.5' : '';
+    });
+  }
+  var actions = $('client-actions');
+  var btnSave = actions ? actions.querySelector('button[onclick*="saveClientEdit"]') : null;
+  var btnDel  = actions ? actions.querySelector('button[onclick*="openConfirmDelete"]') : null;
+  if(btnSave) btnSave.style.display = verrouille ? 'none' : '';
+  if(btnDel)  btnDel.style.display  = verrouille ? 'none' : '';
+  var ban = $('dep-fiche-modif-banner');
+  if(ban) ban.style.display = verrouille ? 'flex' : 'none';
+}
+
+// Bouton "✏️ Modifier" de la bannière — lève la garde pour cette
+// consultation. Sécurité : ne fait rien si la collecte est réellement
+// terminée (isLocked() prime toujours).
+window.depDeverouillerFiche = function(){
+  var loc = false;
+  try{ loc = isLocked(); }catch(e){}
+  if(loc) return;
+  _depAppliquerGardeFiche(false);
+};
+
+/* ─────────────────────────────────────────────
    12. LE CHAMP DÉPART DANS LA FICHE CLIENT
    ───────────────────────────────────────────── */
 
@@ -5609,6 +5747,13 @@ function depAppliquerPrixIndefiniCollecte(){
 // — chaque thème garde ainsi sa propre icône/couleur dans l'écran Suivi.
 // Partagée entre la fiche client, la validation de collecte et le
 // formulaire dépôt (voir depEnregistrerDepot).
+// v1.19.36 : détail avant/après pour chaque type de changement (retour de
+// Cobey du 23/08/2026 : "vraiement le detail de cha evenemetn, poru avoir
+// une trace de qui a fait quoi a quel moement") — avant, colis/destinataire/
+// livraison se contentaient d'un texte générique ("a modifié le colis"...),
+// seul le prix indiquait déjà les valeurs avant → après. La livraison est
+// désormais détaillée par nature de changement (activation, désactivation,
+// adresse, prix de la livraison), chacune avec ses propres valeurs.
 function _depDiffFacturePourHist(fiche, avant){
   var out = [];
   if(!!fiche.prixADefinir !== !!avant.prixADefinir || (parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)){
@@ -5616,9 +5761,38 @@ function _depDiffFacturePourHist(fiche, avant){
     var apresPrixC = fiche.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(fiche.prix)||0) + ' €');
     out.push({ type:'prix', label:'prix', texte:'a modifi&eacute; le prix : ' + avantPrixC + ' &rarr; ' + apresPrixC });
   }
-  if((fiche.colis||'') !== (avant.colis||'')) out.push({ type:'colis', label:'colis', texte:'a modifi&eacute; le colis' });
-  if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')) out.push({ type:'destinataire', label:'destinataire', texte:'a modifi&eacute; le destinataire' });
-  if(!!fiche.livraisonDakar !== !!avant.livraisonDakar || (fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'') || (parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)) out.push({ type:'livraison', label:'livraison', texte:'a modifi&eacute; la livraison' });
+  if((fiche.colis||'') !== (avant.colis||'')){
+    out.push({ type:'colis', label:'colis', texte:'a modifi&eacute; le colis : &laquo;&nbsp;'+esc(avant.colis||'—')+'&nbsp;&raquo; &rarr; &laquo;&nbsp;'+esc(fiche.colis||'—')+'&nbsp;&raquo;' });
+  }
+  if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')){
+    // v1.19.36 : chaque champ est échappé AVANT d'être joint avec l'entité
+    // HTML "&middot;" — échapper la chaîne déjà jointe la ré-échapperait
+    // (le "&" de "&middot;" deviendrait "&amp;middot;", affiché tel quel à
+    // l'écran), même bug déjà rencontré et corrigé sur l'étiquette PDF.
+    var avantDest = [esc(avant.destinataireNom||''), esc(avant.destinataireTel||'')].filter(Boolean).join(' &middot; ') || '—';
+    var apresDest = [esc(fiche.destinataireNom||''), esc(fiche.destinataireTel||'')].filter(Boolean).join(' &middot; ') || '—';
+    out.push({ type:'destinataire', label:'destinataire', texte:'a modifi&eacute; le destinataire : ' + avantDest + ' &rarr; ' + apresDest });
+  }
+  var avantLiv = !!avant.livraisonDakar, apresLiv = !!fiche.livraisonDakar;
+  if(avantLiv !== apresLiv){
+    if(apresLiv){
+      out.push({ type:'livraison', label:'livraison activ&eacute;e', texte:'a activ&eacute; la livraison &agrave; Dakar'
+        + (fiche.livraisonAdresse ? ' &mdash; adresse&nbsp;: ' + esc(fiche.livraisonAdresse) : '')
+        + ' &mdash; ' + depArrondi2(parseFloat(fiche.prixLivraison)||0) + '&nbsp;&euro;' });
+    } else {
+      out.push({ type:'livraison', label:'livraison d&eacute;sactiv&eacute;e', texte:'a d&eacute;sactiv&eacute; la livraison &agrave; Dakar'
+        + (avant.livraisonAdresse ? ' (adresse&nbsp;: ' + esc(avant.livraisonAdresse) + ')' : '') });
+    }
+  } else if(apresLiv){
+    if((fiche.livraisonAdresse||'') !== (avant.livraisonAdresse||'')){
+      out.push({ type:'livraison', label:'adresse livraison', texte:'a modifi&eacute; l&rsquo;adresse de livraison : '
+        + esc(avant.livraisonAdresse || '—') + ' &rarr; ' + esc(fiche.livraisonAdresse || '—') });
+    }
+    if((parseFloat(fiche.prixLivraison)||0) !== (parseFloat(avant.prixLivraison)||0)){
+      out.push({ type:'livraison', label:'prix livraison', texte:'a modifi&eacute; le prix de la livraison : '
+        + depArrondi2(parseFloat(avant.prixLivraison)||0) + '&nbsp;&euro; &rarr; ' + depArrondi2(parseFloat(fiche.prixLivraison)||0) + '&nbsp;&euro;' });
+    }
+  }
   if((fiche.note||'') !== (avant.note||'')) out.push({ type:'note', label:'note', texte:'a modifi&eacute; la note' });
   return out;
 }
@@ -6377,6 +6551,21 @@ function greffer(){
     window.openClientFiche = function(id, retour){
       origFiche.apply(this, arguments);
       try{ remplirFiche(id); }catch(e){ console.error('departs: remplirFiche', e); }
+      // v1.19.38 : garde de la fiche — voir §11 quater. Ouverture toujours
+      // en lecture seule (sauf collecte déjà fermée par isLocked(), qui a
+      // sa propre bannière/désactivation et prime sur tout) ; il faut
+      // taper "✏️ Modifier" pour pouvoir toucher aux champs.
+      try{
+        _depInjecterBanniereFiche();
+        var loc = false;
+        try{ loc = isLocked(); }catch(e2){}
+        if(loc){
+          var ban = $('dep-fiche-modif-banner');
+          if(ban) ban.style.display = 'none';
+        } else {
+          _depAppliquerGardeFiche(true);
+        }
+      }catch(e3){ console.error('departs: garde fiche', e3); }
     };
     window.openClientFiche._depPatch = true;
   }
@@ -6394,10 +6583,20 @@ function greffer(){
      champ que la fonction d'origine aurait effacé sans le vouloir. */
   if(typeof window.saveClientEdit === 'function' && !window.saveClientEdit._depPatch){
     var origEdit = window.saveClientEdit;
+    // v1.19.38 : saveClientEdit() ne fait plus qu'une chose — valider la
+    // saisie et ouvrir la modale récapitulative "Confirmer les
+    // modifications" (voir _depOuvrirConfirmationFiche). L'écriture réelle
+    // (y compris origEdit, le recollage des champs effacés et la
+    // traçabilité) n'a lieu que depuis _depSauvegarderFicheReel, appelée
+    // uniquement par depConfirmerModifFiche — retour de Cobey du
+    // 23/08/2026 : "avant de pouvoir modifier une fiche il faudrait un
+    // bouton ou un modal de proposition de modification", tout le monde
+    // inclus, direction comprise.
     window.saveClientEdit = function(){
       var colId = window.currentCollecteId, id = window.currentClientId;
+      var ficheActuelle = ((window.clientsParCollecte||{})[colId]||{})[id];
       var avant = {};
-      try{ avant = JSON.parse(JSON.stringify(((window.clientsParCollecte||{})[colId]||{})[id] || {})); }catch(e){}
+      try{ avant = JSON.parse(JSON.stringify(ficheActuelle || {})); }catch(e){}
 
       var extras = {
         destinataireNom  : (($('e-dest-nom')||{}).value || '').trim(),
@@ -6408,7 +6607,38 @@ function greffer(){
         prixLivraison    : window._depLivraisonFiche ? (parseFloat(($('e-liv-prix')||{}).value) || 0) : 0
       };
 
-      try{ origEdit.apply(this, arguments); }
+      _depOuvrirConfirmationFiche({ colId: colId, id: id, avant: avant, extras: extras, nom: (ficheActuelle||{}).name || '' });
+    };
+    window.saveClientEdit._depPatch = true;
+
+    // Construit le récapitulatif et ouvre la modale de confirmation.
+    // N'écrit rien tant que l'utilisateur n'a pas tapé "✅ Confirmer".
+    function _depOuvrirConfirmationFiche(p){
+      _depFichePending = p;
+      var texte = $('dep-fiche-confirm-texte');
+      if(texte){
+        texte.innerHTML = 'Enregistrer les modifications apport&eacute;es &agrave; la fiche de <strong>' + esc(p.nom || '') + '</strong>&nbsp;?';
+      }
+      openModal('modal-dep-fiche-confirm');
+    }
+
+    // Bouton "✅ Confirmer" de la modale — déclenche l'écriture réelle,
+    // puis nettoie l'état en attente.
+    window.depConfirmerModifFiche = function(){
+      var p = _depFichePending;
+      closeModal('modal-dep-fiche-confirm');
+      _depFichePending = null;
+      if(!p) return;
+      _depSauvegarderFicheReel(p);
+    };
+
+    // Écriture réelle : reprend telle quelle la logique déjà en place et
+    // testée (recollage des champs effacés par origEdit + traçabilité),
+    // simplement déplacée ici pour n'être appelée qu'après confirmation.
+    function _depSauvegarderFicheReel(p){
+      var colId = p.colId, id = p.id, avant = p.avant, extras = p.extras;
+
+      try{ origEdit.call(window); }
       catch(e){ console.error('departs: saveClientEdit original', e); }
 
       try{
@@ -6433,8 +6663,7 @@ function greffer(){
           sauvegarder();
         }
       }catch(e){ console.error('departs: recollage fiche', e); }
-    };
-    window.saveClientEdit._depPatch = true;
+    }
   }
 
   /* --- F. Le récapitulatif de confirmation montre destinataire /
