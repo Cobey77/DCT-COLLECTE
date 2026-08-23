@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.40';
+var DEP_VERSION = 'v1.19.41';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -335,6 +335,13 @@ var DEP_LOGO_B64 = ''
 window.departsData = {};        // { id: {nom, dateDepart, ...} }
 var _depEditId   = null;        // départ en cours de modification
 var _depDetailId = null;        // départ affiché en détail
+
+// v1.19.41 : filtres cumulables sur la liste des clients d'un container —
+// retour de Cobey du 24/08/2026 ("classement des clients qui ont payé, qui
+// n'ont pas payé, avec et sans livraison"). Réinitialisés à chaque
+// ouverture d'un départ (voir depDetail).
+var _depFiltrePaye = 'tous';       // 'tous' | 'paye' | 'non_paye'
+var _depFiltreLivraison = 'tous';  // 'tous' | 'avec' | 'sans'
 var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
@@ -368,6 +375,10 @@ var _depVersPending = null; // { type: 'colis'|'livraison', ctx, c, montant, dev
 // une fiche il faudrait un bouton ou un modal de proposition de
 // modification").
 var _depFichePending = null; // { colId, id, avant, extras, nom }
+
+// v1.19.41 : fiche en cours pour la modale "Ajouter une note" — voir
+// depOuvrirNoteFiche / depEnregistrerNoteFiche.
+var _depNoteFichePending = null; // { colId, id }
 
 // v1.19.2 : navigation en dossiers cliquables de l'écran ARCHIVAGE
 // (Année > Mois > Semaine > liste). null = niveau non choisi.
@@ -795,6 +806,13 @@ function injecterStyles(){
     + '.dep-kv:last-child{border-bottom:none;}'
     + '.dep-kv-k{color:var(--text3);flex-shrink:0;}'
     + '.dep-kv-v{font-weight:600;text-align:right;color:var(--text);}'
+    // v1.19.41 : pastilles de filtre (payé/non payé, avec/sans livraison)
+    // sur la liste des clients d'un container — retour de Cobey du
+    // 24/08/2026, voir depFiltrerDetail.
+    + '.dep-chip{display:inline-flex;align-items:center;padding:6px 13px;border-radius:20px;'
+    +   'border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;'
+    +   'color:var(--text2);cursor:pointer;white-space:nowrap;}'
+    + '.dep-chip.on{border-color:var(--green);background:var(--green-light);color:var(--green-dark);}'
     + '.dep-menu-item{display:flex;align-items:center;gap:12px;width:100%;background:#fff;'
     +   'border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;'
     +   'margin-bottom:9px;font-family:var(--font);cursor:pointer;text-align:left;}'
@@ -1547,6 +1565,40 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-green-sm" onclick="depConfirmerModifFiche()">&#9989; Confirmer</button>'
     + '</div></div></div>';
   document.body.appendChild(m8);
+
+  /* ---- Modale (v1.19.41) : ajouter une note sur la fiche client — la
+     note n'est plus un champ figé mais un événement daté, qui vient
+     s'ajouter au Suivi chronologiquement (retour de Cobey du 24/08/2026 :
+     "la case note serait un bouton qui ouvrirait un modal... et cette
+     note sera mise dans le suivi chronologiquement"). Voir
+     depOuvrirNoteFiche / depEnregistrerNoteFiche. ---- */
+  var m9 = document.createElement('div');
+  m9.className = 'modal-overlay';
+  m9.id = 'modal-dep-note-fiche';
+  m9.innerHTML = '<div class="modal-sheet">'
+    + '<div class="modal-title">&#128221; Ajouter une note</div>'
+    + '<div class="fg"><textarea class="fi" id="dep-note-fiche-texte" rows="3" placeholder="Remarque sur le colis, le client..." style="resize:none;"></textarea></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-note-fiche\')">Annuler</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depEnregistrerNoteFiche()">&#9989; Enregistrer</button>'
+    + '</div></div>';
+  document.body.appendChild(m9);
+
+  /* ---- Modale (v1.19.41) : accès rapide aux photos du colis depuis la
+     liste des clients d'un container — remplace le bouton "Suivi", jugé
+     inutile à cet endroit (retour de Cobey du 24/08/2026), voir
+     depOuvrirPhotosRapide. ---- */
+  var m10 = document.createElement('div');
+  m10.className = 'modal-overlay';
+  m10.id = 'modal-dep-photos-rapide';
+  m10.innerHTML = '<div class="modal-sheet">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">'
+    +   '<div class="modal-title" style="margin-bottom:0;" id="dep-photos-rapide-nom">Photos du colis</div>'
+    +   '<button onclick="closeModal(\'modal-dep-photos-rapide\')" style="background:none;border:none;font-size:22px;cursor:pointer;">&times;</button>'
+    + '</div>'
+    + '<div id="dep-photos-rapide-box"></div>'
+    + '</div>';
+  document.body.appendChild(m10);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -2662,7 +2714,12 @@ window.depSupprimer = function(){
    10. DÉTAIL D'UN DÉPART
    ───────────────────────────────────────────── */
 
-window.depDetail = function(id){
+window.depDetail = function(id, gardeFiltres){
+  // v1.19.41 : les filtres (voir _depFiltrePaye/_depFiltreLivraison) ne se
+  // réinitialisent que sur une VRAIE nouvelle ouverture du départ — pas
+  // quand depFiltrerDetail() se rappelle elle-même pour rafraîchir la
+  // liste après un tap sur une pastille.
+  if(!gardeFiltres || id !== _depDetailId){ _depFiltrePaye = 'tous'; _depFiltreLivraison = 'tous'; }
   _depDetailId = id;
   var d = (window.departsData||{})[id];
   if(!d){ toast('⚠️ Départ introuvable.'); return; }
@@ -2708,11 +2765,49 @@ window.depDetail = function(id){
   h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:4px;">Clients de ce d&eacute;part</div>';
 
   var tousAffiches = clients.concat(clientsDepot);
+
+  // v1.19.41 : filtres cumulables — retour de Cobey du 24/08/2026. Payé =
+  // colis ET livraison intégralement réglés (depCalculerPaiementCombine) ;
+  // tout le reste (y compris un acompte partiel) compte comme "non payé",
+  // volontairement binaire pour rester lisible sur le container.
+  if(tousAffiches.length){
+    var chip = function(actif, label, onclick){
+      return '<div class="dep-chip'+(actif?' on':'')+'" onclick="'+onclick+'">'+label+'</div>';
+    };
+    h += '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;">'
+      + chip(_depFiltrePaye==='tous', 'Tous', "depFiltrerDetail('paye','tous')")
+      + chip(_depFiltrePaye==='paye', '&#9989; Pay&eacute;s', "depFiltrerDetail('paye','paye')")
+      + chip(_depFiltrePaye==='non_paye', '&#8987; Non pay&eacute;s', "depFiltrerDetail('paye','non_paye')")
+      + '</div>'
+      + '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">'
+      + chip(_depFiltreLivraison==='tous', 'Tous', "depFiltrerDetail('livraison','tous')")
+      + chip(_depFiltreLivraison==='avec', '&#128666; Avec livraison', "depFiltrerDetail('livraison','avec')")
+      + chip(_depFiltreLivraison==='sans', '&#128205; Sans livraison', "depFiltrerDetail('livraison','sans')")
+      + '</div>';
+  }
+
+  var affiches = tousAffiches.filter(function(x){
+    var c = x.c;
+    if(_depFiltrePaye !== 'tous'){
+      var estPaye = depCalculerPaiementCombine(c).statut === 'paye';
+      if(_depFiltrePaye === 'paye' && !estPaye) return false;
+      if(_depFiltrePaye === 'non_paye' && estPaye) return false;
+    }
+    if(_depFiltreLivraison !== 'tous'){
+      var avecLiv = !!c.livraisonDakar;
+      if(_depFiltreLivraison === 'avec' && !avecLiv) return false;
+      if(_depFiltreLivraison === 'sans' && avecLiv) return false;
+    }
+    return true;
+  });
+
   if(!tousAffiches.length){
     h += '<div class="dep-vide" style="padding:28px 16px;">Aucun client rattach&eacute; pour l\'instant.</div>';
+  } else if(!affiches.length){
+    h += '<div class="dep-vide" style="padding:28px 16px;">Aucun client ne correspond &agrave; ces filtres.</div>';
   } else {
-    tousAffiches.sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
-    tousAffiches.forEach(function(x){
+    affiches.sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
+    affiches.forEach(function(x){
       var c = x.c;
       var peutBouger = (d.statut === 'preparation') && !x.depot;
       var clic = x.depot
@@ -2726,8 +2821,11 @@ window.depDetail = function(id){
         +   '<div class="dep-cli-btns">'
               + '<button class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
                 + 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#129534; Facture</button>'
-              + '<button class="dep-cli-btn" style="background:#E0E9FF;border-color:#C3CFFA;color:#252599;" '
-                + 'onclick="event.stopPropagation();depOuvrirSuiviDirect(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+',\''+id+'\')">&#128203; Suivi</button>'
+              // v1.19.41 : le bouton "Suivi" ne servait à rien à cet endroit
+              // (retour de Cobey du 24/08/2026) — remplacé par un accès
+              // rapide aux photos du colis (voir depOuvrirPhotosRapide).
+              + '<button class="dep-cli-btn" style="background:#F3EFFF;border-color:#D9C8F5;color:#6d28d9;" '
+                + 'onclick="event.stopPropagation();depOuvrirPhotosRapide(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#128247; Photos</button>'
               + (peutBouger
                 ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
                   + '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
@@ -2741,6 +2839,13 @@ window.depDetail = function(id){
   var box = $('dep-d-content');
   if(box) box.innerHTML = h;
   goTo('s-depart-detail');
+};
+
+// Pastilles de filtre (voir ci-dessus) — retour de Cobey du 24/08/2026.
+window.depFiltrerDetail = function(type, valeur){
+  if(type === 'paye') _depFiltrePaye = valeur;
+  else if(type === 'livraison') _depFiltreLivraison = valeur;
+  if(_depDetailId) depDetail(_depDetailId, true);
 };
 
 /* ─────────────────────────────────────────────
@@ -4548,7 +4653,18 @@ function depRenderSuivi(c, collecteId, boxId){
     });
   }
 
-  evts.sort(function(a,b){ return (b.ts||0) - (a.ts||0); });
+  // v1.19.41 : compatibilité avec l'ancien champ "note" (texte libre unique,
+  // avant que les notes ne deviennent des événements chronologiques dans le
+  // Suivi — retour de Cobey du 24/08/2026) : si une fiche en a encore une,
+  // on l'affiche comme un événement, faute de date précise on la place à la
+  // création de la fiche.
+  if(c.note){
+    evts.push({ ts: c.creeLe || 0, q: c.by || '', a: 'note&nbsp;: &laquo;&nbsp;' + esc(c.note) + '&nbsp;&raquo;', type: 'note' });
+  }
+
+  // v1.19.41 : du plus ancien en haut au plus récent en bas — retour de
+  // Cobey du 24/08/2026 ("ça se lirait mieux de haut en bas").
+  evts.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
 
   // v1.19.39 : présentation en frise verticale (ligne + pastilles), reprise
   // du carré France & Europe (retour de Cobey du 24/08/2026 : "t'as pas
@@ -4612,28 +4728,50 @@ function depRenderFicheLecture(colId, clientId){
   var vilTxt = esc([c.cp, c.ville].filter(Boolean).join(' '));
   if(vilTxt) adresseTxt = adresseTxt ? (adresseTxt + '<br>' + vilTxt) : vilTxt;
 
+  // v1.19.41 : pastille du collaborateur qui a inscrit le client, à sa
+  // couleur de profil (retour de Cobey du 24/08/2026) — même principe que
+  // le « Ajouté par » du carré France & Europe (voir _pastilleAuteur).
+  var inscritTxt = esc(dateHeureFr(c.creeLe||0));
+  var pastilleInscrit = '';
+  try{ pastilleInscrit = c.by ? _pastilleAuteur(c.by) : ''; }catch(e1){}
+  if(!pastilleInscrit && c.by) pastilleInscrit = '<b>'+esc(c.by)+'</b>';
+
+  // v1.19.41 : collaborateur qui a encaissé le premier versement de ce
+  // client, à côté du prix (retour de Cobey du 24/08/2026 : "ce sont les
+  // clients de la collecte qui ont déjà été récoltés") — même logique que
+  // la ligne "Encaissé par" de la facture publique (voir _depEncaissePar).
+  var encaisseParNom = _depEncaissePar(c);
+  var pastilleEncaisse = '';
+  if(encaisseParNom){
+    try{ pastilleEncaisse = _pastilleAuteur(encaisseParNom); }catch(e1b){}
+    if(!pastilleEncaisse) pastilleEncaisse = '<b>'+esc(encaisseParNom)+'</b>';
+  }
+
   var html = '<div style="text-align:center;margin-bottom:14px;">'
     +   '<div class="av" style="width:56px;height:56px;font-size:19px;margin:0 auto 10px;'
     +     'background:'+esc(c.bg||'#eee')+';color:'+esc(c.color||'#333')+';border:2px solid '+esc(c.color||'#333')+';">'+esc(init)+'</div>'
     +   '<div style="font-size:17px;font-weight:800;color:var(--text);">'+esc(c.name||'')+'</div>'
     + '</div>'
     + '<div class="dep-fiche-card">'
-    +   kv('Inscrit le', esc(dateHeureFr(c.creeLe||0)) + (c.by ? (' &middot; <b>'+esc(c.by)+'</b>') : ''))
+    +   kv('Inscrit le', inscritTxt + (pastilleInscrit ? ('<br>'+pastilleInscrit) : ''))
     +   kv('T&eacute;l&eacute;phone', _depLienTel(c.tel, c.tel || '—'))
     +   (c.tel2 ? kv('Deuxi&egrave;me num&eacute;ro', _depLienTel(c.tel2, c.tel2)) : '')
     +   kv('Adresse', adresseTxt || '—')
     +   (c.infos ? kv('Infos compl&eacute;mentaires', esc(c.infos)) : '')
     +   kv('Colis', esc(c.colis || '—'))
-    +   kv('Prix', c.prixADefinir ? '<span style="color:var(--text3);">&Agrave; d&eacute;finir sur place</span>' : ((c.prix||0) + '&nbsp;&euro;'))
+    +   kv('Prix', (c.prixADefinir ? '<span style="color:var(--text3);">&Agrave; d&eacute;finir sur place</span>' : ((c.prix||0) + '&nbsp;&euro;'))
+          + (pastilleEncaisse ? ('<br><span style="font-size:10.5px;color:var(--text3);">Encaiss&eacute; par</span><br>'+pastilleEncaisse) : ''))
     + '</div>'
     + '<div class="dep-fiche-card">'
     +   (c.livraisonDakar
           ? (kv('Destinataire', esc(c.destinataireNom||'—') + (c.destinataireTel ? ('<br>'+_depLienTel(c.destinataireTel, c.destinataireTel)) : ''))
             + kv('Livraison &agrave; Dakar', esc(c.livraisonAdresse||'—') + '<br>' + ((c.prixLivraison||0)+'&nbsp;&euro;')))
           : kv('Livraison &agrave; Dakar', 'Retrait sur place'))
-    +   (c.note ? kv('Note', esc(c.note)) : '')
     + '</div>'
-    + '<div class="dep-fiche-card"><div class="dep-sec" style="margin-top:6px;padding-top:0;border-top:none;">Suivi</div><div id="dep-ficheL-suivi"></div></div>'
+    + '<div class="dep-fiche-card"><div class="dep-sec" style="margin-top:6px;padding-top:0;border-top:none;">Suivi</div><div id="dep-ficheL-suivi"></div>'
+    +   '<button type="button" class="btn btn-gray" style="background:#FFF9DB;border-color:#F0E2A0;color:#8A7300;margin-top:10px;" '
+    +     'onclick="depOuvrirNoteFiche(\''+colId+'\',\''+clientId+'\')">&#128221; Ajouter une note</button>'
+    + '</div>'
     + '<div id="dep-ficheL-actions"></div>';
 
   box.innerHTML = html;
@@ -4659,6 +4797,77 @@ window.depModifierFicheActuelle = function(){
   if(loc) return;
   _depAppliquerGardeFiche(false);
   goTo('s-client');
+};
+
+// v1.19.41 : premier collaborateur à avoir encaissé ce client (son tout
+// premier versement colis) — même logique que la ligne "Encaissé par" de
+// la facture publique (voir ~depRenderFacturePublique), réutilisée ici
+// pour l'afficher à côté du prix sur la fiche de lecture.
+function _depEncaissePar(c){
+  var versementsTries = Array.isArray(c && c.versements)
+    ? c.versements.slice().sort(function(a,b){ return (a.le||0)-(b.le||0); })
+    : [];
+  return versementsTries.length ? (versementsTries[0].par || '') : '';
+}
+
+/* ─────────────────────────────────────────────
+   10ter bis 2 (v1.19.41). AJOUTER UNE NOTE — la note n'est plus un champ
+   figé sur la fiche mais un événement daté, ajouté au Suivi. Retour de
+   Cobey du 24/08/2026 : "la case note serait un bouton qui ouvrirait un
+   modal qui nous permettrait de mettre une note, et cette note sera mise
+   dans le suivi chronologiquement". Pas de confirmation supplémentaire :
+   la saisie dans la modale sert déjà de validation explicite.
+   ───────────────────────────────────────────── */
+
+window.depOuvrirNoteFiche = function(colId, clientId){
+  _depNoteFichePending = { colId: colId, id: clientId };
+  var t = $('dep-note-fiche-texte');
+  if(t) t.value = '';
+  openModal('modal-dep-note-fiche');
+};
+
+window.depEnregistrerNoteFiche = function(){
+  var p = _depNoteFichePending;
+  if(!p){ closeModal('modal-dep-note-fiche'); return; }
+  var t = $('dep-note-fiche-texte');
+  var texte = (t && t.value || '').trim();
+  if(!texte){ toast('⚠️ &Eacute;crivez une note avant d\'enregistrer.'); return; }
+
+  var fiche = ((window.clientsParCollecte||{})[p.colId]||{})[p.id];
+  if(!fiche){ closeModal('modal-dep-note-fiche'); return; }
+
+  if(!Array.isArray(fiche.hist)) fiche.hist = [];
+  fiche.hist.push({
+    q: (window.currentUser && window.currentUser.name) || '',
+    a: 'note&nbsp;: &laquo;&nbsp;' + esc(texte) + '&nbsp;&raquo;',
+    ts: Date.now(),
+    type: 'note'
+  });
+
+  closeModal('modal-dep-note-fiche');
+  _depNoteFichePending = null;
+  try{ sauvegarder(); }catch(e){ console.error('departs: sauvegarder note fiche', e); }
+  try{ depRenderFicheLecture(p.colId, p.id); }catch(e2){ console.error('departs: rafraîchir fiche après note', e2); }
+  toast('📝 Note ajoutée.');
+};
+
+/* ─────────────────────────────────────────────
+   10ter bis 3 (v1.19.41). ACCÈS RAPIDE AUX PHOTOS — remplace le bouton
+   "Suivi" jugé inutile sur la liste des clients d'un container (retour
+   de Cobey du 24/08/2026). Réutilise l'affichage lecture seule déjà
+   construit pour la fiche (voir _depChargerPhotosFiche), pointé vers la
+   modale plutôt que vers #e-photos-box.
+   ───────────────────────────────────────────── */
+
+window.depOuvrirPhotosRapide = function(collecteId, clientId, depot){
+  var c = depot
+    ? (window.depotClients || {})[clientId]
+    : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  var titre = $('dep-photos-rapide-nom');
+  if(titre) titre.textContent = '📷 Photos — ' + (c.name || 'Client');
+  openModal('modal-dep-photos-rapide');
+  _depChargerPhotosFiche(clientId, c, 'dep-photos-rapide-box');
 };
 
 /* ─────────────────────────────────────────────
@@ -4787,8 +4996,13 @@ function _depPhotosCourantes(prefixe){
 // (#s-client) — pas de suppression/ajout ici, juste la consultation
 // (utile notamment pour Modou à l'arrivée du colis). Un tap agrandit la
 // photo en plein écran.
-function _depChargerPhotosFiche(clientId, c){
-  var box = $('e-photos-box');
+// v1.19.41 : accepte désormais un `boxId` optionnel (défaut 'e-photos-box')
+// pour être réutilisée par l'accès rapide aux photos depuis la liste d'un
+// container (voir depOuvrirPhotosRapide), sans toucher à l'usage d'origine
+// sur la fiche elle-même.
+function _depChargerPhotosFiche(clientId, c, boxId){
+  var idBox = boxId || 'e-photos-box';
+  var box = $(idBox);
   if(!box) return;
   if(!c || !c.aPhotoColis || !window.db || !window.firebaseReady){
     box.innerHTML = '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Aucune photo pour ce colis.</div>';
@@ -4797,7 +5011,10 @@ function _depChargerPhotosFiche(clientId, c){
   box.innerHTML = '<div style="text-align:center;color:#aaa;font-size:12.5px;padding:6px 0 10px;">Chargement…</div>';
   db.ref('dct_photos_colis/'+clientId).once('value', function(snap){
     // le client a pu changer d'écran / rouvrir une autre fiche entretemps
-    if(window.currentClientId && window.currentClientId !== clientId) return;
+    // — uniquement pertinent pour l'affichage sur la fiche elle-même,
+    // l'accès rapide (modale) n'est pas concerné par currentClientId.
+    if(idBox === 'e-photos-box' && window.currentClientId && window.currentClientId !== clientId) return;
+    box = $(idBox); if(!box) return; // la modale a pu être fermée entretemps
     var v = snap.val() || {};
     var arr = Object.keys(v).map(function(k){ return v[k]; }).filter(function(p){ return p && p.d; });
     arr.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
@@ -5600,7 +5817,7 @@ window.depImporterClients = function(input){
 
 function injecterChampsFiche(){
   var ecran = $('s-client');
-  if(!ecran || $('e-note')) return;
+  if(!ecran || $('e-dest-nom')) return;
   var content = ecran.querySelector('.content');
   if(!content) return;
   var actions = $('client-actions');
@@ -5636,13 +5853,12 @@ function injecterChampsFiche(){
     +     '<input class="fi" id="e-liv-prix" type="number" min="0" placeholder="0"></div>'
     +   '<div style="font-size:11.5px;color:var(--text3);background:#f7f7f7;border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.5;">'
     +     '&#8505;&#65039; La livraison est factur&eacute;e au client mais reste <b>hors comptabilit&eacute; DCT</b>.</div>'
-    + '</div>'
-
-    // La photo (v1.11.0) : plus de case ici non plus — elle se prend
-    // désormais uniquement au moment de la validation de la collecte.
-    + '<div class="dep-sec">Note</div>'
-    + '<div class="fg"><label class="fl">Note</label>'
-    +   '<textarea class="fi" id="e-note" rows="2" placeholder="Remarque sur le colis, le client..." style="resize:none;"></textarea></div>';
+    + '</div>';
+    // v1.19.41 : le champ "Note" (texte figé) a disparu du formulaire —
+    // les notes s'ajoutent désormais depuis le bouton "📝 Ajouter une
+    // note" de l'écran de lecture (voir depOuvrirNoteFiche), et viennent
+    // s'inscrire chronologiquement dans le Suivi plutôt que d'écraser un
+    // champ unique (retour de Cobey du 24/08/2026).
 
   if(actions) content.insertBefore(bloc, actions);
   else content.appendChild(bloc);
@@ -5670,7 +5886,6 @@ function remplirFiche(clientId){
   e = $('e-dest-tel');    if(e) e.value = c.destinataireTel || '';
   e = $('e-liv-adresse'); if(e) e.value = c.livraisonAdresse || '';
   e = $('e-liv-prix');    if(e) e.value = c.prixLivraison ? String(c.prixLivraison) : '';
-  e = $('e-note');        if(e) e.value = c.note || '';
   depSetLivraisonFiche(c.livraisonDakar === true);
   _depChargerPhotosFiche(clientId, c);
 
@@ -5689,7 +5904,7 @@ function remplirFiche(clientId){
   // Verrouillage si la collecte est terminée
   var locked = false;
   try{ locked = isLocked(); }catch(e2){}
-  ['e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix','e-note'].forEach(function(id){
+  ['e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix'].forEach(function(id){
     var el = $(id); if(!el) return;
     el.disabled = locked;
     el.style.background = locked ? '#f5f5f5' : '';
@@ -5715,7 +5930,7 @@ function remplirFiche(clientId){
 
 function _depChampsGardeFiche(){
   return ['e-prenom','e-nom','e-tel','e-tel2','e-adresse','e-infos','e-cp','e-ville','e-colis',
-          'e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix','e-note'];
+          'e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix'];
 }
 
 // Applique (verrouille=true) ou lève (verrouille=false) la garde : champs
@@ -6685,7 +6900,11 @@ function greffer(){
       var extras = {
         destinataireNom  : (($('e-dest-nom')||{}).value || '').trim(),
         destinataireTel  : (($('e-dest-tel')||{}).value || '').trim(),
-        note             : (($('e-note')||{}).value || '').trim(),
+        // v1.19.41 : "note" n'est plus édité depuis ce formulaire — voir
+        // depOuvrirNoteFiche/depEnregistrerNoteFiche (bouton "Ajouter une
+        // note" sur l'écran de lecture, événement chronologique dans le
+        // Suivi). L'ancienne valeur, si elle existe encore, est préservée
+        // telle quelle par le recollage ci-dessous (avant[k] -> fiche[k]).
         livraisonDakar   : !!window._depLivraisonFiche,
         livraisonAdresse : window._depLivraisonFiche ? (($('e-liv-adresse')||{}).value || '').trim() : '',
         prixLivraison    : window._depLivraisonFiche ? (parseFloat(($('e-liv-prix')||{}).value) || 0) : 0
