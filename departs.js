@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.34';
+var DEP_VERSION = 'v1.19.35';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -358,6 +358,9 @@ var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bout
 // v1.19.22 : caisse livraison, indépendante de celle du colis ci-dessus.
 var _depVersMethodeLivraison = '';
 var _depVersDeviseLivraison  = 'eur';
+// v1.19.35 : versement (colis ou livraison) en attente de confirmation —
+// voir _depOuvrirConfirmationVersement / depConfirmerVersement.
+var _depVersPending = null; // { type: 'colis'|'livraison', ctx, c, montant, devise, saisie, methode }
 
 // v1.19.2 : navigation en dossiers cliquables de l'écran ARCHIVAGE
 // (Année > Mois > Semaine > liste). null = niveau non choisi.
@@ -1445,6 +1448,24 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-green-sm" onclick="depValiderFactureFinaleExecuter()">Oui, valider</button>'
     + '</div></div></div>';
   document.body.appendChild(m6);
+
+  /* ---- Modale (v1.19.35) : confirmation avant enregistrement d'un
+     versement (colis ou livraison) — retour de Cobey du 23/08/2026 : "pour
+     être sûr du paiement !". Récapitule montant + méthode avant d'écrire
+     quoi que ce soit (voir _depOuvrirConfirmationVersement /
+     depConfirmerVersement). ---- */
+  var m7 = document.createElement('div');
+  m7.className = 'modal-overlay';
+  m7.id = 'modal-dep-vers-confirm';
+  m7.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#128176;</div>'
+    + '<div class="modal-confirm-title">Confirmer le versement</div>'
+    + '<div id="dep-vers-confirm-texte" style="font-size:14px;color:#333;margin:4px 0 16px;line-height:1.5;"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-vers-confirm\')">Annuler</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depConfirmerVersement()">&#9989; Confirmer</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m7);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -3774,6 +3795,41 @@ function _depEcrireClient(ctx, champs){
 // voir depValiderConfirmer/depValiderModifierPrix), ou via "Modifier la
 // fiche" sinon (voir §6ter/§13 point 5 du récap projet).
 
+// v1.19.35 : ouvre la modale récapitulative "Confirmer le versement" —
+// utilisée aussi bien pour un versement colis que livraison (voir `p.type`).
+// Ne touche à rien tant que l'utilisateur n'a pas cliqué "Confirmer".
+function _depOuvrirConfirmationVersement(p){
+  _depVersPending = p;
+  var texte = $('dep-vers-confirm-texte');
+  if(texte){
+    var methodeTxt = p.methode === 'especes' ? 'Esp&egrave;ces' : 'Virement';
+    var montantTxt = p.montant + '&nbsp;&euro;' + (p.devise === 'fcfa' ? ' (' + p.saisie + '&nbsp;FCFA)' : '');
+    texte.innerHTML = 'Enregistrer un versement' + (p.type === 'livraison' ? ' <strong>livraison</strong>' : '')
+      + ' de <strong>' + montantTxt + '</strong> par <strong>' + methodeTxt + '</strong>'
+      + ' pour <strong>' + esc(p.c.name || '') + '</strong>&nbsp;?';
+  }
+  openModal('modal-dep-vers-confirm');
+}
+
+// Bouton "Confirmer" de la modale — déclenche l'écriture réelle (colis ou
+// livraison selon _depVersPending.type), puis nettoie l'état en attente.
+window.depConfirmerVersement = function(){
+  var p = _depVersPending;
+  closeModal('modal-dep-vers-confirm');
+  _depVersPending = null;
+  if(!p) return;
+  if(p.type === 'livraison'){
+    _depAjouterVersementLivraisonExecuter(p);
+  } else {
+    _depAjouterVersementExecuter(p);
+  }
+};
+
+// v1.19.35 : confirmation avant écriture réelle (retour de Cobey du
+// 23/08/2026 : "pour être sûr du paiement !") — depAjouterVersement ne
+// fait plus que valider la saisie et ouvrir une modale récapitulative
+// (voir _depOuvrirConfirmationVersement) ; l'écriture Firebase n'a lieu
+// que dans _depAjouterVersementExecuter, appelée depuis la modale.
 window.depAjouterVersement = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
@@ -3795,8 +3851,13 @@ window.depAjouterVersement = function(){
   var devise = _depVersDevise;
   var montant = devise === 'fcfa' ? Math.round((saisie / TAUX_FCFA_EUR) * 100) / 100 : saisie;
 
+  _depOuvrirConfirmationVersement({ type: 'colis', ctx: ctx, c: c, montant: montant, devise: devise, saisie: saisie, methode: _depVersMethode });
+};
+
+function _depAjouterVersementExecuter(p){
+  var ctx = p.ctx, c = p.c, montant = p.montant, devise = p.devise, saisie = p.saisie;
   var u = window.currentUser || {};
-  var v = { montant: montant, le: Date.now(), par: u.name || u.id || '', methode: _depVersMethode };
+  var v = { montant: montant, le: Date.now(), par: u.name || u.id || '', methode: p.methode };
   if(devise === 'fcfa'){ v.montantFCFA = saisie; v.tauxFCFA = TAUX_FCFA_EUR; }
 
   var versements = Array.isArray(c.versements) ? c.versements : [];
@@ -3823,7 +3884,7 @@ window.depAjouterVersement = function(){
 
   toast('✅ Versement enregistré');
   depRenderFacture(c);
-};
+}
 
 // v1.16.2 : corriger un versement (erreur de saisie, trop perçu...) en le
 // supprimant — pas d'édition en place, juste retirer puis en ajouter un
@@ -3915,6 +3976,9 @@ window.depVersMajFcfaLivraison = function(){
   hint.textContent = '≈ ' + eur + ' € (taux fixe 1 € = ' + TAUX_FCFA_EUR + ' FCFA)';
 };
 
+// v1.19.35 : même confirmation que depAjouterVersement (voir plus haut) —
+// on ne valide que la saisie ici, l'écriture se fait dans
+// _depAjouterVersementLivraisonExecuter, depuis la modale.
 window.depAjouterVersementLivraison = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
@@ -3934,8 +3998,13 @@ window.depAjouterVersementLivraison = function(){
   var devise = _depVersDeviseLivraison;
   var montant = devise === 'fcfa' ? Math.round((saisie / TAUX_FCFA_EUR) * 100) / 100 : saisie;
 
+  _depOuvrirConfirmationVersement({ type: 'livraison', ctx: ctx, c: c, montant: montant, devise: devise, saisie: saisie, methode: _depVersMethodeLivraison });
+};
+
+function _depAjouterVersementLivraisonExecuter(p){
+  var ctx = p.ctx, c = p.c, montant = p.montant, devise = p.devise, saisie = p.saisie;
   var u = window.currentUser || {};
-  var v = { montant: montant, le: Date.now(), par: u.name || u.id || '', methode: _depVersMethodeLivraison };
+  var v = { montant: montant, le: Date.now(), par: u.name || u.id || '', methode: p.methode };
   if(devise === 'fcfa'){ v.montantFCFA = saisie; v.tauxFCFA = TAUX_FCFA_EUR; }
 
   var versementsLiv = Array.isArray(c.versementsLivraison) ? c.versementsLivraison : [];
@@ -3955,7 +4024,7 @@ window.depAjouterVersementLivraison = function(){
 
   toast('✅ Versement livraison enregistré');
   depRenderFacture(c);
-};
+}
 
 window.depSupprimerVersementLivraison = function(idx){
   var ctx = _depFactureCtx;
