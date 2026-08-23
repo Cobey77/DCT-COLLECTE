@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.33';
+var DEP_VERSION = 'v1.19.34';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -345,6 +345,14 @@ var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture a
 // depAfficherFacturePublique). Permet à depExporterFacturePDF de
 // fonctionner dans les deux cas (depuis l'appli, ou depuis un lien public).
 var _depPubFactureCtx = null;   // { ctx, c }
+// v1.19.34 : mémorise si la facture publique a été ouverte depuis l'écran
+// "Documents" (bouton "Imprimer / PDF" post-validation) — sert à ramener
+// le collecteur au bon endroit avec "← Retour" (voir depRetourFacturePublique
+// ci-dessous). Retour de Cobey du 23/08/2026 : après "Imprimer / PDF" puis
+// "Retour", il atterrissait sur la fiche facture (écran d'édition) au lieu
+// de revenir sur "Documents" pour imprimer autre chose ou repartir en
+// tournée.
+var _depPubVientImpression = false;
 var _depVersMethode = '';       // 'especes' | 'virement' — méthode choisie sur le bouton "Ajouter un versement"
 var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bouton "Ajouter un versement"
 // v1.19.22 : caisse livraison, indépendante de celle du colis ci-dessus.
@@ -543,6 +551,7 @@ if(_depFactureDeepLink){
     if(ecranPret && (cible || tentative >= 20)){
       var ov = document.getElementById('dep-facture-overlay');
       if(ov && ov.parentNode) ov.parentNode.removeChild(ov);
+      _depPubVientImpression = false; // arrivée par lien, pas depuis "Documents"
       depAfficherFacturePublique(dl);
       return;
     }
@@ -3289,7 +3298,19 @@ function _depSommeEnLettres(montant){
 // caché), mais l'export s'enchaîne tout seul, sans clic supplémentaire.
 window.depOuvrirFacturePDF = function(){
   if(!_depFactureCtx){ toast('⚠️ Facture introuvable.'); return; }
+  _depPubVientImpression = true;
   depAfficherFacturePublique(_depFactureCtx, function(){ depExporterFacturePDF(); });
+};
+
+// v1.19.34 : "← Retour" sur la facture publique — ramène au bon endroit
+// selon comment on est arrivé ici : depuis "Documents" (bouton "Imprimer /
+// PDF" post-validation, voir depOuvrirFacturePDF), on revient sur
+// "Documents" (pour imprimer l'étiquette ou repartir en tournée) plutôt
+// que sur la fiche facture éditable. Depuis un lien WhatsApp/QR (arrivée
+// directe sur cet écran, _depPubVientImpression resté à false), on garde
+// l'ancien comportement : retour vers la fiche facture normale.
+window.depRetourFacturePublique = function(){
+  goTo(_depPubVientImpression ? 's-dep-impression' : 's-facture');
 };
 
 // Bouton "Imprimer / PDF" resté sur l'écran Facture publique lui-même
@@ -3448,7 +3469,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     // v1.19.27 : copier le texte du message — certains clients n'ont pas
     // WhatsApp (retour de Cobey du 22/08/2026).
     +    (connecte ? '<button type="button" class="fac-btn fac-btn-copier" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>' : '')
-    +    (connecte ? '<button type="button" class="fac-btn fac-btn-retour" onclick="goTo(\'s-facture\')">&larr; Retour</button>' : '')
+    +    (connecte ? '<button type="button" class="fac-btn fac-btn-retour" onclick="depRetourFacturePublique()">&larr; Retour</button>' : '')
     +  '</div>'
 
     +  '</div>' // fac-body
