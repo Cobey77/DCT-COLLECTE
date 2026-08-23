@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.38';
+var DEP_VERSION = 'v1.19.39';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -785,6 +785,16 @@ function injecterStyles(){
     + '.dep-fc-lab{font-size:10.5px;font-weight:800;color:var(--text3);letter-spacing:0.04em;'
     +   'text-transform:uppercase;margin-bottom:3px;}'
     + '.dep-fc-val{font-size:14px;font-weight:600;color:var(--text);word-break:break-word;}'
+    // v1.19.38 : fiche client (collecte), lecture seule — mise en page
+    // reprise du carré France & Europe (retour de Cobey du 23/08/2026 :
+    // "le suivi est bien, on peut reprendre ça"), voir depRenderFicheLecture.
+    + '.dep-fiche-card{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);'
+    +   'padding:2px 14px 6px;margin-bottom:12px;}'
+    + '.dep-kv{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;'
+    +   'padding:9px 0;border-bottom:1px dashed var(--border);}'
+    + '.dep-kv:last-child{border-bottom:none;}'
+    + '.dep-kv-k{color:var(--text3);flex-shrink:0;}'
+    + '.dep-kv-v{font-weight:600;text-align:right;color:var(--text);}'
     + '.dep-menu-item{display:flex;align-items:center;gap:12px;width:100%;background:#fff;'
     +   'border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;'
     +   'margin-bottom:9px;font-family:var(--font);cursor:pointer;text-align:left;}'
@@ -1083,6 +1093,23 @@ function injecterEcrans(){
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content" id="dep-histo-contact-content"></div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 6ter (v1.19.38) : fiche client d'une collecte, en lecture
+     seule à l'ouverture — présentation reprise du carré France & Europe
+     (retour de Cobey du 23/08/2026 : "le suivi est bien, on peut
+     reprendre ça"). Carte d'informations + Suivi complet, puis bouton
+     "✏️ Modifier la fiche" pour accéder au vrai formulaire (voir
+     depRenderFicheLecture / depModifierFicheActuelle). Le bouton Retour
+     délègue à #client-back, déjà câblé par openClientFiche/le point
+     d'entrée appelant, pour ressortir exactement là d'où on est venu. ---- */
+  + '<div class="screen" id="s-dep-fiche-lecture">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" id="dep-ficheL-back" onclick="var b=document.getElementById(\'client-back\');if(b&&b.onclick){b.onclick();}else{goTo(\'s-collecte\');}">&larr; Retour</button>'
+  +     '<div class="h-title" id="dep-ficheL-nom">Fiche client</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content" id="dep-ficheL-content"></div>'
   + '</div>'
 
   /* ---- ÉCRAN 7 : facture d'un client (lecture seule) ---- */
@@ -4478,7 +4505,7 @@ var DEP_SUIVI_THEMES = {
 // permet d'indiquer dans quelle collecte le client a été inscrit à
 // l'origine (retour de Cobey du 23/08/2026 : "dans quel collecte le
 // client a etait mis"), affiché sur la ligne de création ci-dessous.
-function depRenderSuivi(c, collecteId){
+function depRenderSuivi(c, collecteId, boxId){
   var evts = [];
 
   var collecteLabel = '';
@@ -4547,9 +4574,84 @@ function depRenderSuivi(c, collecteId){
     });
   }
 
-  var box = $('dep-suivi-content');
+  var box = $(boxId || 'dep-suivi-content');
   if(box) box.innerHTML = h;
 }
+
+/* ─────────────────────────────────────────────
+   10ter bis (v1.19.38). FICHE CLIENT EN LECTURE SEULE — reprend la
+   présentation du carré France & Europe (retour de Cobey du 23/08/2026,
+   sur les captures d'écran envoyées : "le suivi est bien également,
+   j'aime bien la présentation, on peut reprendre ça"). Carte
+   d'informations (kv) + Suivi complet (voir depRenderSuivi ci-dessus),
+   puis bouton "Modifier" pour ouvrir le vrai formulaire.
+   ───────────────────────────────────────────── */
+
+function depRenderFicheLecture(colId, clientId){
+  var c = ((window.clientsParCollecte||{})[colId]||{})[clientId];
+  var box = $('dep-ficheL-content');
+  var titre = $('dep-ficheL-nom');
+  if(!c || !box) return;
+  if(titre) titre.textContent = c.name || 'Client';
+
+  var kv = function(k, v){
+    return '<div class="dep-kv"><span class="dep-kv-k">'+k+'</span><span class="dep-kv-v">'+v+'</span></div>';
+  };
+  var init = '';
+  try{ init = initiales(c.prenom, c.nom); }catch(e){ init = (c.name||'?').charAt(0).toUpperCase(); }
+
+  var adresseTxt = esc(c.adresse || '');
+  var vilTxt = esc([c.cp, c.ville].filter(Boolean).join(' '));
+  if(vilTxt) adresseTxt = adresseTxt ? (adresseTxt + '<br>' + vilTxt) : vilTxt;
+
+  var html = '<div style="text-align:center;margin-bottom:14px;">'
+    +   '<div class="av" style="width:56px;height:56px;font-size:19px;margin:0 auto 10px;'
+    +     'background:'+esc(c.bg||'#eee')+';color:'+esc(c.color||'#333')+';border:2px solid '+esc(c.color||'#333')+';">'+esc(init)+'</div>'
+    +   '<div style="font-size:17px;font-weight:800;color:var(--text);">'+esc(c.name||'')+'</div>'
+    + '</div>'
+    + '<div class="dep-fiche-card">'
+    +   kv('Inscrit le', esc(dateHeureFr(c.creeLe||0)) + (c.by ? (' &middot; <b>'+esc(c.by)+'</b>') : ''))
+    +   kv('T&eacute;l&eacute;phone', _depLienTel(c.tel, c.tel || '—'))
+    +   (c.tel2 ? kv('Deuxi&egrave;me num&eacute;ro', _depLienTel(c.tel2, c.tel2)) : '')
+    +   kv('Adresse', adresseTxt || '—')
+    +   (c.infos ? kv('Infos compl&eacute;mentaires', esc(c.infos)) : '')
+    +   kv('Colis', esc(c.colis || '—'))
+    +   kv('Prix', c.prixADefinir ? '<span style="color:var(--text3);">&Agrave; d&eacute;finir sur place</span>' : ((c.prix||0) + '&nbsp;&euro;'))
+    + '</div>'
+    + '<div class="dep-fiche-card">'
+    +   (c.livraisonDakar
+          ? (kv('Destinataire', esc(c.destinataireNom||'—') + (c.destinataireTel ? ('<br>'+_depLienTel(c.destinataireTel, c.destinataireTel)) : ''))
+            + kv('Livraison &agrave; Dakar', esc(c.livraisonAdresse||'—') + '<br>' + ((c.prixLivraison||0)+'&nbsp;&euro;')))
+          : kv('Livraison &agrave; Dakar', 'Retrait sur place'))
+    +   (c.note ? kv('Note', esc(c.note)) : '')
+    + '</div>'
+    + '<div class="dep-fiche-card"><div class="dep-sec" style="margin-top:6px;padding-top:0;border-top:none;">Suivi</div><div id="dep-ficheL-suivi"></div></div>'
+    + '<div id="dep-ficheL-actions"></div>';
+
+  box.innerHTML = html;
+  depRenderSuivi(c, colId, 'dep-ficheL-suivi');
+
+  var loc = false;
+  try{ loc = isLocked(); }catch(e2){}
+  var act = $('dep-ficheL-actions');
+  if(act){
+    act.innerHTML = loc
+      ? '<div class="dep-alert" style="margin-top:4px;">&#128274; Collecte termin&eacute;e — modification impossible.</div>'
+      : '<button class="btn btn-green" style="margin-top:4px;" onclick="depModifierFicheActuelle()">&#9999;&#65039; Modifier la fiche</button>';
+  }
+}
+
+// Bouton "✏️ Modifier la fiche" de l'écran de lecture — lève la garde et
+// ouvre le vrai formulaire. Sécurité : ne fait rien si la collecte est
+// réellement terminée (isLocked() prime toujours, comme pour
+// depDeverouillerFiche ci-dessous).
+window.depModifierFicheActuelle = function(){
+  var loc = false;
+  try{ loc = isLocked(); }catch(e){}
+  if(loc) return;
+  _depAppliquerGardeFiche(false);
+  goTo('s-client');
+};
 
 /* ─────────────────────────────────────────────
    10ter. OUVRIR LA FICHE D'UN CLIENT DEPUIS LE DÉPART
@@ -5608,25 +5710,15 @@ function _depChampsGardeFiche(){
           'e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix','e-note'];
 }
 
-// Injecte une fois la bannière "Fiche en lecture seule" + bouton
-// "Modifier", juste après la bannière native de collecte terminée.
-function _depInjecterBanniereFiche(){
-  if($('dep-fiche-modif-banner')) return;
-  var lb = $('client-locked-banner');
-  var actions = $('client-actions');
-  var ban = document.createElement('div');
-  ban.id = 'dep-fiche-modif-banner';
-  ban.className = 'warn-banner';
-  ban.style.cssText = 'display:none;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;';
-  ban.innerHTML = '<span>🔒 Fiche en lecture seule, pour éviter les modifications accidentelles.</span>'
-    + '<button type="button" class="btn-sm btn-green-sm" style="white-space:nowrap;" onclick="depDeverouillerFiche()">✏️ Modifier</button>';
-  if(lb && lb.parentNode) lb.parentNode.insertBefore(ban, lb.nextSibling);
-  else if(actions && actions.parentNode) actions.parentNode.insertBefore(ban, actions);
-}
-
 // Applique (verrouille=true) ou lève (verrouille=false) la garde : champs
-// désactivés, boutons Enregistrer/Supprimer masqués, bannière affichée.
-// N'est jamais appelée quand isLocked() est vrai (voir plus haut).
+// du formulaire d'édition désactivés, boutons Enregistrer/Supprimer
+// masqués. Depuis la v1.19.38, l'utilisateur ne voit plus ce formulaire
+// verrouillé directement : il atterrit d'abord sur l'écran de lecture
+// (voir depRenderFicheLecture) et n'arrive ici qu'après avoir tapé
+// "✏️ Modifier la fiche" (voir depModifierFicheActuelle) — cette
+// fonction reste néanmoins appelée à l'ouverture pour que le formulaire
+// démarre toujours verrouillé par défaut, filet de sécurité si jamais on
+// y accédait autrement.
 function _depAppliquerGardeFiche(verrouille){
   _depChampsGardeFiche().forEach(function(id){
     var el = $(id); if(!el) return;
@@ -5649,19 +5741,7 @@ function _depAppliquerGardeFiche(verrouille){
   var btnDel  = actions ? actions.querySelector('button[onclick*="openConfirmDelete"]') : null;
   if(btnSave) btnSave.style.display = verrouille ? 'none' : '';
   if(btnDel)  btnDel.style.display  = verrouille ? 'none' : '';
-  var ban = $('dep-fiche-modif-banner');
-  if(ban) ban.style.display = verrouille ? 'flex' : 'none';
 }
-
-// Bouton "✏️ Modifier" de la bannière — lève la garde pour cette
-// consultation. Sécurité : ne fait rien si la collecte est réellement
-// terminée (isLocked() prime toujours).
-window.depDeverouillerFiche = function(){
-  var loc = false;
-  try{ loc = isLocked(); }catch(e){}
-  if(loc) return;
-  _depAppliquerGardeFiche(false);
-};
 
 /* ─────────────────────────────────────────────
    12. LE CHAMP DÉPART DANS LA FICHE CLIENT
@@ -6551,21 +6631,17 @@ function greffer(){
     window.openClientFiche = function(id, retour){
       origFiche.apply(this, arguments);
       try{ remplirFiche(id); }catch(e){ console.error('departs: remplirFiche', e); }
-      // v1.19.38 : garde de la fiche — voir §11 quater. Ouverture toujours
-      // en lecture seule (sauf collecte déjà fermée par isLocked(), qui a
-      // sa propre bannière/désactivation et prime sur tout) ; il faut
-      // taper "✏️ Modifier" pour pouvoir toucher aux champs.
+      // v1.19.38 : garde de la fiche — voir §10ter bis / §11 quater. Le
+      // formulaire d'édition démarre toujours verrouillé (filet de
+      // sécurité), et on affiche à la place l'écran de lecture seule
+      // (kv + Suivi), d'où l'on ne peut passer au vrai formulaire qu'en
+      // tapant "✏️ Modifier la fiche" — retour de Cobey du 23/08/2026.
+      try{ _depAppliquerGardeFiche(true); }catch(e2){ console.error('departs: garde fiche', e2); }
       try{
-        _depInjecterBanniereFiche();
-        var loc = false;
-        try{ loc = isLocked(); }catch(e2){}
-        if(loc){
-          var ban = $('dep-fiche-modif-banner');
-          if(ban) ban.style.display = 'none';
-        } else {
-          _depAppliquerGardeFiche(true);
-        }
-      }catch(e3){ console.error('departs: garde fiche', e3); }
+        var colId = window.currentCollecteId;
+        depRenderFicheLecture(colId, id);
+        goTo('s-dep-fiche-lecture');
+      }catch(e3){ console.error('departs: fiche lecture', e3); }
     };
     window.openClientFiche._depPatch = true;
   }
