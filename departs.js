@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.32';
+var DEP_VERSION = 'v1.19.33';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -3016,13 +3016,17 @@ function _depChargerHtml2canvasEtJsPDF(cb){
 // canvas obtenu (en px "physiques") vers des mm (96px CSS = 25.4mm).
 var DEP_PDF_SCALE_CAPTURE = 2;
 
-// Génère le PDF de la facture (A4, potentiellement plusieurs pages) —
-// remplace l'ancien _depExporterPDFDepuisElement pour ce cas précis. On
-// capture le document une seule fois, puis on le découpe nous-mêmes en
-// pages A4 pleine largeur : le point de coupure recule automatiquement
-// jusqu'au début de la ligne de tableau / du bloc en cours s'il tombe en
-// plein milieu (jamais de ligne coupée en deux). `ignoreElements` retire
-// les boutons ("no-print", qui sont bien à l'intérieur de .fac-doc).
+// Génère le PDF de la facture (A4, UNE SEULE page) — remplace l'ancien
+// _depExporterPDFDepuisElement pour ce cas précis. v1.19.32 découpait la
+// facture sur plusieurs pages A4 pleine largeur ; retour de Cobey du
+// 23/08/2026 ("la facture a4 est sur 2 page du coup, faut la mettre sur une
+// page !") : on capture le document une seule fois, puis on le recale
+// ("contain", même logique que pour l'étiquette) pour qu'il tienne
+// entièrement dans les limites d'UNE page A4, en choisissant l'axe le plus
+// contraignant (largeur ou hauteur). Sur une facture avec beaucoup de
+// lignes, le texte ressort un peu plus petit, mais rien n'est jamais coupé
+// et tout tient toujours sur une seule page. `ignoreElements` retire les
+// boutons ("no-print", qui sont bien à l'intérieur de .fac-doc).
 function _depExporterFacturePDFViaCanvas(el, nomFichier){
   if(!el){ toast('⚠️ Facture introuvable.'); return; }
   toast('⏳ Génération du PDF…');
@@ -3037,46 +3041,15 @@ function _depExporterFacturePDFViaCanvas(el, nomFichier){
       ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
     }).then(function(canvas){
       try{
-        var mmParPx = largeurUtile / canvas.width;
-        var pageHpx = Math.round(hauteurUtile / mmParPx);
-        var scaleCapture = canvas.width / el.scrollWidth;
-
-        // Zones "à ne pas couper" (en px canvas, relatif au coin
-        // haut-gauche de `el`) : lignes de tableau + blocs de section.
-        var docTop = el.getBoundingClientRect().top;
-        var zones = [];
-        el.querySelectorAll('tr, .fac-info, .fac-parties, .fac-bas, .fac-hist-titre, .fac-footer').forEach(function(zoneEl){
-          var r = zoneEl.getBoundingClientRect();
-          zones.push({ top: (r.top - docTop) * scaleCapture, bottom: (r.bottom - docTop) * scaleCapture });
-        });
-        function ajusterCoupure(yIdeal){
-          for (var i = 0; i < zones.length; i++){
-            var z = zones[i];
-            if (yIdeal > z.top && yIdeal < z.bottom) return z.top;
-          }
-          return yIdeal;
-        }
+        var imgWmm = (canvas.width / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
+        var imgHmm = (canvas.height / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
+        var ratio = Math.min(largeurUtile / imgWmm, hauteurUtile / imgHmm);
+        var wMm = imgWmm * ratio, hMm = imgHmm * ratio;
+        var xMm = marge + (largeurUtile - wMm) / 2; // centré horizontalement
+        var yMm = marge; // aligné en haut, comme un document imprimé
 
         var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: [pageW, pageH], orientation: 'portrait' });
-        var y = 0, page = 0;
-        while (y < canvas.height - 1) {
-          var yFin = Math.min(y + pageHpx, canvas.height);
-          if (yFin < canvas.height) {
-            var yAjuste = ajusterCoupure(yFin);
-            // Filet de sécurité : si le recul renvoie une valeur avant `y`
-            // (ne devrait jamais arriver), on ignore la zone protégée
-            // plutôt que de bloquer la boucle sur une page de hauteur nulle.
-            if (yAjuste > y) yFin = yAjuste;
-          }
-          var h = Math.round(yFin - y);
-          if (h <= 0) h = pageHpx;
-          var c = document.createElement('canvas');
-          c.width = canvas.width; c.height = h;
-          c.getContext('2d').drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
-          if (page > 0) pdf.addPage([pageW, pageH], 'portrait');
-          pdf.addImage(c.toDataURL('image/jpeg', 0.95), 'JPEG', marge, marge, largeurUtile, h * mmParPx);
-          y += h; page++;
-        }
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', xMm, yMm, wMm, hMm);
         pdf.save(nomFichier || 'Facture.pdf');
       }catch(e){
         console.error('departs: échec génération PDF facture', e);
