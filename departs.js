@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.45';
+var DEP_VERSION = 'v1.19.46';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1417,8 +1417,14 @@ function injecterEcrans(){
   +     '<div class="dep-sec">Prix (&euro;)</div>'
   +     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">'
   +       '<div id="dv-prix-affiche" style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px;text-align:center;font-size:20px;font-weight:800;">0 &euro;</div>'
-  +       '<input class="fi" id="dv-prix-input" type="number" min="0" style="display:none;flex:1;font-size:20px;font-weight:700;text-align:center;padding:13px;margin:0;" oninput="depValiderPrixChange()">'
+  // v1.19.46 : la saisie ne s'appliquait plus qu'en tapant les chiffres,
+  // sans aucune confirmation — retour de Cobey du 24/08/2026 : "c'est pas
+  // sécurisant, faut valider pour confirmation". Un bouton "✓ Valider ce
+  // prix" explicite est désormais requis (voir depValiderConfirmerPrix) ;
+  // tant qu'on n'a pas appuyé dessus, l'ancien prix reste celui retenu.
+  +       '<input class="fi" id="dv-prix-input" type="number" min="0" style="display:none;flex:1;font-size:20px;font-weight:700;text-align:center;padding:13px;margin:0;">'
   +       '<button type="button" class="dep-cli-btn" id="dv-prix-btn" onclick="depValiderModifierPrix()">&#9999;&#65039; Modifier</button>'
+  +       '<button type="button" class="dep-cli-btn" id="dv-prix-confirm-btn" style="display:none;background:var(--green-light);border-color:#C8E6D0;color:var(--green-dark);" onclick="depValiderConfirmerPrix()">&#10003; Valider ce prix</button>'
   +     '</div>'
 
   +     '<div class="dep-sec">Photo du colis <span style="color:#992020;">*</span></div>'
@@ -3702,7 +3708,9 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     +         '<img class="fac-brand-logo" src="'+DEP_LOGO_B64+'" alt="Dakar City Transport">'
     +         '<div>'
     +           '<div class="fac-brand-nom">DAKAR CITY TRANSPORT</div>'
-    +           '<div class="fac-brand-sub">Paris<br>T&eacute;l&nbsp;: +33 6 69 18 30 01<br>Email&nbsp;: contact@dakarcitytransport.com<br>Site web&nbsp;: dakarcitytransport.com</div>'
+    // v1.19.46 : deuxième numéro + réseaux sociaux (retour de Cobey du
+    // 24/08/2026), sur la facture publique et l'étiquette colis.
+    +           '<div class="fac-brand-sub">Paris<br>T&eacute;l&nbsp;: +33 6 69 18 30 01 / +33 6 03 67 04 98<br>Email&nbsp;: contact@dakarcitytransport.com<br>Site web&nbsp;: dakarcitytransport.com<br>TikTok &amp; Instagram&nbsp;: @dakar_ct</div>'
     +         '</div>'
     +       '</div>'
     +       '<div class="fac-info">'
@@ -3785,7 +3793,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     +  '</div>'
 
     +  '</div>' // fac-body
-    +  '<div class="fac-footer">DAKAR CITY TRANSPORT &middot; Paris &middot; T&eacute;l&nbsp;: +33 6 69 18 30 01<br>Email&nbsp;: contact@dakarcitytransport.com &middot; Site web&nbsp;: dakarcitytransport.com</div>'
+    +  '<div class="fac-footer">DAKAR CITY TRANSPORT &middot; Paris &middot; T&eacute;l&nbsp;: +33 6 69 18 30 01 / +33 6 03 67 04 98<br>Email&nbsp;: contact@dakarcitytransport.com &middot; Site web&nbsp;: dakarcitytransport.com &middot; TikTok &amp; Instagram&nbsp;: @dakar_ct</div>'
     +  '</div>'; // fac-doc
 
   var box = $('pub-contenu');
@@ -3998,7 +4006,7 @@ function depRenderEtiquettes(c, ctx, n){
       +       '</div>'
       +       '<div class="etq-nature"><span>Nature</span><strong>'+esc(c.colis||'—')+'</strong></div>'
       +     '</div>'
-      +     '<div class="etq-footer">dakarcitytransport.com &middot; +33 6 69 18 30 01</div>'
+      +     '<div class="etq-footer">dakarcitytransport.com &middot; +33 6 69 18 30 01 / +33 6 03 67 04 98 &middot; @dakar_ct</div>'
       +   '</div>'
       + '</div>';
   }
@@ -6267,6 +6275,7 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   if(pAff){ pAff.textContent = fiche.prixADefinir ? '🕗 À définir sur place' : (pay.total + ' €'); pAff.style.display = 'block'; }
   var pInp = $('dv-prix-input'); if(pInp){ pInp.value = fiche.prixADefinir ? '' : pay.total; pInp.style.display = 'none'; }
   var pBtn = $('dv-prix-btn'); if(pBtn) pBtn.style.display = 'inline-block';
+  var pConf = $('dv-prix-confirm-btn'); if(pConf) pConf.style.display = 'none'; // v1.19.46
 
   window.depRetirerPhotoValider();
 
@@ -6297,9 +6306,10 @@ window.depValiderAnnuler = function(){
 };
 
 window.depValiderModifierPrix = function(){
-  var disp = $('dv-prix-affiche'), inp = $('dv-prix-input'), btn = $('dv-prix-btn');
+  var disp = $('dv-prix-affiche'), inp = $('dv-prix-input'), btn = $('dv-prix-btn'), conf = $('dv-prix-confirm-btn');
   if(disp) disp.style.display = 'none';
   if(btn) btn.style.display = 'none';
+  if(conf) conf.style.display = 'inline-block'; // v1.19.46
   if(inp){ inp.style.display = 'block'; inp.focus(); }
 };
 
@@ -6313,10 +6323,23 @@ window.depValiderToggleLivraison = function(oui){
   if(bloc) bloc.style.display = oui ? 'block' : 'none';
 };
 
-window.depValiderPrixChange = function(){
+// v1.19.46 : le prix ne s'appliquait plus qu'en tapant les chiffres, sans
+// confirmation (retour de Cobey du 24/08/2026 : "pas sécurisant") — il
+// faut désormais appuyer sur "✓ Valider ce prix" pour que la saisie soit
+// prise en compte ; tant que ce n'est pas fait, _depValiderCtx.prixModifie
+// (et donc ce qui sera écrit à la validation) garde l'ancienne valeur.
+window.depValiderConfirmerPrix = function(){
   var inp = $('dv-prix-input');
   var v = parseFloat(inp && inp.value);
-  if(_depValiderCtx) _depValiderCtx.prixModifie = isNaN(v) ? 0 : v;
+  if(isNaN(v) || v < 0){ toast('⚠️ Entrez un prix valide.'); return; }
+  if(_depValiderCtx) _depValiderCtx.prixModifie = v;
+
+  var disp = $('dv-prix-affiche'), btn = $('dv-prix-btn'), conf = $('dv-prix-confirm-btn');
+  if(disp){ disp.textContent = v + ' €'; disp.style.display = 'block'; }
+  if(inp) inp.style.display = 'none';
+  if(conf) conf.style.display = 'none';
+  if(btn) btn.style.display = 'inline-block';
+  toast('✅ Prix confirmé : ' + v + ' €');
 };
 
 // v1.19.16 : "pays" filtre la liste aux containers de la destination
