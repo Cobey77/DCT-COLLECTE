@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.29';
+var DEP_VERSION = 'v1.19.30';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1106,54 +1106,54 @@ function injecterEcrans(){
   // index.html), donc ni le bas de la facture ni le bouton Imprimer
   // n'étaient atteignables (constaté par Cobey, capture à l'appui).
   +     '#s-facture-publique{background:#e8e8e8;overflow-y:auto;-webkit-overflow-scrolling:touch;}'
-  +     '#s-facture-publique .pub-wrap{max-width:720px;margin:0 auto;padding:16px 10px 30px;}'
-  +     '#s-facture-publique .fac-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);}'
-  +     '#s-facture-publique .fac-topbar{height:8px;background:#006b2d;}'
-  +     '#s-facture-publique .fac-body{padding:18px 16px;}'
-  +     '#s-facture-publique .fac-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:14px;}'
-  +     '#s-facture-publique .fac-brand{display:flex;gap:10px;align-items:flex-start;}'
-  +     '#s-facture-publique .fac-brand-logo{width:52px;height:52px;border-radius:50%;flex-shrink:0;}'
-  +     '#s-facture-publique .fac-brand-nom{font-size:14px;font-weight:800;color:#006b2d;}'
-  +     '#s-facture-publique .fac-brand-sub{font-size:10.5px;color:#666;line-height:1.5;}'
-  +     '#s-facture-publique .fac-info{display:flex;gap:10px;align-items:flex-start;}'
-  +     '#s-facture-publique .fac-info-box{border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;min-width:150px;}'
-  +     '#s-facture-publique .fac-info-titre{font-size:17px;font-weight:800;color:#111;margin-bottom:6px;}'
-  +     '#s-facture-publique .fac-info-ligne{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#666;padding:1.5px 0;}'
-  +     '#s-facture-publique .fac-info-ligne strong{color:#111;font-weight:700;}'
-  +     '#s-facture-publique .fac-qr-wrap{flex-shrink:0;}'
+  +     '.pub-wrap{max-width:720px;margin:0 auto;padding:16px 10px 30px;}'
+  +     '.fac-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);}'
+  +     '.fac-topbar{height:8px;background:#006b2d;}'
+  +     '.fac-body{padding:18px 16px;}'
+  +     '.fac-header{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;margin-bottom:14px;}'
+  +     '.fac-brand{display:flex;gap:10px;align-items:flex-start;}'
+  +     '.fac-brand-logo{width:52px;height:52px;border-radius:50%;flex-shrink:0;}'
+  +     '.fac-brand-nom{font-size:14px;font-weight:800;color:#006b2d;}'
+  +     '.fac-brand-sub{font-size:10.5px;color:#666;line-height:1.5;}'
+  +     '.fac-info{display:flex;gap:10px;align-items:flex-start;}'
+  +     '.fac-info-box{border:1.5px solid var(--border);border-radius:8px;padding:10px 12px;min-width:150px;}'
+  +     '.fac-info-titre{font-size:17px;font-weight:800;color:#111;margin-bottom:6px;}'
+  +     '.fac-info-ligne{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#666;padding:1.5px 0;}'
+  +     '.fac-info-ligne strong{color:#111;font-weight:700;}'
+  +     '.fac-qr-wrap{flex-shrink:0;}'
   // v1.19.29 : QR agrandi (74px -> 130px) — trop petit pour être scanné
   // facilement selon les téléphones (retour de Cobey du 23/08/2026, pour
   // Modou). Voir aussi le canvas plus bas (résolution 260 au lieu de 148,
   // pour rester net à cette taille d'affichage).
-  +     '#s-facture-publique .fac-qr-wrap canvas{display:block;width:130px;height:130px;border:1.5px solid var(--border);border-radius:6px;}'
-  +     '#s-facture-publique .fac-sep{border:none;border-top:2px solid #006b2d;margin:10px 0 16px;}'
-  +     '#s-facture-publique .fac-parties{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}'
-  +     '#s-facture-publique .fac-partie-titre{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:4px;}'
-  +     '#s-facture-publique .fac-partie-nom{font-size:13px;font-weight:700;color:#111;}'
-  +     '#s-facture-publique .fac-partie-detail{font-size:11.5px;color:#555;line-height:1.5;}'
-  +     '#s-facture-publique .fac-tbl-wrap{overflow-x:auto;margin-bottom:18px;}'
-  +     '#s-facture-publique table.fac-table{width:100%;border-collapse:collapse;font-size:12px;}'
-  +     '#s-facture-publique table.fac-table th{background:#006b2d;color:#fff;text-align:left;padding:8px 9px;font-size:10.5px;font-weight:700;white-space:nowrap;}'
-  +     '#s-facture-publique table.fac-table td{padding:8px 9px;border-bottom:1px solid #eee;color:#333;}'
-  +     '#s-facture-publique table.fac-table th:last-child,#s-facture-publique table.fac-table td:last-child{text-align:right;}'
-  +     '#s-facture-publique .fac-bas{display:flex;justify-content:space-between;flex-wrap:wrap-reverse;gap:14px;margin-bottom:18px;}'
-  +     '#s-facture-publique .fac-lettres{flex:1;min-width:180px;background:#f7f7f7;border-radius:6px;padding:10px 12px;font-size:11px;color:#555;font-style:italic;align-self:flex-end;}'
-  +     '#s-facture-publique .fac-totaux{min-width:200px;}'
-  +     '#s-facture-publique .fac-totaux-ligne{display:flex;justify-content:space-between;gap:16px;font-size:12.5px;color:#444;padding:5px 4px;}'
-  +     '#s-facture-publique .fac-totaux-total{background:#006b2d;color:#fff;font-weight:800;border-radius:5px;padding:8px 10px;margin:4px 0;}'
-  +     '#s-facture-publique .fac-hist-titre{background:#006b2d;color:#fff;font-size:11px;font-weight:700;letter-spacing:.03em;padding:8px 12px;border-radius:5px 5px 0 0;}'
-  +     '#s-facture-publique table.fac-hist{width:100%;border-collapse:collapse;font-size:11.5px;}'
-  +     '#s-facture-publique table.fac-hist th{text-align:left;padding:7px 9px;font-size:10px;color:#888;font-weight:700;border-bottom:2px solid #eee;white-space:nowrap;}'
-  +     '#s-facture-publique table.fac-hist td{padding:7px 9px;border-bottom:1px solid #f2f2f2;color:#333;white-space:nowrap;}'
-  +     '#s-facture-publique .fac-footer{background:#006b2d;color:#fff;text-align:center;font-size:10.5px;padding:12px;line-height:1.6;}'
-  +     '#s-facture-publique .fac-actions{margin-top:16px;display:flex;flex-direction:column;gap:8px;}'
-  +     '#s-facture-publique .fac-btn{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;}'
-  +     '#s-facture-publique .fac-btn-print{background:#006b2d;color:#fff;}'
-  +     '#s-facture-publique .fac-btn-whatsapp{background:#25D366;color:#fff;}'
-  +     '#s-facture-publique .fac-btn-copier{background:#111;color:#fff;}'
-  +     '#s-facture-publique .fac-btn-retour{background:none;color:#666;text-decoration:underline;}'
+  +     '.fac-qr-wrap canvas{display:block;width:130px;height:130px;border:1.5px solid var(--border);border-radius:6px;}'
+  +     '.fac-sep{border:none;border-top:2px solid #006b2d;margin:10px 0 16px;}'
+  +     '.fac-parties{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}'
+  +     '.fac-partie-titre{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:4px;}'
+  +     '.fac-partie-nom{font-size:13px;font-weight:700;color:#111;}'
+  +     '.fac-partie-detail{font-size:11.5px;color:#555;line-height:1.5;}'
+  +     '.fac-tbl-wrap{overflow-x:auto;margin-bottom:18px;}'
+  +     'table.fac-table{width:100%;border-collapse:collapse;font-size:12px;}'
+  +     'table.fac-table th{background:#006b2d;color:#fff;text-align:left;padding:8px 9px;font-size:10.5px;font-weight:700;white-space:nowrap;}'
+  +     'table.fac-table td{padding:8px 9px;border-bottom:1px solid #eee;color:#333;}'
+  +     'table.fac-table th:last-child,table.fac-table td:last-child{text-align:right;}'
+  +     '.fac-bas{display:flex;justify-content:space-between;flex-wrap:wrap-reverse;gap:14px;margin-bottom:18px;}'
+  +     '.fac-lettres{flex:1;min-width:180px;background:#f7f7f7;border-radius:6px;padding:10px 12px;font-size:11px;color:#555;font-style:italic;align-self:flex-end;}'
+  +     '.fac-totaux{min-width:200px;}'
+  +     '.fac-totaux-ligne{display:flex;justify-content:space-between;gap:16px;font-size:12.5px;color:#444;padding:5px 4px;}'
+  +     '.fac-totaux-total{background:#006b2d;color:#fff;font-weight:800;border-radius:5px;padding:8px 10px;margin:4px 0;}'
+  +     '.fac-hist-titre{background:#006b2d;color:#fff;font-size:11px;font-weight:700;letter-spacing:.03em;padding:8px 12px;border-radius:5px 5px 0 0;}'
+  +     'table.fac-hist{width:100%;border-collapse:collapse;font-size:11.5px;}'
+  +     'table.fac-hist th{text-align:left;padding:7px 9px;font-size:10px;color:#888;font-weight:700;border-bottom:2px solid #eee;white-space:nowrap;}'
+  +     'table.fac-hist td{padding:7px 9px;border-bottom:1px solid #f2f2f2;color:#333;white-space:nowrap;}'
+  +     '.fac-footer{background:#006b2d;color:#fff;text-align:center;font-size:10.5px;padding:12px;line-height:1.6;}'
+  +     '.fac-actions{margin-top:16px;display:flex;flex-direction:column;gap:8px;}'
+  +     '.fac-btn{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;}'
+  +     '.fac-btn-print{background:#006b2d;color:#fff;}'
+  +     '.fac-btn-whatsapp{background:#25D366;color:#fff;}'
+  +     '.fac-btn-copier{background:#111;color:#fff;}'
+  +     '.fac-btn-retour{background:none;color:#666;text-decoration:underline;}'
   +     '@media (max-width:480px){'
-  +       '#s-facture-publique .fac-parties{grid-template-columns:1fr;}'
+  +       '.fac-parties{grid-template-columns:1fr;}'
   +     '}'
   +     '@media print{'
   // Format A4 explicite (sinon le navigateur imprime avec la taille par
@@ -1177,10 +1177,10 @@ function injecterEcrans(){
   // depExporterFacturePDF), mais reste corrigé au cas où quelqu'un
   // imprime via le raccourci du navigateur (Ctrl/Cmd+P).
   +       '#s-facture-publique.active{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
-  +       '#s-facture-publique .no-print{display:none !important;}'
-  +       '#s-facture-publique .fac-doc{overflow:visible !important;box-shadow:none;border-radius:0;}'
-  +       '#s-facture-publique .pub-wrap{padding:0;max-width:100%;}'
-  +       '#s-facture-publique .fac-parties{grid-template-columns:1fr 1fr !important;}'
+  +       '.no-print{display:none !important;}'
+  +       '.fac-doc{overflow:visible !important;box-shadow:none;border-radius:0;}'
+  +       '.pub-wrap{padding:0;max-width:100%;}'
+  +       '.fac-parties{grid-template-columns:1fr 1fr !important;}'
   +     '}'
   +   '</style>'
   +   '<div class="pub-wrap">'
@@ -1202,32 +1202,32 @@ function injecterEcrans(){
   + '<div class="screen" id="s-etiquette">'
   +   '<style>'
   +     '#s-etiquette{background:#e8e8e8;overflow-y:auto;-webkit-overflow-scrolling:touch;}'
-  +     '#s-etiquette .etq-wrap{max-width:420px;margin:0 auto;padding:16px 10px 30px;}'
-  +     '#s-etiquette .etq-actions{margin-bottom:14px;display:flex;flex-direction:column;gap:8px;}'
-  +     '#s-etiquette .etq-btn{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;}'
-  +     '#s-etiquette .etq-btn-print{background:#006b2d;color:#fff;}'
-  +     '#s-etiquette .etq-btn-retour{background:none;color:#666;text-decoration:underline;}'
-  +     '#s-etiquette .etq-page{margin-bottom:16px;}'
-  +     '#s-etiquette .etq-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);}'
-  +     '#s-etiquette .etq-topbar{height:8px;background:#006b2d;}'
-  +     '#s-etiquette .etq-body{padding:16px;}'
-  +     '#s-etiquette .etq-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}'
-  +     '#s-etiquette .etq-logo{width:36px;height:36px;border-radius:50%;flex-shrink:0;}'
-  +     '#s-etiquette .etq-marque{font-size:12px;font-weight:800;color:#006b2d;flex:1;}'
-  +     '#s-etiquette .etq-compte{font-size:13px;font-weight:800;background:#006b2d;color:#fff;padding:3px 9px;border-radius:20px;flex-shrink:0;}'
-  +     '#s-etiquette .etq-numero{font-size:19px;font-weight:800;letter-spacing:.02em;color:#111;text-align:center;background:#f7f7f7;border-radius:6px;padding:10px;margin-bottom:6px;}'
-  +     '#s-etiquette .etq-dest{text-align:center;font-size:13px;font-weight:700;color:#333;margin-bottom:10px;}'
+  +     '.etq-wrap{max-width:420px;margin:0 auto;padding:16px 10px 30px;}'
+  +     '.etq-actions{margin-bottom:14px;display:flex;flex-direction:column;gap:8px;}'
+  +     '.etq-btn{padding:13px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);border:none;}'
+  +     '.etq-btn-print{background:#006b2d;color:#fff;}'
+  +     '.etq-btn-retour{background:none;color:#666;text-decoration:underline;}'
+  +     '.etq-page{margin-bottom:16px;}'
+  +     '.etq-doc{background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 2px 14px rgba(0,0,0,.1);}'
+  +     '.etq-topbar{height:8px;background:#006b2d;}'
+  +     '.etq-body{padding:16px;}'
+  +     '.etq-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}'
+  +     '.etq-logo{width:36px;height:36px;border-radius:50%;flex-shrink:0;}'
+  +     '.etq-marque{font-size:12px;font-weight:800;color:#006b2d;flex:1;}'
+  +     '.etq-compte{font-size:13px;font-weight:800;background:#006b2d;color:#fff;padding:3px 9px;border-radius:20px;flex-shrink:0;}'
+  +     '.etq-numero{font-size:19px;font-weight:800;letter-spacing:.02em;color:#111;text-align:center;background:#f7f7f7;border-radius:6px;padding:10px;margin-bottom:6px;}'
+  +     '.etq-dest{text-align:center;font-size:13px;font-weight:700;color:#333;margin-bottom:10px;}'
   // v1.19.29 : QR sur l'étiquette (voir depRenderEtiquettes) — absent
   // avant, retour de Cobey du 23/08/2026.
-  +     '#s-etiquette .etq-qr-wrap{text-align:center;margin-bottom:10px;}'
-  +     '#s-etiquette .etq-qr-wrap canvas{width:90px;height:90px;border:1.5px solid var(--border);border-radius:6px;}'
-  +     '#s-etiquette .etq-sep{border:none;border-top:2px solid #006b2d;margin:8px 0 12px;}'
-  +     '#s-etiquette .etq-parties{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}'
-  +     '#s-etiquette .etq-partie-titre{font-size:10px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:3px;}'
-  +     '#s-etiquette .etq-partie-nom{font-size:12.5px;font-weight:700;color:#111;}'
-  +     '#s-etiquette .etq-partie-detail{font-size:11px;color:#555;line-height:1.45;}'
-  +     '#s-etiquette .etq-nature{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:6px;}'
-  +     '#s-etiquette .etq-footer{background:#006b2d;color:#fff;text-align:center;font-size:9.5px;padding:8px;}'
+  +     '.etq-qr-wrap{text-align:center;margin-bottom:10px;}'
+  +     '.etq-qr-wrap canvas{width:90px;height:90px;border:1.5px solid var(--border);border-radius:6px;}'
+  +     '.etq-sep{border:none;border-top:2px solid #006b2d;margin:8px 0 12px;}'
+  +     '.etq-parties{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}'
+  +     '.etq-partie-titre{font-size:10px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:3px;}'
+  +     '.etq-partie-nom{font-size:12.5px;font-weight:700;color:#111;}'
+  +     '.etq-partie-detail{font-size:11px;color:#555;line-height:1.45;}'
+  +     '.etq-nature{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:#555;border-top:1px dashed #ddd;padding-top:8px;margin-bottom:6px;}'
+  +     '.etq-footer{background:#006b2d;color:#fff;text-align:center;font-size:9.5px;padding:8px;}'
   +     '@media print{'
   +       '@page{size:A5 portrait;margin:8mm;}'
   +       'html,body,.app{height:auto !important;overflow:visible !important;}'
@@ -1235,11 +1235,11 @@ function injecterEcrans(){
   // v1.19.29 : scopé à ".active" — voir la même correction sur
   // #s-facture-publique, juste au-dessus, même cause.
   +       '#s-etiquette.active{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
-  +       '#s-etiquette .no-print{display:none !important;}'
-  +       '#s-etiquette .etq-wrap{padding:0;max-width:100%;}'
-  +       '#s-etiquette .etq-doc{box-shadow:none;border-radius:0;}'
-  +       '#s-etiquette .etq-page{page-break-after:always;margin-bottom:0;}'
-  +       '#s-etiquette .etq-page:last-child{page-break-after:auto;}'
+  +       '.no-print{display:none !important;}'
+  +       '.etq-wrap{padding:0;max-width:100%;}'
+  +       '.etq-doc{box-shadow:none;border-radius:0;}'
+  +       '.etq-page{page-break-after:always;margin-bottom:0;}'
+  +       '.etq-page:last-child{page-break-after:auto;}'
   +     '}'
   +   '</style>'
   +   '<div class="etq-wrap">'
@@ -3016,11 +3016,13 @@ function _depExporterPDFDepuisElement(el, nomFichier, optsExtra){
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
+        foreignObjectRendering: true,
         ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
       },
       jsPDF: extra.jsPDF || { unit: 'mm', format: 'a4', orientation: 'portrait' }
     };
     if(extra.pagebreak) opts.pagebreak = extra.pagebreak;
+    if(extra.autoPaging !== undefined) opts.autoPaging = extra.autoPaging;
     try{
       window.html2pdf().set(opts).from(el).save();
     }catch(e){
@@ -3219,8 +3221,9 @@ window.depExporterFacturePDF = function(){
   var infos = _depPubFactureCtx || {};
   var nomFichier = 'Facture-' + (infos.c ? depNumeroFacture(infos.c, infos.ctx) : Date.now()) + '.pdf';
   _depExporterPDFDepuisElement(doc, nomFichier, {
-    margin: 10,
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    margin: 6,
+    autoPaging: false,
+    jsPDF: { unit: 'mm', format: [210, 400], orientation: 'portrait' }
   });
 };
 
@@ -3557,7 +3560,12 @@ function depRenderEtiquettes(c, ctx, n){
       +         '<div class="etq-compte">'+i+'/'+n+'</div>'
       +       '</div>'
       +       '<div class="etq-numero">'+esc(numEtq)+'</div>'
-      +       '<div class="etq-dest">'+(pInfo.drapeau||'')+' '+esc(pInfo.nom||'')+'</div>'
+      // v1.19.30 : DEP_PAYS_NOM_PLAIN (texte brut) au lieu de pInfo.nom
+      // (qui contient des entités HTML du genre "S&eacute;n&eacute;gal",
+      // prévues pour du innerHTML direct) — passé dans esc() par erreur,
+      // ça doublait l'échappement et affichait les entités telles quelles
+      // à l'écran (repéré par Cobey sur l'étiquette générée).
+      +       '<div class="etq-dest">'+(pInfo.drapeau||'')+' '+esc(DEP_PAYS_NOM_PLAIN[depPaysDepart(d)] || pInfo.nom || '')+'</div>'
       // v1.19.29 : QR ajouté sur l'étiquette (absent avant) — même jeton
       // que sur la facture, pour ouvrir directement la fiche du client en
       // scannant le colis (retour de Cobey du 23/08/2026). Dessiné juste
