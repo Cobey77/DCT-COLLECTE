@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.28';
+var DEP_VERSION = 'v1.19.29';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -339,6 +339,12 @@ var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
 var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
+// v1.19.29 : ctx+client de la facture PUBLIQUE actuellement affichée
+// (#s-facture-publique) — distinct de _depFactureCtx, qui n'est jamais
+// posé pour un visiteur non connecté arrivé par lien WhatsApp (voir
+// depAfficherFacturePublique). Permet à depExporterFacturePDF de
+// fonctionner dans les deux cas (depuis l'appli, ou depuis un lien public).
+var _depPubFactureCtx = null;   // { ctx, c }
 var _depVersMethode = '';       // 'especes' | 'virement' — méthode choisie sur le bouton "Ajouter un versement"
 var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bouton "Ajouter un versement"
 // v1.19.22 : caisse livraison, indépendante de celle du colis ci-dessus.
@@ -1115,7 +1121,11 @@ function injecterEcrans(){
   +     '#s-facture-publique .fac-info-ligne{display:flex;justify-content:space-between;gap:10px;font-size:11px;color:#666;padding:1.5px 0;}'
   +     '#s-facture-publique .fac-info-ligne strong{color:#111;font-weight:700;}'
   +     '#s-facture-publique .fac-qr-wrap{flex-shrink:0;}'
-  +     '#s-facture-publique .fac-qr-wrap canvas{display:block;width:74px;height:74px;border:1.5px solid var(--border);border-radius:6px;}'
+  // v1.19.29 : QR agrandi (74px -> 130px) — trop petit pour être scanné
+  // facilement selon les téléphones (retour de Cobey du 23/08/2026, pour
+  // Modou). Voir aussi le canvas plus bas (résolution 260 au lieu de 148,
+  // pour rester net à cette taille d'affichage).
+  +     '#s-facture-publique .fac-qr-wrap canvas{display:block;width:130px;height:130px;border:1.5px solid var(--border);border-radius:6px;}'
   +     '#s-facture-publique .fac-sep{border:none;border-top:2px solid #006b2d;margin:10px 0 16px;}'
   +     '#s-facture-publique .fac-parties{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px;}'
   +     '#s-facture-publique .fac-partie-titre{font-size:10.5px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:4px;}'
@@ -1159,7 +1169,14 @@ function injecterEcrans(){
   // aussi overflow:hidden.
   +       'html,body,.app{height:auto !important;overflow:visible !important;}'
   +       '.app{max-width:100% !important;}'
-  +       '#s-facture-publique{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
+  // v1.19.29 : scopé à ".active" — avant, ce réglage forçait cet écran à
+  // s'afficher dès qu'on imprimait quoi que ce soit dans l'appli, même
+  // s'il n'était pas celui ouvert (c'est ce qui mélangeait facture et
+  // étiquette, retour de Cobey du 23/08/2026). Ce cas ne devrait plus se
+  // présenter via les boutons de l'appli (PDF direct, voir
+  // depExporterFacturePDF), mais reste corrigé au cas où quelqu'un
+  // imprime via le raccourci du navigateur (Ctrl/Cmd+P).
+  +       '#s-facture-publique.active{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
   +       '#s-facture-publique .no-print{display:none !important;}'
   +       '#s-facture-publique .fac-doc{overflow:visible !important;box-shadow:none;border-radius:0;}'
   +       '#s-facture-publique .pub-wrap{padding:0;max-width:100%;}'
@@ -1200,6 +1217,10 @@ function injecterEcrans(){
   +     '#s-etiquette .etq-compte{font-size:13px;font-weight:800;background:#006b2d;color:#fff;padding:3px 9px;border-radius:20px;flex-shrink:0;}'
   +     '#s-etiquette .etq-numero{font-size:19px;font-weight:800;letter-spacing:.02em;color:#111;text-align:center;background:#f7f7f7;border-radius:6px;padding:10px;margin-bottom:6px;}'
   +     '#s-etiquette .etq-dest{text-align:center;font-size:13px;font-weight:700;color:#333;margin-bottom:10px;}'
+  // v1.19.29 : QR sur l'étiquette (voir depRenderEtiquettes) — absent
+  // avant, retour de Cobey du 23/08/2026.
+  +     '#s-etiquette .etq-qr-wrap{text-align:center;margin-bottom:10px;}'
+  +     '#s-etiquette .etq-qr-wrap canvas{width:90px;height:90px;border:1.5px solid var(--border);border-radius:6px;}'
   +     '#s-etiquette .etq-sep{border:none;border-top:2px solid #006b2d;margin:8px 0 12px;}'
   +     '#s-etiquette .etq-parties{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;}'
   +     '#s-etiquette .etq-partie-titre{font-size:10px;font-weight:800;letter-spacing:.03em;color:#006b2d;margin-bottom:3px;}'
@@ -1211,7 +1232,9 @@ function injecterEcrans(){
   +       '@page{size:A5 portrait;margin:8mm;}'
   +       'html,body,.app{height:auto !important;overflow:visible !important;}'
   +       '.app{max-width:100% !important;}'
-  +       '#s-etiquette{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
+  // v1.19.29 : scopé à ".active" — voir la même correction sur
+  // #s-facture-publique, juste au-dessus, même cause.
+  +       '#s-etiquette.active{background:#fff;overflow:visible !important;height:auto !important;display:block !important;}'
   +       '#s-etiquette .no-print{display:none !important;}'
   +       '#s-etiquette .etq-wrap{padding:0;max-width:100%;}'
   +       '#s-etiquette .etq-doc{box-shadow:none;border-radius:0;}'
@@ -1221,7 +1244,7 @@ function injecterEcrans(){
   +   '</style>'
   +   '<div class="etq-wrap">'
   +     '<div class="etq-actions no-print">'
-  +       '<button type="button" class="etq-btn etq-btn-print" onclick="window.print()">&#128424;&#65039; Imprimer</button>'
+  +       '<button type="button" class="etq-btn etq-btn-print" onclick="depExporterEtiquettesPDF()">&#128424;&#65039; Imprimer</button>'
   +       '<button type="button" class="etq-btn etq-btn-retour" onclick="goTo(\'s-facture\')">&larr; Retour &agrave; la facture</button>'
   +     '</div>'
   +     '<div id="etq-contenu"></div>'
@@ -2913,22 +2936,97 @@ function _depChargerQR(cb){
   var s = document.createElement('script');
   s.src = 'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js';
   s.onload = function(){ _depQrEnCours = false; cb(); };
-  s.onerror = function(){ _depQrEnCours = false; console.error('departs: échec chargement de la librairie QR (connexion internet ?)'); };
+  // v1.19.29 : appelle quand même `cb` en cas d'échec (pas de connexion...)
+  // — avant, ça bloquait silencieusement toute la chaîne, y compris
+  // l'export PDF automatique de depOuvrirFacturePDF qui attend ce
+  // callback pour se déclencher (voir depGenererQR).
+  s.onerror = function(){ _depQrEnCours = false; console.error('departs: échec chargement de la librairie QR (connexion internet ?)'); cb(); };
   document.head.appendChild(s);
 }
 
 // Génère le QR dans le canvas de la page facture, une fois la librairie
 // disponible. Revérifie que le canvas existe encore (l'utilisateur a pu
 // changer d'écran pendant le chargement de la librairie).
-function depGenererQR(ctx, canvasId){
-  if(!ctx) return;
+// v1.19.29 : ajout de `cb` (appelé une fois le QR vraiment dessiné, ou
+// immédiatement si rien à dessiner) et `taille` (résolution du QR, voir
+// depRenderFacturePublique — QR agrandi sur la facture publique pour
+// rester scannable facilement, retour de Cobey du 23/08/2026) — nécessaire
+// pour l'export PDF (voir _depExporterPDFDepuisElement) : il faut être sûr
+// que le QR est bien dessiné dans le canvas AVANT de capturer la page,
+// sinon il ressort vide sur le PDF.
+function depGenererQR(ctx, canvasId, cb, taille){
+  if(!ctx){ if(cb) cb(); return; }
   var valeur = _depTokenQR(ctx);
   _depChargerQR(function(){
     try{
       var canvas = $(canvasId || 'dep-fact-qr');
-      if(!canvas || !valeur) return;
-      new QRious({ element: canvas, value: valeur, size: 176, background: '#fff', foreground: '#222' });
+      if(!canvas || !valeur){ if(cb) cb(); return; }
+      new QRious({ element: canvas, value: valeur, size: taille || 176, background: '#fff', foreground: '#222' });
     }catch(e){ console.error('departs: génération QR', e); }
+    if(cb) cb();
+  });
+}
+
+/* ─────────────────────────────────────────────
+   Export PDF direct (v1.19.29) — remplace window.print() (qui ouvrait le
+   menu d'impression du téléphone, avec une étape intermédiaire en page
+   web et un risque de mélanger facture/étiquette si les deux écrans
+   étaient déjà en mémoire, voir plus bas). html2pdf.js (html2canvas +
+   jsPDF) est chargé à la demande, comme QRious — un fichier PDF propre
+   est généré directement à partir d'un élément précis de la page, sans
+   dépendre de ce qui est affiché ailleurs dans l'appli. Retour de Cobey
+   du 23/08/2026 : "je veux que ça génère directement la facture pdf...
+   propre comme la photo 3".
+   ───────────────────────────────────────────── */
+var _depHtml2pdfEnCours = false;
+function _depChargerHtml2pdf(cb){
+  if(window.html2pdf){ cb(); return; }
+  if(_depHtml2pdfEnCours){ setTimeout(function(){ _depChargerHtml2pdf(cb); }, 200); return; }
+  _depHtml2pdfEnCours = true;
+  var s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+  s.onload = function(){ _depHtml2pdfEnCours = false; cb(); };
+  s.onerror = function(){
+    _depHtml2pdfEnCours = false;
+    console.error('departs: échec chargement PDF (connexion internet ?)');
+    toast('⚠️ Impossible de générer le PDF (connexion internet ?).');
+  };
+  document.head.appendChild(s);
+}
+
+// Génère un PDF à partir d'un élément précis du DOM (jamais toute la
+// page) — c'est ce qui évite tout mélange avec un autre écran resté en
+// mémoire (voir le bug facture+étiquette mélangées de Cobey du
+// 23/08/2026). `ignoreElements` retire aussi les boutons ("no-print")
+// du rendu, comme le faisait avant le CSS d'impression.
+// `optsExtra` peut contenir margin / jsPDF / pagebreak — fusionné par
+// dessus les réglages par défaut ci-dessous (pas de dépendance à
+// Object.assign, pour rester cohérent avec le reste du fichier).
+function _depExporterPDFDepuisElement(el, nomFichier, optsExtra){
+  if(!el){ toast('⚠️ Contenu introuvable.'); return; }
+  toast('⏳ Génération du PDF…');
+  _depChargerHtml2pdf(function(){
+    if(!window.html2pdf) return;
+    var extra = optsExtra || {};
+    var opts = {
+      margin: (extra.margin !== undefined) ? extra.margin : 10,
+      filename: nomFichier || 'document.pdf',
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
+      },
+      jsPDF: extra.jsPDF || { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    };
+    if(extra.pagebreak) opts.pagebreak = extra.pagebreak;
+    try{
+      window.html2pdf().set(opts).from(el).save();
+    }catch(e){
+      console.error('departs: échec génération PDF', e);
+      toast('❌ Échec de la génération du PDF, réessayez.');
+    }
   });
 }
 
@@ -3098,12 +3196,35 @@ function _depSommeEnLettres(montant){
 
 // Ouvre l'aperçu imprimable de la facture actuellement affichée
 // (#s-facture doit déjà être ouverte — voir le bouton "Imprimer / PDF").
+// v1.19.29 : "Imprimer / PDF" ne passe plus par le menu d'impression du
+// téléphone — un fichier PDF propre est généré directement (retour de
+// Cobey du 23/08/2026 : "je veux que ça génère directement la facture
+// pdf... propre comme la photo 3"). L'écran "Facture publique" reste
+// affiché le temps du rendu (html2canvas ne peut pas capturer un élément
+// caché), mais l'export s'enchaîne tout seul, sans clic supplémentaire.
 window.depOuvrirFacturePDF = function(){
   if(!_depFactureCtx){ toast('⚠️ Facture introuvable.'); return; }
-  depAfficherFacturePublique(_depFactureCtx);
+  depAfficherFacturePublique(_depFactureCtx, function(){ depExporterFacturePDF(); });
 };
 
-function depAfficherFacturePublique(ctx){
+// Bouton "Imprimer / PDF" resté sur l'écran Facture publique lui-même
+// (arrivée directe via un lien WhatsApp, sans passer par depOuvrirFacturePDF
+// ci-dessus). Capture uniquement le document (.fac-doc), jamais le reste
+// de la page — voir _depExporterPDFDepuisElement, c'est ce qui évite tout
+// mélange avec un autre écran resté en mémoire (bug étiquette+facture).
+window.depExporterFacturePDF = function(){
+  var conteneur = $('pub-contenu');
+  var doc = conteneur ? conteneur.querySelector('.fac-doc') : null;
+  if(!doc){ toast('⚠️ Facture introuvable.'); return; }
+  var infos = _depPubFactureCtx || {};
+  var nomFichier = 'Facture-' + (infos.c ? depNumeroFacture(infos.c, infos.ctx) : Date.now()) + '.pdf';
+  _depExporterPDFDepuisElement(doc, nomFichier, {
+    margin: 10,
+    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+  });
+};
+
+function depAfficherFacturePublique(ctx, cbApresQR){
   goTo('s-facture-publique');
   var chargement = $('pub-chargement'), erreur = $('pub-erreur'), contenu = $('pub-contenu');
   var c = ctx.depot
@@ -3115,10 +3236,15 @@ function depAfficherFacturePublique(ctx){
     return;
   }
   if(contenu) contenu.style.display = 'block';
-  depRenderFacturePublique(c, ctx);
+  _depPubFactureCtx = { ctx: ctx, c: c };
+  depRenderFacturePublique(c, ctx, cbApresQR);
 }
 
-function depRenderFacturePublique(c, ctx){
+// v1.19.29 : `cbApresQR` optionnel, appelé une fois le rendu ET le QR
+// (agrandi, voir plus bas) vraiment prêts — utilisé par
+// depExporterFacturePDF pour ne capturer la page qu'une fois le QR
+// effectivement dessiné (sinon il ressortirait vide sur le PDF).
+function depRenderFacturePublique(c, ctx, cbApresQR){
   var pay = depCalculerPaiement(c);
   var payLivPub = depCalculerPaiementLivraison(c);
   // v1.19.27 : statut global combiné colis+livraison (voir
@@ -3173,7 +3299,7 @@ function depRenderFacturePublique(c, ctx){
     +           (encaissePar ? ('<div class="fac-info-ligne"><span>Encaiss&eacute; par</span><strong>'+esc(encaissePar)+'</strong></div>') : '')
     +           '<div class="fac-info-ligne"><span>Statut</span><strong style="color:'+(st.color||'#555')+';">'+esc(st.label||pay.statut)+'</strong></div>'
     +         '</div>'
-    +         '<div class="fac-qr-wrap"><canvas id="dep-pub-qr" width="148" height="148"></canvas></div>'
+    +         '<div class="fac-qr-wrap"><canvas id="dep-pub-qr" width="260" height="260"></canvas></div>'
     +       '</div>'
     +     '</div>'
 
@@ -3235,7 +3361,7 @@ function depRenderFacturePublique(c, ctx){
   // renvoi WhatsApp depuis cette page-là.
   var connecte = _depConnecte;
   h += '<div class="fac-actions no-print">'
-    +    '<button type="button" class="fac-btn fac-btn-print" onclick="window.print()">&#128424;&#65039; Imprimer / PDF</button>'
+    +    '<button type="button" class="fac-btn fac-btn-print" onclick="depExporterFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
     +    (connecte ? '<button type="button" class="fac-btn fac-btn-whatsapp" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>' : '')
     // v1.19.27 : copier le texte du message — certains clients n'ont pas
     // WhatsApp (retour de Cobey du 22/08/2026).
@@ -3249,7 +3375,7 @@ function depRenderFacturePublique(c, ctx){
 
   var box = $('pub-contenu');
   if(box) box.innerHTML = h;
-  try{ depGenererQR(ctx, 'dep-pub-qr'); }catch(e){ console.error('departs: QR facture', e); }
+  try{ depGenererQR(ctx, 'dep-pub-qr', cbApresQR, 260); }catch(e){ console.error('departs: QR facture', e); if(cbApresQR) cbApresQR(); }
 }
 
 // Message WhatsApp — v1.16.1 : texte + lien (comme CARGO360), le lien
@@ -3357,6 +3483,25 @@ window.depGenererEtiquettes = function(){
   goTo('s-etiquette');
 };
 
+// v1.19.29 : "Imprimer" ne passe plus par le menu d'impression du
+// téléphone (window.print()) — c'est justement ce qui mélangeait
+// l'étiquette avec la facture restée en mémoire sur un autre écran
+// (retour de Cobey du 23/08/2026 : "quand je veux imprimer une étiquette
+// [...] il imprime également la facture"). Un PDF est généré directement
+// à partir de #etq-contenu uniquement (une page A5 par colis), donc
+// aucun autre écran ne peut s'y mélanger.
+window.depExporterEtiquettesPDF = function(){
+  var conteneur = $('etq-contenu');
+  if(!conteneur || !conteneur.children.length){ toast('⚠️ Étiquette introuvable.'); return; }
+  var ctx = window._depEtiquetteCtx;
+  var nomFichier = 'Etiquettes-' + (ctx && ctx.clientId ? ctx.clientId : Date.now()) + '.pdf';
+  _depExporterPDFDepuisElement(conteneur, nomFichier, {
+    margin: 6,
+    jsPDF: { unit: 'mm', format: 'a5', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'], before: '.etq-page:not(:first-child)' }
+  });
+};
+
 // v1.19.22 : téléphone/adresse partiellement masqués sur l'étiquette — elle
 // est collée sur un colis en transit, donc visible par n'importe qui, pas
 // seulement le staff DCT (contrairement à l'appli, où tout reste en clair).
@@ -3413,6 +3558,11 @@ function depRenderEtiquettes(c, ctx, n){
       +       '</div>'
       +       '<div class="etq-numero">'+esc(numEtq)+'</div>'
       +       '<div class="etq-dest">'+(pInfo.drapeau||'')+' '+esc(pInfo.nom||'')+'</div>'
+      // v1.19.29 : QR ajouté sur l'étiquette (absent avant) — même jeton
+      // que sur la facture, pour ouvrir directement la fiche du client en
+      // scannant le colis (retour de Cobey du 23/08/2026). Dessiné juste
+      // après l'injection du HTML, voir la boucle plus bas.
+      +       '<div class="etq-qr-wrap"><canvas id="etq-qr-'+i+'" width="180" height="180"></canvas></div>'
       +       '<hr class="etq-sep">'
       +       '<div class="etq-parties">'
       +         '<div>'
@@ -3436,6 +3586,13 @@ function depRenderEtiquettes(c, ctx, n){
 
   var box = $('etq-contenu');
   if(box) box.innerHTML = pages;
+
+  // v1.19.29 : un QR par étiquette (même jeton que la facture) — la
+  // librairie ne se charge qu'une fois (voir _depChargerQR), les appels
+  // suivants sont donc instantanés.
+  for(var qi = 1; qi <= n; qi++){
+    depGenererQR(ctx, 'etq-qr-' + qi, undefined, 180);
+  }
 }
 
 // "1755701520000" → "20/08/2026 14:32"
