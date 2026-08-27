@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.47';
+var DEP_VERSION = 'v1.19.49';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -3083,6 +3083,15 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
     : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
   if(!c){ toast('⚠️ Facture introuvable.'); return; }
   _depFactureCtx = { collecteId: collecteId || '', clientId: clientId, depot: !!depot };
+  // v1.19.48 : mémorise si on vient du carré Départ (liste des clients
+  // d'un container, voir depDetail) plutôt que du carré Collecte/tournée
+  // — même signal que le bouton retour ci-dessous ("← Départ" = le seul
+  // cas où aucun des trois paramètres de provenance n'est vrai) — pour
+  // que l'écran Documents, plus loin, sache où revenir avec son propre
+  // bouton "Retour" (retour de Cobey du 24/08/2026 : "je suis dans le
+  // carré départ [...] je veux retourner dans les départs et pas dans
+  // les collectes").
+  window._depDocVientDepart = !depot && !viaScan && !retourCamion && !viaHistorique;
 
   // v1.19.23 : tant que la collecte n'est pas validée pour de vrai (voir
   // depValiderFactureFinale), la facture ne sert qu'au paiement — le
@@ -3132,6 +3141,25 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
 // avant. S'appuie sur le camion trouvé via _depTruckEtStatut et délègue,
 // comme avant, à confirmValider() d'origine pour tout le reste (dispatch/
 // camion/Activité).
+
+// v1.19.48 : bascule vers l'écran "Documents" en adaptant le bouton
+// "Retour" du bas — vers le carré Départ (depDetail) si on vient de là,
+// vers la tournée/dispatch sinon (voir window._depDocVientDepart, posé
+// dans depOuvrirFacture). Le libellé change avec, "dispatch" étant le nom
+// déjà utilisé pour cet onglet côté Collecte (voir switchSubtab).
+function _depAfficherEcranDocuments(){
+  var btn = $('dep-doc-retour');
+  if(btn) btn.innerHTML = window._depDocVientDepart
+    ? '&#128230; Retour au d&eacute;part'
+    : '&#128666; Retour &agrave; la dispatch';
+  goTo('s-dep-impression');
+}
+
+window.depRetourDocuments = function(){
+  if(window._depDocVientDepart){ depDetail(_depDetailIdPublic()); return; }
+  goTo('s-camion');
+};
+
 window.depValiderFactureFinale = function(){
   var ctx = _depFactureCtx;
   if(!ctx || ctx.depot){ toast('⚠️ Rien à valider ici.'); return; }
@@ -3144,7 +3172,7 @@ window.depValiderFactureFinale = function(){
   if(info.valide){
     var fiche0 = (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
     if(fiche0) depRenderFacture(fiche0);
-    goTo('s-dep-impression');
+    _depAfficherEcranDocuments();
     return;
   }
 
@@ -3205,7 +3233,7 @@ window.depValiderFactureFinaleExecuter = function(){
   }
 
   if(fiche) depRenderFacture(fiche); // débloque immédiatement les boutons si on revient sur s-facture
-  goTo('s-dep-impression');
+  _depAfficherEcranDocuments();
 };
 
 // v1.19.23 : retour "Documents" → "Facture" — on ré-affiche la facture
@@ -3715,6 +3743,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
   var destBlock = c.destinataireNom
     ? ('<div class="fac-partie-nom">'+esc(c.destinataireNom)+'</div>'
        + '<div class="fac-partie-detail">'+_depLienTel(c.destinataireTel, c.destinataireTel||'—')
+       + (c.destinataireTel2 ? ' &middot; '+_depLienTel(c.destinataireTel2, c.destinataireTel2) : '')
        + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(c.livraisonAdresse) : '')
        + '</div>')
     : '<div class="fac-partie-nom">—</div>';
@@ -3994,6 +4023,7 @@ function depRenderEtiquettes(c, ctx, n){
   var destBlock = c.destinataireNom
     ? ('<div class="etq-partie-nom">'+esc(c.destinataireNom)+'</div>'
        + '<div class="etq-partie-detail">'+esc(_depMasquerTel(c.destinataireTel))
+       + (c.destinataireTel2 ? ' &middot; '+esc(_depMasquerTel(c.destinataireTel2)) : '')
        + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(_depMasquerAdresse(c.livraisonAdresse)) : '')
        + '</div>')
     : '<div class="etq-partie-nom">—</div>';
@@ -4446,7 +4476,9 @@ function depRenderFacture(c){
   h += kv('Colis', esc(c.colis || '—'));
 
   if(c.destinataireNom || c.destinataireTel){
-    h += kv('Destinataire', esc(c.destinataireNom || '—') + (c.destinataireTel ? (' &middot; ' + _depLienTel(c.destinataireTel, c.destinataireTel)) : ''));
+    h += kv('Destinataire', esc(c.destinataireNom || '—')
+      + (c.destinataireTel ? (' &middot; ' + _depLienTel(c.destinataireTel, c.destinataireTel)) : '')
+      + (c.destinataireTel2 ? (' &middot; ' + _depLienTel(c.destinataireTel2, c.destinataireTel2)) : ''));
   }
 
   // v1.19.23 : la livraison (Oui/Non + ville/adresse + prix) ne se
@@ -4914,7 +4946,9 @@ function depRenderFicheLecture(colId, clientId){
     + '</div>'
     + '<div class="dep-fiche-card">'
     +   (c.livraisonDakar
-          ? (kv('Destinataire', esc(c.destinataireNom||'—') + (c.destinataireTel ? ('<br>'+_depLienTel(c.destinataireTel, c.destinataireTel)) : ''))
+          ? (kv('Destinataire', esc(c.destinataireNom||'—')
+                + (c.destinataireTel ? ('<br>'+_depLienTel(c.destinataireTel, c.destinataireTel)) : '')
+                + (c.destinataireTel2 ? ('<br>'+_depLienTel(c.destinataireTel2, c.destinataireTel2)) : ''))
             + kv('Livraison &agrave; Dakar', esc(c.livraisonAdresse||'—') + '<br>' + ((c.prixLivraison||0)+'&nbsp;&euro;')))
           : kv('Livraison &agrave; Dakar', 'Retrait sur place'))
     + '</div>'
@@ -5998,6 +6032,8 @@ function injecterChampsFiche(){
     +   '<input class="fi" id="e-dest-nom" placeholder="Awa Ndiaye"></div>'
     + '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label>'
     +   '<input class="fi" id="e-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
+    + '<div class="fg"><label class="fl">Deuxi&egrave;me num&eacute;ro du destinataire <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+    +   '<input class="fi" id="e-dest-tel2" type="tel" placeholder="77 000 00 00"></div>'
 
     + '<div class="dep-sec">Livraison &agrave; Dakar</div>'
     + '<div class="fg"><label class="fl">Le colis doit-il &ecirc;tre livr&eacute; ?</label>'
@@ -6043,19 +6079,21 @@ function remplirFiche(clientId){
   var e;
   e = $('e-dest-nom');    if(e) e.value = c.destinataireNom || '';
   e = $('e-dest-tel');    if(e) e.value = c.destinataireTel || '';
+  e = $('e-dest-tel2');   if(e) e.value = c.destinataireTel2 || '';
   e = $('e-liv-adresse'); if(e) e.value = c.livraisonAdresse || '';
   e = $('e-liv-prix');    if(e) e.value = c.prixLivraison ? String(c.prixLivraison) : '';
   depSetLivraisonFiche(c.livraisonDakar === true);
   _depChargerPhotosFiche(clientId, c);
 
-  // v1.17.0 : le prix ne se modifie plus depuis cette fiche générale —
-  // seulement via le bouton dédié "Modifier le prix" sur la facture (ou à
-  // la validation de la collecte), pour garder une trace de chaque
-  // changement. Affiche "à définir sur place" tant qu'aucun prix n'est fixé.
+  // v1.19.49 : le prix redevient modifiable depuis cette fiche (retour de
+  // Cobey du 27/08/2026, capture d'écran annotée "MODIF PRIX") — il reste
+  // néanmoins verrouillé par défaut comme tous les autres champs, derrière
+  // la garde "✏️ Modifier la fiche" (voir _depChampsGardeFiche ci-dessous),
+  // et chaque changement est tracé dans le Suivi via _depDiffFacturePourHist,
+  // exactement comme avant pour les autres champs. Affiche "à définir sur
+  // place" tant qu'aucun prix n'est fixé.
   var ep = $('e-prix');
   if(ep){
-    ep.disabled = true;
-    ep.style.background = '#f5f5f5';
     ep.value = c.prixADefinir ? '' : (c.prix ? String(c.prix) : '');
     ep.placeholder = c.prixADefinir ? 'à définir sur place' : '100';
   }
@@ -6063,7 +6101,7 @@ function remplirFiche(clientId){
   // Verrouillage si la collecte est terminée
   var locked = false;
   try{ locked = isLocked(); }catch(e2){}
-  ['e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix'].forEach(function(id){
+  ['e-prix','e-dest-nom','e-dest-tel','e-dest-tel2','e-liv-adresse','e-liv-prix'].forEach(function(id){
     var el = $(id); if(!el) return;
     el.disabled = locked;
     el.style.background = locked ? '#f5f5f5' : '';
@@ -6089,7 +6127,7 @@ function remplirFiche(clientId){
 
 function _depChampsGardeFiche(){
   return ['e-prenom','e-nom','e-tel','e-tel2','e-adresse','e-infos','e-cp','e-ville','e-colis',
-          'e-dest-nom','e-dest-tel','e-liv-adresse','e-liv-prix'];
+          'e-prix','e-dest-nom','e-dest-tel','e-dest-tel2','e-liv-adresse','e-liv-prix'];
 }
 
 // Applique (verrouille=true) ou lève (verrouille=false) la garde : champs
@@ -6226,13 +6264,13 @@ function _depDiffFacturePourHist(fiche, avant){
   if((fiche.colis||'') !== (avant.colis||'')){
     out.push({ type:'colis', label:'colis', texte:'a modifi&eacute; le colis : &laquo;&nbsp;'+esc(avant.colis||'—')+'&nbsp;&raquo; &rarr; &laquo;&nbsp;'+esc(fiche.colis||'—')+'&nbsp;&raquo;' });
   }
-  if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'')){
+  if((fiche.destinataireNom||'') !== (avant.destinataireNom||'') || (fiche.destinataireTel||'') !== (avant.destinataireTel||'') || (fiche.destinataireTel2||'') !== (avant.destinataireTel2||'')){
     // v1.19.36 : chaque champ est échappé AVANT d'être joint avec l'entité
     // HTML "&middot;" — échapper la chaîne déjà jointe la ré-échapperait
     // (le "&" de "&middot;" deviendrait "&amp;middot;", affiché tel quel à
     // l'écran), même bug déjà rencontré et corrigé sur l'étiquette PDF.
-    var avantDest = [esc(avant.destinataireNom||''), esc(avant.destinataireTel||'')].filter(Boolean).join(' &middot; ') || '—';
-    var apresDest = [esc(fiche.destinataireNom||''), esc(fiche.destinataireTel||'')].filter(Boolean).join(' &middot; ') || '—';
+    var avantDest = [esc(avant.destinataireNom||''), esc(avant.destinataireTel||''), esc(avant.destinataireTel2||'')].filter(Boolean).join(' &middot; ') || '—';
+    var apresDest = [esc(fiche.destinataireNom||''), esc(fiche.destinataireTel||''), esc(fiche.destinataireTel2||'')].filter(Boolean).join(' &middot; ') || '—';
     out.push({ type:'destinataire', label:'destinataire', texte:'a modifi&eacute; le destinataire : ' + avantDest + ' &rarr; ' + apresDest });
   }
   var avantLiv = !!avant.livraisonDakar, apresLiv = !!fiche.livraisonDakar;
@@ -7077,6 +7115,9 @@ function greffer(){
       var extras = {
         destinataireNom  : (($('e-dest-nom')||{}).value || '').trim(),
         destinataireTel  : (($('e-dest-tel')||{}).value || '').trim(),
+        // v1.19.49 : deuxième numéro du destinataire (retour de Cobey du
+        // 27/08/2026, capture d'écran annotée "2 NUM").
+        destinataireTel2 : (($('e-dest-tel2')||{}).value || '').trim(),
         // v1.19.41 : "note" n'est plus édité depuis ce formulaire — voir
         // depOuvrirNoteFiche/depEnregistrerNoteFiche (bouton "Ajouter une
         // note" sur l'écran de lecture, événement chronologique dans le
@@ -7086,6 +7127,18 @@ function greffer(){
         livraisonAdresse : window._depLivraisonFiche ? (($('e-liv-adresse')||{}).value || '').trim() : '',
         prixLivraison    : window._depLivraisonFiche ? (parseFloat(($('e-liv-prix')||{}).value) || 0) : 0
       };
+
+      // v1.19.49 : le prix redevient modifiable depuis cette fiche (voir
+      // remplirFiche/_depChampsGardeFiche) — on ne l'écrase que si un
+      // nombre valide a été saisi, pour ne jamais remettre le prix à 0 si
+      // le champ est resté vide (cas "à définir sur place" pas encore
+      // touché). Un prix valide saisi ici lève automatiquement le
+      // marqueur "à définir sur place".
+      var epVal = ($('e-prix')||{}).value;
+      if(epVal !== undefined && epVal !== null && String(epVal).trim() !== '' && !isNaN(parseFloat(epVal))){
+        extras.prix = parseFloat(epVal);
+        extras.prixADefinir = false;
+      }
 
       _depOuvrirConfirmationFiche({ colId: colId, id: id, avant: avant, extras: extras, nom: (ficheActuelle||{}).name || '' });
     };
