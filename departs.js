@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.56';
+var DEP_VERSION = 'v1.19.57';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -342,6 +342,7 @@ var _depDetailId = null;        // départ affiché en détail
 // ouverture d'un départ (voir depDetail).
 var _depFiltrePaye = 'tous';       // 'tous' | 'paye' | 'non_paye'
 var _depFiltreLivraison = 'tous';  // 'tous' | 'avec' | 'sans'
+var _depDetailRecherche = '';      // v1.19.57 : recherche expéditeur/destinataire du carré Départ
 var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
@@ -1058,7 +1059,10 @@ function injecterEcrans(){
   +     '<div class="h-sub" id="dep-d-sub"></div></div>'
   +     '<button class="btn-back" id="dep-d-btn-modifier" onclick="depModifier(_depDetailIdPublic())">Modifier</button>'
   +   '</div>'
-  +   '<div class="content" id="dep-d-content"></div>'
+  +   '<div class="content">'
+  +     '<input class="fi" id="dep-d-recherche" placeholder="&#128269; Rechercher un client (exp&eacute;diteur ou destinataire)" style="margin-bottom:14px;" oninput="depDetailFiltrerRecherche()">'
+  +     '<div id="dep-d-content"></div>'
+  +   '</div>'
   + '</div>'
 
   /* ---- ÉCRAN 5 : inscrire / modifier un client au dépôt ---- */
@@ -1211,6 +1215,7 @@ function injecterEcrans(){
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content" id="dep-ficheL-content"></div>'
+  +   '<input type="file" id="dep-ficheL-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="depFicheLPhotoChoisie(this)">'
   + '</div>'
 
   /* ---- ÉCRAN 7 : facture d'un client (lecture seule) ---- */
@@ -2973,8 +2978,13 @@ window.depDetail = function(id, gardeFiltres){
   // réinitialisent que sur une VRAIE nouvelle ouverture du départ — pas
   // quand depFiltrerDetail() se rappelle elle-même pour rafraîchir la
   // liste après un tap sur une pastille.
-  if(!gardeFiltres || id !== _depDetailId){ _depFiltrePaye = 'tous'; _depFiltreLivraison = 'tous'; }
+  if(!gardeFiltres || id !== _depDetailId){ _depFiltrePaye = 'tous'; _depFiltreLivraison = 'tous'; _depDetailRecherche = ''; }
   _depDetailId = id;
+  // v1.19.57 : barre de recherche par expéditeur/destinataire, en dehors de
+  // dep-d-content (voir template) pour ne pas perdre le focus à chaque
+  // frappe — retour de Cobey du 28/08/2026 ("faudrait faire pareil" que le
+  // carré Inscription au dépôt, voir _depDepotCarreRenderListe).
+  var rechD = $('dep-d-recherche'); if(rechD && rechD.value !== _depDetailRecherche) rechD.value = _depDetailRecherche;
   var d = (window.departsData||{})[id];
   if(!d){ toast('⚠️ Départ introuvable.'); return; }
   var estDepot = (id === DEP_ID_DEPOT); // v1.19.44
@@ -3067,6 +3077,7 @@ window.depDetail = function(id, gardeFiltres){
       + '</div>';
   }
 
+  var qDetail = String(_depDetailRecherche||'').trim().toLowerCase();
   var affiches = tousAffiches.filter(function(x){
     var c = x.c;
     if(_depFiltrePaye !== 'tous'){
@@ -3078,6 +3089,11 @@ window.depDetail = function(id, gardeFiltres){
       var avecLiv = !!c.livraisonDakar;
       if(_depFiltreLivraison === 'avec' && !avecLiv) return false;
       if(_depFiltreLivraison === 'sans' && avecLiv) return false;
+    }
+    if(qDetail){
+      var exp = (c.name || ((c.prenom||'')+' '+(c.nom||''))).toLowerCase();
+      var dest = (c.destinataireNom||'').toLowerCase();
+      if(exp.indexOf(qDetail) === -1 && dest.indexOf(qDetail) === -1) return false;
     }
     return true;
   });
@@ -3144,6 +3160,13 @@ window.depDetail = function(id, gardeFiltres){
 window.depFiltrerDetail = function(type, valeur){
   if(type === 'paye') _depFiltrePaye = valeur;
   else if(type === 'livraison') _depFiltreLivraison = valeur;
+  if(_depDetailId) depDetail(_depDetailId, true);
+};
+
+// v1.19.57 : barre de recherche du carré Départ — même principe que
+// depCarreDepotFiltrer (retour de Cobey du 28/08/2026).
+window.depDetailFiltrerRecherche = function(){
+  _depDetailRecherche = (($('dep-d-recherche')||{}).value || '');
   if(_depDetailId) depDetail(_depDetailId, true);
 };
 
@@ -5167,6 +5190,15 @@ function depRenderFicheLecture(colId, clientId){
             + kv('Livraison &agrave; Dakar', esc(c.livraisonAdresse||'—') + '<br>' + ((c.prixLivraison||0)+'&nbsp;&euro;')))
           : kv('Livraison &agrave; Dakar', 'Retrait sur place'))
     + '</div>'
+    // v1.19.57 : photos du colis + possibilité d'en reprendre une (retour
+    // de Cobey du 28/08/2026 : un colis peut être remballé/protégé à
+    // l'entrepôt, il faut pouvoir documenter son nouvel état) — propre à
+    // ce client, directement sur sa fiche.
+    + '<div class="dep-fiche-card"><div class="dep-sec" style="margin-top:6px;padding-top:0;border-top:none;">Photos du colis</div>'
+    +   '<div id="dep-ficheL-photos-box" style="margin-bottom:8px;"></div>'
+    +   '<button type="button" class="btn btn-gray" style="background:#F3EFFF;border-color:#D9C8F5;color:#6d28d9;" '
+    +     'onclick="depAjouterPhotoFiche(\''+colId+'\',\''+clientId+'\')">&#128247; Ajouter une photo</button>'
+    + '</div>'
     + '<div class="dep-fiche-card"><div class="dep-sec" style="margin-top:6px;padding-top:0;border-top:none;">Suivi</div><div id="dep-ficheL-suivi"></div>'
     +   '<button type="button" class="btn btn-gray" style="background:#FFF9DB;border-color:#F0E2A0;color:#8A7300;margin-top:10px;" '
     +     'onclick="depOuvrirNoteFiche(\''+colId+'\',\''+clientId+'\')">&#128221; Ajouter une note</button>'
@@ -5174,6 +5206,7 @@ function depRenderFicheLecture(colId, clientId){
     + '<div id="dep-ficheL-actions"></div>';
 
   box.innerHTML = html;
+  _depChargerPhotosFiche(clientId, c, 'dep-ficheL-photos-box');
   depRenderSuivi(c, colId, 'dep-ficheL-suivi');
 
   var loc = false;
@@ -5248,6 +5281,54 @@ window.depEnregistrerNoteFiche = function(){
   try{ sauvegarder(); }catch(e){ console.error('departs: sauvegarder note fiche', e); }
   try{ depRenderFicheLecture(p.colId, p.id); }catch(e2){ console.error('departs: rafraîchir fiche après note', e2); }
   toast('📝 Note ajoutée.');
+};
+
+/* ─────────────────────────────────────────────
+   10ter bis 3bis (v1.19.57). REPRENDRE/AJOUTER UNE PHOTO DEPUIS LA FICHE
+   — un colis peut être remballé/protégé à l'entrepôt ; on doit pouvoir
+   documenter son nouvel état sans repasser par la validation de la
+   collecte. Propre à chaque client (retour de Cobey du 28/08/2026),
+   directement écrit dans dct_photos_colis/<clientId> (le nœud existant,
+   sans toucher aux photos déjà présentes). Aucun verrou (isLocked) : ce
+   n'est pas une modification des données déclarées du client, juste un
+   ajout de justificatif.
+   ───────────────────────────────────────────── */
+
+var _depFichePhotoPending = null;
+
+window.depAjouterPhotoFiche = function(colId, clientId){
+  var deja = (window._depPhotosFicheCourantes || []).length;
+  if(deja >= PHOTO_MAX){ toast('⚠️ ' + PHOTO_MAX + ' photos maximum.'); return; }
+  _depFichePhotoPending = { colId: colId, id: clientId };
+  var i = $('dep-ficheL-photo-input');
+  if(i) i.click();
+};
+
+window.depFicheLPhotoChoisie = function(input){
+  var f = input && input.files && input.files[0];
+  input.value = '';
+  if(!f) return;
+  var p = _depFichePhotoPending;
+  if(!p){ return; }
+  if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
+  toast('⏳ Préparation de la photo…');
+  try{
+    _compresserPhoto(f, function(data){
+      if(!data){ toast('❌ Photo illisible.'); return; }
+      var u = window.currentUser || {};
+      db.ref('dct_photos_colis/'+p.id).push({ d: data, ts: Date.now(), q: (u.name||''), uid: (u.id||'') });
+
+      var fiche = ((window.clientsParCollecte||{})[p.colId]||{})[p.id];
+      if(fiche){
+        fiche.aPhotoColis = true;
+        if(!Array.isArray(fiche.hist)) fiche.hist = [];
+        fiche.hist.push({ q: (u.name||u.id||''), a: 'a ajout&eacute; une nouvelle photo du colis', ts: Date.now(), type: 'photo' });
+        try{ sauvegarder(); }catch(e){ console.error('departs: sauvegarder photo fiche', e); }
+      }
+      try{ depRenderFicheLecture(p.colId, p.id); }catch(e2){ console.error('departs: rafraîchir fiche après photo', e2); }
+      toast('📷 Photo ajoutée.');
+    });
+  }catch(e3){ toast('❌ Photo illisible.'); }
 };
 
 /* ─────────────────────────────────────────────
