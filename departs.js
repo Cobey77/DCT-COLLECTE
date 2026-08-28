@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.50';
+var DEP_VERSION = 'v1.19.52';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -957,7 +957,7 @@ function injecterEcrans(){
   // qui vivait dans le carré Départs, réservé à la direction.
   +       '<div class="dep-case" id="dep-case-depot" style="border-color:#B8720C;" onclick="depCarreDepotOuvrir()">'
   +         '<div class="dep-case-ico">&#127970;</div>'
-  +         '<div class="dep-case-tit" style="color:#B8720C;">D&Eacute;P&Ocirc;T</div>'
+  +         '<div class="dep-case-tit" style="color:#B8720C;">INSCRIPTION AU D&Eacute;P&Ocirc;T</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-depot">—</div>'
   +       '</div>'
   +     '</div>'
@@ -1128,7 +1128,7 @@ function injecterEcrans(){
   + '<div class="screen" id="s-depot-carre-liste">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
-  +     '<div class="h-title">D&eacute;p&ocirc;t</div>'
+  +     '<div class="h-title">Inscription au d&eacute;p&ocirc;t</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
@@ -1731,19 +1731,27 @@ window.depCarreDepotOuvrir = function(){
   goTo('s-depot-carre-liste');
   var box = $('depot-carre-liste');
   if(!box) return;
-  var deps = tousLesDeparts();
+  var deps = departsDisponibles();
   if(!deps.length){
-    box.innerHTML = '<div class="dep-vide" style="padding:28px 16px;">Aucun d&eacute;part pour l\'instant.</div>';
+    box.innerHTML = '<div class="dep-vide" style="padding:28px 16px;">Aucun d&eacute;part ouvert &agrave; l\'inscription pour l\'instant.</div>';
     return;
   }
+  // v1.19.52 : regroupés et étiquetés par pays (drapeau + nom bien
+  // visibles) pour ne jamais confondre un container Sénégal et un
+  // container Mali (retour de Cobey du 28/08/2026).
+  deps.sort(function(a,b){
+    var pa = depPaysDepart(a), pb = depPaysDepart(b);
+    if(pa !== pb) return pa.localeCompare(pb);
+    return String(a.dateDepart||'').localeCompare(String(b.dateDepart||''));
+  });
   var h = '';
   deps.forEach(function(d){
     var id = d._id;
-    var st = STATUTS_DEPART[d.statut] || STATUTS_DEPART.preparation;
+    var pays = DEP_PAYS_DEST[depPaysDepart(d)] || DEP_PAYS_DEST[DEP_PAYS_DEFAUT];
     var nbDp = Object.keys(window.depotClients||{}).filter(function(k){ return (window.depotClients[k]||{}).departId === id; }).length;
     h += '<div class="dep-card" style="cursor:pointer;" onclick="depCarreDepotContainer(\''+id+'\')">'
-      +   '<div class="dep-card-top"><div class="dep-nom">'+esc(d.nom||'D&eacute;part')+'</div>'
-      +     '<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';">'+st.label+'</div></div>'
+      +   '<div class="dep-card-top"><div class="dep-nom">'+pays.drapeau+' '+esc(d.nom||'D&eacute;part')+'</div>'
+      +     '<div class="dep-badge" style="background:#EDEDED;color:#333;">'+pays.nom+'</div></div>'
       +   '<div class="dep-meta"><span>Part le '+dateFr(d.dateDepart)+'</span><span>'+nbDp+' client'+(nbDp>1?'s':'')+' au d&eacute;p&ocirc;t</span></div>'
       + '</div>';
   });
@@ -1753,8 +1761,9 @@ window.depCarreDepotOuvrir = function(){
 window.depCarreDepotContainer = function(departId){
   _depDepotDepart = departId;
   var d = (window.departsData||{})[departId] || {};
-  var t = $('depot-carre-d-nom'); if(t) t.textContent = d.nom || 'Départ';
-  var s = $('depot-carre-d-sub'); if(s) s.textContent = 'Part le ' + dateFr(d.dateDepart);
+  var drapeauPlain = { SN:'🇸🇳', ML:'🇲🇱' }[depPaysDepart(d)] || '';
+  var t = $('depot-carre-d-nom'); if(t) t.textContent = (drapeauPlain ? drapeauPlain + ' ' : '') + (d.nom || 'Départ');
+  var s = $('depot-carre-d-sub'); if(s) s.textContent = (DEP_PAYS_NOM_PLAIN[depPaysDepart(d)] || '') + ' · Part le ' + dateFr(d.dateDepart);
 
   var peutInscrire = (d.statut === 'preparation');
   var clientsDepot = Object.keys(window.depotClients||{})
