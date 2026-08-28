@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.59';
+var DEP_VERSION = 'v1.19.60';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -7946,7 +7946,9 @@ function greffer(){
         g('fa-dest-nom', c.destinataireNom);
         g('fa-dest-tel', c.destinataireTel);
         g('fa-dest-tel2', c.destinataireTel2);
-        g('fa-note', c.note);
+        // v1.19.60 : la note n'est plus un champ figé (voir plus bas) mais
+        // une nouvelle entrée du Suivi à chaque fois — jamais pré-remplie.
+        g('fa-note', '');
         depSetLivraisonFrance(!!c.livraisonDakar);
         if(c.livraisonDakar){ g('fa-liv-adresse', c.livraisonAdresse); g('fa-liv-prix', c.prixLivraison ? String(c.prixLivraison) : ''); }
         _frPrixIndefini = !!c.prixADefinir;
@@ -7986,11 +7988,24 @@ function greffer(){
           maj['clients/'+id+'/destinataireNom']   = (($('fa-dest-nom')||{}).value || '').trim();
           maj['clients/'+id+'/destinataireTel']   = (($('fa-dest-tel')||{}).value || '').trim();
           maj['clients/'+id+'/destinataireTel2']  = (($('fa-dest-tel2')||{}).value || '').trim();
-          maj['clients/'+id+'/note']              = (($('fa-note')||{}).value || '').trim();
           maj['clients/'+id+'/livraisonDakar']    = !!_frLivraison;
           maj['clients/'+id+'/livraisonAdresse']  = _frLivraison ? (($('fa-liv-adresse')||{}).value || '').trim() : '';
           maj['clients/'+id+'/prixLivraison']     = _frLivraison ? (parseFloat(($('fa-liv-prix')||{}).value) || 0) : 0;
           maj['clients/'+id+'/prixADefinir']      = !!_frPrixIndefini;
+          // v1.19.60 : la note tapée à l'inscription/modification n'existait
+          // nulle part ensuite (champ "note" mort) — retour de Cobey du
+          // 28/08/2026 : elle rejoint directement le Suivi (📝 Notes de
+          // suivi, déjà visible sur la fiche), comme une note ajoutée à la
+          // main, plutôt qu'un champ séparé invisible.
+          var noteTxt = (($('fa-note')||{}).value || '').trim();
+          if(noteTxt){
+            var cActuel = ((window.franceData||{}).clients || {})[id] || {};
+            var listeNotes = Array.isArray(cActuel.notes) ? cActuel.notes.slice()
+              : (cActuel.notes ? Object.keys(cActuel.notes).map(function(k){ return cActuel.notes[k]; }) : []);
+            var uNote = window.currentUser || {};
+            listeNotes.push({ q: uNote.name || '', uid: uNote.id || '', t: noteTxt, ts: Date.now() });
+            maj['clients/'+id+'/notes'] = listeNotes;
+          }
           db.ref('france').update(maj);
         }
       }catch(e4){ console.error('departs: extras france', e4); }
