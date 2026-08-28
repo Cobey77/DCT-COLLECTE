@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.52';
+var DEP_VERSION = 'v1.19.53';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -3114,6 +3114,20 @@ window.depFiltrerDetail = function(type, valeur){
 // binaires du type 24.760000000000005 affichés tels quels à l'écran.
 function depArrondi2(n){ return Math.round((n + Number.EPSILON) * 100) / 100; }
 
+// v1.19.53 : conversion EUR → FCFA pour l'affichage du reste à payer
+// (retour de Cobey du 28/08/2026) — arrondi au millier le plus proche
+// (sous 500 : en dessous, au-dessus de 500 : au-dessus), pratique pour
+// des paiements en espèces.
+function depEurEnCFA(eur){
+  var cfa = (parseFloat(eur) || 0) * TAUX_FCFA_EUR;
+  var base = Math.floor(cfa / 1000) * 1000;
+  var reste = cfa - base;
+  return reste < 500 ? base : base + 1000;
+}
+function depFormatCFA(eur){
+  return depEurEnCFA(eur).toLocaleString('fr-FR') + ' FCFA';
+}
+
 // v1.19.22 : calcul générique — réutilisé pour le colis (versements) ET,
 // séparément, pour la livraison (versementsLivraison), voir
 // depCalculerPaiementLivraison plus bas. Deux caisses distinctes, jamais
@@ -4647,6 +4661,7 @@ function depRenderFacture(c){
       + '<div style="font-size:10px;color:var(--text3);font-weight:700;">PAY&Eacute;</div></div>'
     + '<div style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px;text-align:center;">'
       + '<div style="font-size:17px;font-weight:800;color:#992020;">' + pay.reste + ' &euro;</div>'
+      + (pay.reste > 0 ? '<div style="font-size:11px;color:#992020;font-weight:700;">' + esc(depFormatCFA(pay.reste)) + '</div>' : '')
       + '<div style="font-size:10px;color:var(--text3);font-weight:700;">RESTE &Agrave; PAYER</div></div>'
     + '</div>';
 
@@ -5086,6 +5101,15 @@ function depRenderFicheLecture(colId, clientId){
     +   kv('Colis', esc(c.colis || '—'))
     +   kv('Prix', (c.prixADefinir ? '<span style="color:var(--text3);">&Agrave; d&eacute;finir sur place</span>' : ((c.prix||0) + '&nbsp;&euro;'))
           + (pastilleEncaisse ? ('<br><span style="font-size:10.5px;color:var(--text3);">Encaiss&eacute; par</span><br>'+pastilleEncaisse) : ''))
+    // v1.19.53 : reste à payer, visible uniquement si le paiement est
+    // incomplet (retour de Cobey du 28/08/2026) — € + FCFA arrondi.
+    +   (function(){
+          if(c.prixADefinir) return '';
+          var pay = depCalculerPaiement(c);
+          if(pay.reste <= 0) return '';
+          return kv('Reste &agrave; payer', '<span style="color:#992020;font-weight:800;">'+pay.reste+'&nbsp;&euro;</span>'
+            + '<br><span style="font-size:11px;color:#992020;">'+esc(depFormatCFA(pay.reste))+'</span>');
+        })()
     + '</div>'
     + '<div class="dep-fiche-card">'
     +   (c.livraisonDakar
