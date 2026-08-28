@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.54';
+var DEP_VERSION = 'v1.19.56';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1084,10 +1084,10 @@ function injecterEcrans(){
   +       '<div class="fg"><label class="fl">Ville</label><input class="fi" id="dp-ville" placeholder="Aubervilliers"></div>'
   +     '</div>'
   +     '<div class="fg"><label class="fl">Description du colis</label><textarea class="fi" id="dp-colis" rows="3" placeholder="ex: 2 valises + 1 carton..." style="resize:none;"></textarea></div>'
+  // v1.19.55 : "Prix à définir sur place" retiré de ce parcours (retour de
+  // Cobey du 28/08/2026) — au dépôt direct, le prix est acté immédiatement,
+  // contrairement à la collecte du dimanche.
   +     '<div class="fg"><label class="fl">Prix (&euro;)</label><input class="fi" id="dp-prix" placeholder="100" type="number" min="0" style="font-size:20px;font-weight:700;text-align:center;padding:14px;"></div>'
-  +     '<div style="margin:-6px 0 12px;">'
-  +       '<button type="button" class="dep-st" id="dp-prix-adef" onclick="depTogglePrixIndefiniDepot()" style="width:100%;">&#128337; Prix &agrave; d&eacute;finir sur place</button>'
-  +     '</div>'
 
   +     '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
   +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dp-dest-nom" placeholder="Awa Ndiaye"></div>'
@@ -1149,7 +1149,10 @@ function injecterEcrans(){
   +     '<div class="h-sub" id="depot-carre-d-sub"></div></div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
-  +   '<div class="content" id="depot-carre-d-content"></div>'
+  +   '<div class="content">'
+  +     '<input class="fi" id="depot-carre-recherche" placeholder="&#128269; Rechercher un client (exp&eacute;diteur ou destinataire)" style="margin-bottom:14px;" oninput="depCarreDepotFiltrer()">'
+  +     '<div id="depot-carre-d-content"></div>'
+  +   '</div>'
   + '</div>'
 
   /* ---- ÉCRAN 6 : fiche client en lecture seule (carré Client) ---- */
@@ -1768,26 +1771,68 @@ window.depCarreDepotContainer = function(departId){
   var s = $('depot-carre-d-sub'); if(s) s.textContent = (DEP_PAYS_NOM_PLAIN[depPaysDepart(d)] || '') + ' · Part le ' + dateFr(d.dateDepart);
 
   var peutInscrire = (d.statut === 'preparation');
+  // v1.19.55 : reprend tous les clients rattachés à ce départ — venus
+  // d'une collecte OU inscrits directement au dépôt (comme depDetail),
+  // pas seulement ces derniers (retour de Cobey du 28/08/2026 : un
+  // client passé par la collecte n'apparaissait pas ici).
+  var clientsCollecte = tousLesClients().filter(function(x){ return x.c.departId === departId; });
   var clientsDepot = Object.keys(window.depotClients||{})
     .filter(function(k){ return (window.depotClients[k]||{}).departId === departId; })
-    .map(function(k){ return { id:k, c: window.depotClients[k] }; })
+    .map(function(k){ return { depot:true, clientId:k, c: window.depotClients[k] }; });
+  // v1.19.56 : mémorisés pour la barre de recherche (voir
+  // depCarreDepotFiltrer) — retour de Cobey du 28/08/2026.
+  _depDepotCarreDepartId = departId;
+  _depDepotCarrePeutInscrire = peutInscrire;
+  _depDepotCarreListe = clientsCollecte.concat(clientsDepot)
     .sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
 
+  var rech = $('depot-carre-recherche'); if(rech) rech.value = '';
+  _depDepotCarreRenderListe('');
+  goTo('s-depot-carre-detail');
+};
+
+var _depDepotCarreListe = [];
+var _depDepotCarreDepartId = null;
+var _depDepotCarrePeutInscrire = false;
+
+// v1.19.56 : barre de recherche par container — filtre sur le nom de
+// l'expéditeur (le client) OU du destinataire, insensible à la casse.
+window.depCarreDepotFiltrer = function(){
+  var v = (($('depot-carre-recherche')||{}).value || '');
+  _depDepotCarreRenderListe(v);
+};
+
+function _depDepotCarreRenderListe(filtre){
+  var departId = _depDepotCarreDepartId;
+  var q = String(filtre||'').trim().toLowerCase();
+  var liste = !q ? _depDepotCarreListe : _depDepotCarreListe.filter(function(x){
+    var c = x.c;
+    var exp = (c.name || ((c.prenom||'')+' '+(c.nom||''))).toLowerCase();
+    var dest = (c.destinataireNom||'').toLowerCase();
+    return exp.indexOf(q) !== -1 || dest.indexOf(q) !== -1;
+  });
+
   var h = '';
-  if(peutInscrire){
+  if(_depDepotCarrePeutInscrire){
     h += '<button class="btn btn-gray" style="margin-bottom:14px;border-color:#C8E6D0;background:#EAF7EE;color:#006b2d;" '
       +  'onclick="depOuvrirDepotForm(\''+departId+'\',null,true)">&#127970; Inscrire un client au d&eacute;p&ocirc;t</button>';
   }
-  h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:0;">Clients inscrits au d&eacute;p&ocirc;t pour ce d&eacute;part</div>';
-  if(!clientsDepot.length){
-    h += '<div class="dep-vide" style="padding:28px 16px;">Aucun client pour l\'instant.</div>';
+  h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:0;">Clients de ce d&eacute;part'
+    + (q ? ' &mdash; ' + liste.length + ' r&eacute;sultat' + (liste.length>1?'s':'') : '') + '</div>';
+  if(!liste.length){
+    h += '<div class="dep-vide" style="padding:28px 16px;">'+(q ? 'Aucun client ne correspond &agrave; cette recherche.' : 'Aucun client pour l\'instant.')+'</div>';
   } else {
-    clientsDepot.forEach(function(x){
+    liste.forEach(function(x){
       var c = x.c;
-      h += '<div class="dep-cli" style="cursor:pointer;" onclick="depOuvrirDepotForm(\''+departId+'\',\''+x.id+'\',true)">'
+      var clic = x.depot
+        ? "depOuvrirDepotForm('"+departId+"','"+x.clientId+"',true)"
+        : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"',true)";
+      h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
         +   '<div style="flex:1;min-width:0;">'
-        +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+'</div>'
+        +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
+        +       (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
         +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
+        +       (c.destinataireNom ? ' &middot; &#127968; '+esc(c.destinataireNom) : '')
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
         +   '</div>'
         + '</div>';
@@ -1795,8 +1840,7 @@ window.depCarreDepotContainer = function(departId){
   }
   var box = $('depot-carre-d-content');
   if(box) box.innerHTML = h;
-  goTo('s-depot-carre-detail');
-};
+}
 
 // Retour/Annuler du formulaire dp-* : vers le carré Dépôt si on en
 // vient, sinon comportement d'origine (retour au carré Départs).
@@ -5229,10 +5273,11 @@ window.depOuvrirPhotosRapide = function(collecteId, clientId, depot){
    10ter. OUVRIR LA FICHE D'UN CLIENT DEPUIS LE DÉPART
    ───────────────────────────────────────────── */
 
-window.depOuvrirFicheClient = function(collecteId, clientId){
+window.depOuvrirFicheClient = function(collecteId, clientId, viaCarreDepot){
   if(typeof openClientFiche !== 'function'){ toast('⚠️ Fonction indisponible.'); return; }
   var cls = (window.clientsParCollecte||{})[collecteId] || {};
   if(!cls[clientId]){ toast('⚠️ Client introuvable.'); return; }
+  var departIdSnapshot = cls[clientId].departId;
 
   // Se positionner sur la bonne collecte avant d'ouvrir la fiche : un départ
   // peut regrouper des clients venant de plusieurs collectes différentes.
@@ -5242,7 +5287,11 @@ window.depOuvrirFicheClient = function(collecteId, clientId){
 
   // Le retour/annuler d'origine se contente d'un goTo() figé ; on le remplace
   // pour re-render l'écran du départ (compteurs et liste à jour après édition).
-  var retourDepart = function(){ depDetail(_depDetailId); };
+  // v1.19.55 : vers le carré Dépôt si on y consultait ce client, sinon
+  // comportement d'origine (carré Départs).
+  var retourDepart = viaCarreDepot
+    ? function(){ depCarreDepotContainer(departIdSnapshot); }
+    : function(){ depDetail(_depDetailId); };
   var bk = $('client-back'); if(bk) bk.onclick = retourDepart;
   var cn = $('client-cancel'); if(cn) cn.onclick = retourDepart;
 };
@@ -5513,8 +5562,10 @@ window.depEnregistrerDepot = function(){
   var infos     = (($('dp-infos')||{}).value || '').trim();
   var ville     = (($('dp-ville')||{}).value || '').trim();
   var colis     = (($('dp-colis')||{}).value || '').trim();
-  var prixIndefini = _depPrixIndefiniDepot;
-  var prix      = prixIndefini ? 0 : (parseFloat(($('dp-prix')||{}).value) || 0);
+  // v1.19.55 : plus de "prix à définir sur place" ici — le prix est acté
+  // immédiatement à l'inscription au dépôt (retour de Cobey du 28/08/2026).
+  var prix      = parseFloat(($('dp-prix')||{}).value) || 0;
+  if(prix <= 0){ toast('⚠️ Indiquez un prix.'); return; }
   var dnom      = (($('dp-dest-nom')||{}).value || '').trim();
   var dtel      = (($('dp-dest-tel')||{}).value || '').trim();
   var dtel2     = (($('dp-dest-tel2')||{}).value || '').trim();
@@ -5532,7 +5583,7 @@ window.depEnregistrerDepot = function(){
   var fiche = {
     civilite: civ, prenom: prenom, nom: nom, name: _composeNom(civ, prenom, nom),
     tel: tel, tel2: tel2, adresse: adresse, infos: infos, ville: ville, cp: cp, dept: dept,
-    colis: colis, prix: prix, prixADefinir: prixIndefini,
+    colis: colis, prix: prix, prixADefinir: false,
     departId: departId,
     destinataireNom: dnom, destinataireTel: dtel, destinataireTel2: dtel2,
     livraisonDakar: livraison, livraisonAdresse: ladresse, prixLivraison: lprix,
