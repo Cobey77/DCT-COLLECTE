@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.57';
+var DEP_VERSION = 'v1.19.58';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -894,9 +894,21 @@ function injecterEcrans(){
   +     '<div><div class="h-title">Dakar City Transport</div>'
   +     '<div class="h-sub" id="dep-esp-greet">Bonjour !</div></div>'
   +     '<div style="display:flex;align-items:center;gap:8px;">'
-  +       '<button id="dep-esp-activite-btn" onclick="setNav(\'activite\')" title="Activit&eacute;" '
-  +         'style="background:#1a1a2e;color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:15px;'
-  +         'cursor:pointer;font-family:var(--font);line-height:1;">&#128337;</button>'
+  // v1.19.58 : pastille de notification manquante sur ce bouton depuis
+  // que les carrés ont remplacé la barre de navigation native comme
+  // écran d'accueil (retour de Cobey du 28/08/2026) — le code natif
+  // continue de mettre à jour tous les éléments de classe
+  // "notif-badge-tab" (voir updateNotifBadge dans index.html), il
+  // suffisait de lui en donner un ici aussi.
+  +       '<div style="position:relative;display:inline-flex;">'
+  +         '<button id="dep-esp-activite-btn" onclick="setNav(\'activite\')" title="Activit&eacute;" '
+  +           'style="background:#1a1a2e;color:#fff;border:none;border-radius:8px;padding:7px 11px;font-size:15px;'
+  +           'cursor:pointer;font-family:var(--font);line-height:1;">&#128337;</button>'
+  +         '<span class="notif-badge-tab" style="display:none;position:absolute;top:-6px;right:-6px;'
+  +           'background:#E31B23;color:#fff;border-radius:50%;width:18px;height:18px;font-size:10px;'
+  +           'font-weight:800;align-items:center;justify-content:center;border:2px solid #fff;'
+  +           'font-family:var(--font);"></span>'
+  +       '</div>'
   +       '<div id="dep-esp-av" class="av" style="cursor:pointer;" onclick="depDeconnexion()"></div>'
   +     '</div>'
   +   '</div>'
