@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.53';
+var DEP_VERSION = 'v1.19.54';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1092,6 +1092,7 @@ function injecterEcrans(){
   +     '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
   +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dp-dest-nom" placeholder="Awa Ndiaye"></div>'
   +     '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label><input class="fi" id="dp-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
+  +     '<div class="fg"><label class="fl">Deuxi&egrave;me num&eacute;ro du destinataire <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label><input class="fi" id="dp-dest-tel2" type="tel" placeholder="77 000 00 00"></div>'
 
   +     '<div class="dep-sec">Livraison &agrave; Dakar</div>'
   +     '<div class="fg"><label class="fl">Le colis doit-il &ecirc;tre livr&eacute; ?</label>'
@@ -1473,6 +1474,7 @@ function injecterEcrans(){
   +     '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
   +     '<div class="fg"><label class="fl">Nom du destinataire</label><input class="fi" id="dv-dest-nom" placeholder="Awa Ndiaye"></div>'
   +     '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label><input class="fi" id="dv-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
+  +     '<div class="fg"><label class="fl">Deuxi&egrave;me num&eacute;ro du destinataire <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label><input class="fi" id="dv-dest-tel2" type="tel" placeholder="77 000 00 00"></div>'
 
   /* v1.19.23 : la livraison (Oui/Non + ville/adresse + prix) se décide
      désormais ici, avant la facture — voir depValiderToggleLivraison et
@@ -1857,6 +1859,8 @@ function injecterChampsClient(){
     +   '<input class="fi" id="f-dest-nom" placeholder="Awa Ndiaye"></div>'
     + '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label>'
     +   '<input class="fi" id="f-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
+    + '<div class="fg"><label class="fl">Deuxi&egrave;me num&eacute;ro du destinataire <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+    +   '<input class="fi" id="f-dest-tel2" type="tel" placeholder="77 000 00 00"></div>'
 
     + '<div class="dep-sec">Livraison &agrave; Dakar</div>'
     + '<div class="fg"><label class="fl">Le colis doit-il &ecirc;tre livr&eacute; ?</label>'
@@ -5263,7 +5267,7 @@ window.depOuvrirDepotForm = function(departId, clientId, viaCarre){
   var c = clientId ? (((window.depotClients||{})[clientId]) || {}) : {};
 
   ['dp-prenom','dp-nom','dp-tel','dp-tel2','dp-adresse','dp-infos','dp-cp','dp-ville',
-   'dp-colis','dp-prix','dp-dest-nom','dp-dest-tel','dp-liv-adresse','dp-liv-prix','dp-note']
+   'dp-colis','dp-prix','dp-dest-nom','dp-dest-tel','dp-dest-tel2','dp-liv-adresse','dp-liv-prix','dp-note']
     .forEach(function(id){ var el = $(id); if(el) el.value = ''; });
 
   _civDct.dp = c.civilite || '';
@@ -5283,6 +5287,7 @@ window.depOuvrirDepotForm = function(departId, clientId, viaCarre){
     e = $('dp-prix');       if(e) e.value = c.prix ? String(c.prix) : '';
     e = $('dp-dest-nom');   if(e) e.value = c.destinataireNom || '';
     e = $('dp-dest-tel');   if(e) e.value = c.destinataireTel || '';
+    e = $('dp-dest-tel2');  if(e) e.value = c.destinataireTel2 || '';
     e = $('dp-liv-adresse');if(e) e.value = c.livraisonAdresse || '';
     e = $('dp-liv-prix');   if(e) e.value = c.prixLivraison ? String(c.prixLivraison) : '';
     e = $('dp-note');       if(e) e.value = c.note || '';
@@ -5512,6 +5517,7 @@ window.depEnregistrerDepot = function(){
   var prix      = prixIndefini ? 0 : (parseFloat(($('dp-prix')||{}).value) || 0);
   var dnom      = (($('dp-dest-nom')||{}).value || '').trim();
   var dtel      = (($('dp-dest-tel')||{}).value || '').trim();
+  var dtel2     = (($('dp-dest-tel2')||{}).value || '').trim();
   var livraison = !!window._depLivraisonDepot;
   var ladresse  = livraison ? (($('dp-liv-adresse')||{}).value || '').trim() : '';
   var lprix     = livraison ? (parseFloat(($('dp-liv-prix')||{}).value) || 0) : 0;
@@ -5528,7 +5534,7 @@ window.depEnregistrerDepot = function(){
     tel: tel, tel2: tel2, adresse: adresse, infos: infos, ville: ville, cp: cp, dept: dept,
     colis: colis, prix: prix, prixADefinir: prixIndefini,
     departId: departId,
-    destinataireNom: dnom, destinataireTel: dtel,
+    destinataireNom: dnom, destinataireTel: dtel, destinataireTel2: dtel2,
     livraisonDakar: livraison, livraisonAdresse: ladresse, prixLivraison: lprix,
     note: note,
     bg: (existant && existant.bg) || u.bg || '#eee',
@@ -6379,7 +6385,7 @@ window.depSetLivraison = function(oui){
    l'inscription depuis la v1.11.0. ---- */
 
 function reinitialiserNouveauxChamps(){
-  ['f-dest-nom','f-dest-tel','f-liv-adresse','f-liv-prix','f-note'].forEach(function(id){
+  ['f-dest-nom','f-dest-tel','f-dest-tel2','f-liv-adresse','f-liv-prix','f-note'].forEach(function(id){
     var e = $(id); if(e) e.value = '';
   });
   depSetLivraison(false);
@@ -6522,6 +6528,7 @@ window.depOuvrirValidation = function(id, tk, name, prix){
 
   var dn = $('dv-dest-nom'); if(dn) dn.value = fiche.destinataireNom || '';
   var dt = $('dv-dest-tel'); if(dt) dt.value = fiche.destinataireTel || '';
+  var dt2 = $('dv-dest-tel2'); if(dt2) dt2.value = fiche.destinataireTel2 || '';
 
   // v1.19.23 : livraison (Oui/Non + ville/adresse + prix) — reprend l'état
   // déjà déclaré (inscription, ou une validation/passage précédent),
@@ -6688,6 +6695,7 @@ window.depValiderConfirmer = function(){
 
   fiche.destinataireNom = (($('dv-dest-nom')||{}).value || '').trim();
   fiche.destinataireTel = (($('dv-dest-tel')||{}).value || '').trim();
+  fiche.destinataireTel2 = (($('dv-dest-tel2')||{}).value || '').trim();
 
   fiche.livraisonDakar = livOui;
   fiche.livraisonAdresse = livAdresse;
@@ -7191,6 +7199,7 @@ function greffer(){
       var extras = {
         destinataireNom  : (($('f-dest-nom')||{}).value || '').trim(),
         destinataireTel  : (($('f-dest-tel')||{}).value || '').trim(),
+        destinataireTel2 : (($('f-dest-tel2')||{}).value || '').trim(),
         note             : (($('f-note')||{}).value || '').trim(),
         livraisonDakar   : !!window._depLivraison,
         livraisonAdresse : window._depLivraison ? (($('f-liv-adresse')||{}).value || '').trim() : '',
