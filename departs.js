@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.49';
+var DEP_VERSION = 'v1.19.50';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -952,6 +952,14 @@ function injecterEcrans(){
   +         '<div class="dep-case-tit" style="color:#B8860B;">STATISTIQUES</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-stats">—</div>'
   +       '</div>'
+  // v1.19.50 : carré à part, ouvert à tout le monde (retour de Cobey du
+  // 28/08/2026) — remplace l'ancien bouton "Inscrire un client au dépôt"
+  // qui vivait dans le carré Départs, réservé à la direction.
+  +       '<div class="dep-case" id="dep-case-depot" style="border-color:#B8720C;" onclick="depCarreDepotOuvrir()">'
+  +         '<div class="dep-case-ico">&#127970;</div>'
+  +         '<div class="dep-case-tit" style="color:#B8720C;">D&Eacute;P&Ocirc;T</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-depot">—</div>'
+  +       '</div>'
   +     '</div>'
   +     '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:22px;">Module départs '+DEP_VERSION+'</div>'
   +   '</div>'
@@ -1056,7 +1064,7 @@ function injecterEcrans(){
   /* ---- ÉCRAN 5 : inscrire / modifier un client au dépôt ---- */
   + '<div class="screen" id="s-depot-form">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="depDetail(_depDepotDepartPublic())">&larr; Retour</button>'
+  +     '<button class="btn-back" onclick="depDepotFormRetour()">&larr; Retour</button>'
   +     '<div class="h-title" id="dp-form-titre">Client au d&eacute;p&ocirc;t</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
@@ -1107,10 +1115,40 @@ function injecterEcrans(){
 
   +     '<div style="margin-top:6px;">'
   +       '<button class="btn btn-green" onclick="depEnregistrerDepot()">&#9989; Enregistrer</button>'
-  +       '<button class="btn btn-gray" onclick="depDetail(_depDepotDepartPublic())">&#10005; Annuler</button>'
+  +       '<button class="btn btn-gray" onclick="depDepotFormRetour()">&#10005; Annuler</button>'
   +     '</div>'
   +     '<div id="dp-suppr" style="display:none;margin-top:6px;"></div>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 5bis (v1.19.50) : carré "Inscrire un client au dépôt" —
+     ouvert à tout le monde, distinct du carré Départs (réservé à la
+     direction). Liste des départs (consultation seule, aucune édition
+     du container) ---- */
+  + '<div class="screen" id="s-depot-carre-liste">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
+  +     '<div class="h-title">D&eacute;p&ocirc;t</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div style="font-size:12.5px;color:var(--text3);margin-bottom:12px;">Choisissez le d&eacute;part dans lequel inscrire ou consulter un client.</div>'
+  +     '<div id="depot-carre-liste"></div>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 5ter (v1.19.50) : détail d'un départ vu depuis le carré
+     Dépôt — le container lui-même n'est pas modifiable ici (pas de
+     bouton "Modifier", pas de statut) : uniquement les clients inscrits
+     directement au dépôt pour ce départ. ---- */
+  + '<div class="screen" id="s-depot-carre-detail">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depCarreDepotOuvrir()">&larr; D&eacute;p&ocirc;t</button>'
+  +     '<div style="text-align:center;"><div class="h-title" id="depot-carre-d-nom">D&eacute;part</div>'
+  +     '<div class="h-sub" id="depot-carre-d-sub"></div></div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content" id="depot-carre-d-content"></div>'
   + '</div>'
 
   /* ---- ÉCRAN 6 : fiche client en lecture seule (carré Client) ---- */
@@ -1673,6 +1711,90 @@ window._depDetailIdPublic = function(){ return _depDetailId; };
 window._depDepotDepartPublic = function(){ return _depDepotDepart; };
 
 /* ─────────────────────────────────────────────
+   4bis (v1.19.50). CARRÉ "INSCRIRE UN CLIENT AU DÉPÔT" — écran à part,
+   ouvert à tout le monde (retour de Cobey du 28/08/2026), qui remplace
+   l'ancien bouton du carré Départs (réservé à la direction). Le
+   parcours d'inscription/modification d'un client (formulaire dp-*,
+   depOuvrirDepotForm/depEnregistrerDepot) est repris tel quel — seule
+   la navigation change. Le container (nom, date, statut) reste en
+   lecture seule ici : ni "Modifier", ni changement de statut, ni accès
+   aux clients venus d'une collecte — uniquement les clients dépôt.
+   ───────────────────────────────────────────── */
+
+// true tant qu'on est venu ici depuis le carré Dépôt — lu par
+// depDepotFormRetour() pour savoir où revenir après Enregistrer/
+// Annuler/Supprimer (sinon on revient au carré Départs, comportement
+// d'origine quand on édite un client dépôt depuis là-bas).
+var _depDepotViaCarre = false;
+
+window.depCarreDepotOuvrir = function(){
+  goTo('s-depot-carre-liste');
+  var box = $('depot-carre-liste');
+  if(!box) return;
+  var deps = tousLesDeparts();
+  if(!deps.length){
+    box.innerHTML = '<div class="dep-vide" style="padding:28px 16px;">Aucun d&eacute;part pour l\'instant.</div>';
+    return;
+  }
+  var h = '';
+  deps.forEach(function(d){
+    var id = d._id;
+    var st = STATUTS_DEPART[d.statut] || STATUTS_DEPART.preparation;
+    var nbDp = Object.keys(window.depotClients||{}).filter(function(k){ return (window.depotClients[k]||{}).departId === id; }).length;
+    h += '<div class="dep-card" style="cursor:pointer;" onclick="depCarreDepotContainer(\''+id+'\')">'
+      +   '<div class="dep-card-top"><div class="dep-nom">'+esc(d.nom||'D&eacute;part')+'</div>'
+      +     '<div class="dep-badge" style="background:'+st.bg+';color:'+st.color+';">'+st.label+'</div></div>'
+      +   '<div class="dep-meta"><span>Part le '+dateFr(d.dateDepart)+'</span><span>'+nbDp+' client'+(nbDp>1?'s':'')+' au d&eacute;p&ocirc;t</span></div>'
+      + '</div>';
+  });
+  box.innerHTML = h;
+};
+
+window.depCarreDepotContainer = function(departId){
+  _depDepotDepart = departId;
+  var d = (window.departsData||{})[departId] || {};
+  var t = $('depot-carre-d-nom'); if(t) t.textContent = d.nom || 'Départ';
+  var s = $('depot-carre-d-sub'); if(s) s.textContent = 'Part le ' + dateFr(d.dateDepart);
+
+  var peutInscrire = (d.statut === 'preparation');
+  var clientsDepot = Object.keys(window.depotClients||{})
+    .filter(function(k){ return (window.depotClients[k]||{}).departId === departId; })
+    .map(function(k){ return { id:k, c: window.depotClients[k] }; })
+    .sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
+
+  var h = '';
+  if(peutInscrire){
+    h += '<button class="btn btn-gray" style="margin-bottom:14px;border-color:#C8E6D0;background:#EAF7EE;color:#006b2d;" '
+      +  'onclick="depOuvrirDepotForm(\''+departId+'\',null,true)">&#127970; Inscrire un client au d&eacute;p&ocirc;t</button>';
+  }
+  h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:0;">Clients inscrits au d&eacute;p&ocirc;t pour ce d&eacute;part</div>';
+  if(!clientsDepot.length){
+    h += '<div class="dep-vide" style="padding:28px 16px;">Aucun client pour l\'instant.</div>';
+  } else {
+    clientsDepot.forEach(function(x){
+      var c = x.c;
+      h += '<div class="dep-cli" style="cursor:pointer;" onclick="depOuvrirDepotForm(\''+departId+'\',\''+x.id+'\',true)">'
+        +   '<div style="flex:1;min-width:0;">'
+        +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+'</div>'
+        +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
+        +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
+        +   '</div>'
+        + '</div>';
+    });
+  }
+  var box = $('depot-carre-d-content');
+  if(box) box.innerHTML = h;
+  goTo('s-depot-carre-detail');
+};
+
+// Retour/Annuler du formulaire dp-* : vers le carré Dépôt si on en
+// vient, sinon comportement d'origine (retour au carré Départs).
+window.depDepotFormRetour = function(){
+  if(_depDepotViaCarre) depCarreDepotContainer(_depDepotDepart);
+  else depDetail(_depDepotDepart);
+};
+
+/* ─────────────────────────────────────────────
    5. LES CHAMPS AJOUTÉS À LA FICHE CLIENT (s-add)
    ───────────────────────────────────────────── */
 
@@ -1868,6 +1990,13 @@ window.depRenderEspaces = function(){
   if(scfr){
     var cfr = (typeof compteursFrance === 'function') ? compteursFrance() : {attente:0,chartres:0};
     scfr.innerHTML = '<b style="color:#1a237e;">'+cfr.attente+'</b> en attente<br>'+cfr.chartres+' &agrave; Chartres';
+  }
+
+  // Case DÉPÔT (v1.19.50)
+  var sdp = $('dep-case-sub-depot');
+  if(sdp){
+    var nbDp = Object.keys(window.depotClients||{}).length;
+    sdp.innerHTML = nbDp === 0 ? 'Aucun client' : '<b style="color:#B8720C;">'+nbDp+'</b> client'+(nbDp>1?'s':'')+'<br>au d&eacute;p&ocirc;t';
   }
 
   // Case ARCHIVAGE (v1.19.0)
@@ -2853,10 +2982,10 @@ window.depDetail = function(id, gardeFiltres){
   // sans rapport avec le Dépôt d'attente) n'a pas de sens ici — ça
   // attacherait un client directement à ce container virtuel, sans vrai
   // départ ni pays pour la facture.
-  if(d.statut === 'preparation' && estDirection() && !estDepot){
-    h += '<button class="btn btn-gray" style="margin-bottom:6px;border-color:#C8E6D0;background:#EAF7EE;color:#006b2d;" '
-      +  'onclick="depOuvrirDepotForm(\''+id+'\')">&#127970; Inscrire un client au d&eacute;p&ocirc;t</button>';
-  }
+  // v1.19.50 : bouton retiré d'ici — l'inscription d'un client au dépôt
+  // se fait désormais depuis son propre carré (voir depCarreDepotOuvrir),
+  // ouvert à toute l'équipe. Les clients dépôt déjà rattachés à ce
+  // départ restent visibles et modifiables ci-dessous.
   h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:4px;">'+(estDepot ? 'Clients en attente' : 'Clients de ce d&eacute;part')+'</div>';
 
   var tousAffiches = clients.concat(clientsDepot);
@@ -3126,6 +3255,11 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
       // départ (qui n'a pas forcément été ouvert avant).
       btnRetour.textContent = '← Retour';
       btnRetour.onclick = function(){ goTo('s-dep-historique-contact'); };
+    } else if(depot && _depDepotViaCarre){
+      // v1.19.50 : client dépôt inscrit depuis le carré Dépôt (pas le
+      // carré Départs) — _depDetailId n'a jamais été posé dans ce cas.
+      btnRetour.textContent = '← Dépôt';
+      btnRetour.onclick = function(){ depCarreDepotContainer(_depDepotDepart); };
     } else {
       btnRetour.textContent = '← Départ';
       btnRetour.onclick = function(){ depDetail(_depDetailIdPublic()); };
@@ -5081,8 +5215,11 @@ window.depOuvrirFicheClient = function(collecteId, clientId){
    (hors collecte — réservé à Issyaka et Cobey)
    ───────────────────────────────────────────── */
 
-window.depOuvrirDepotForm = function(departId, clientId){
-  if(!estDirection()){ toast('🔒 Réservé à la direction.'); return; }
+window.depOuvrirDepotForm = function(departId, clientId, viaCarre){
+  // v1.19.50 : ouvert à toute l'équipe (plus réservé à la direction) —
+  // voir le carré Dépôt (depCarreDepotOuvrir). "Supprimer" reste réservé
+  // à la direction, plus bas.
+  _depDepotViaCarre = !!viaCarre;
   _depDepotDepart = departId;
   _depDepotEditId = clientId || null;
   window._depDepotPhotos = [];
@@ -5142,7 +5279,7 @@ window.depOuvrirDepotForm = function(departId, clientId){
 
   var suppr = $('dp-suppr');
   if(suppr){
-    if(clientId){
+    if(clientId && estDirection()){
       suppr.style.display = 'block';
       suppr.innerHTML = '<button class="btn btn-gray" style="border-color:#F5C6C6;background:#FDEDED;color:#992020;" '
         + 'onclick="depSupprimerDepot()">&#128465; Supprimer ce client</button>';
@@ -5320,7 +5457,7 @@ window.depPhotoChoisieDepot = function(input){
 };
 
 window.depEnregistrerDepot = function(){
-  if(!estDirection()){ toast('🔒 Réservé à la direction.'); return; }
+  // v1.19.50 : ouvert à toute l'équipe — voir depOuvrirDepotForm.
   var departId = _depDepotDepart;
   if(!departId){ toast('⚠️ Départ introuvable.'); return; }
 
@@ -5437,7 +5574,7 @@ window.depEnregistrerDepot = function(){
   if(!existant){
     depOuvrirFacture('', id, true);
   } else {
-    depDetail(departId);
+    depDepotFormRetour();
   }
 };
 
@@ -5457,7 +5594,7 @@ window.depSupprimerDepot = function(){
   depActivite('&#128465;', 'a supprim&eacute; <strong>'+esc(nom)+'</strong> du d&eacute;p&ocirc;t');
   toast('🗑️ Client supprimé');
   _depDepotEditId = null;
-  depDetail(departId);
+  depDepotFormRetour();
 };
 
 /* ─────────────────────────────────────────────
