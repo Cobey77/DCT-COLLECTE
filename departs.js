@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.61';
+var DEP_VERSION = 'v1.19.62';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -7979,6 +7979,20 @@ function greffer(){
       }catch(e){ console.error('departs: retrait photos fiche france', e); }
     };
     window._renderFicheFrance._depPatch = true;
+  }
+  /* --- N quater (v1.19.62). Espace de Danny Diop (partenaire ramassage) :
+     retrait du bouton "📷 Photos" sur chaque client du vivier ("Disponibles")
+     — il ne ramasse pas, la photo n'a pas de sens ici (retour de Cobey du
+     28/08/2026). Seul "📝 Notes" reste, pour qu'il trace tout (appel
+     passé, rdv pris...) et que DCT retrouve l'historique en un clic sur
+     le client. _actionsClient() n'a qu'un seul appelant (_htmlVivierDanny),
+     remplacement complet plus sûr qu'un post-traitement sur du texte. --- */
+  if(typeof window._actionsClient === 'function' && !window._actionsClient._depPatch){
+    window._actionsClient = function(id){
+      var c = (window.franceData||{}).clients ? window.franceData.clients[id] || {} : {};
+      return _lienAppel(c) + _rangee(_boutonNotes(id, _ACT_BLEU));
+    };
+    window._actionsClient._depPatch = true;
   }
   /* --- N bis. Enregistrement du formulaire France & Europe : mêmes champs
      que la Collecte, écrits juste après l'original (retour de Cobey du
