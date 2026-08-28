@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.60';
+var DEP_VERSION = 'v1.19.61';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -7958,6 +7958,27 @@ function greffer(){
       }catch(e3){ console.error('departs: pré-remplissage fa- (modif)', e3); }
     };
     window.modifierClientFrance._depPatch = true;
+  }
+  /* --- N ter (v1.19.61). Fiche client France & Europe : retrait du bouton
+     "📷 Photos des colis" — inutile juste après l'inscription, le colis
+     n'est pas encore physiquement présent (retour de Cobey du 28/08/2026).
+     Les photos prises au chargement (camion/tournée, _boutonPhotos ailleurs
+     dans index.html) restent inchangées, seule cette fiche est concernée. --- */
+  if(typeof window._renderFicheFrance === 'function' && !window._renderFicheFrance._depPatch){
+    var origRenderFicheFrance = window._renderFicheFrance;
+    window._renderFicheFrance = function(){
+      origRenderFicheFrance.apply(this, arguments);
+      try{
+        var box = $('fc-content');
+        if(box){
+          var btns = box.querySelectorAll('button');
+          for(var i=0; i<btns.length; i++){
+            if(/ouvrirPhotos\(/.test(btns[i].getAttribute('onclick')||'')) btns[i].remove();
+          }
+        }
+      }catch(e){ console.error('departs: retrait photos fiche france', e); }
+    };
+    window._renderFicheFrance._depPatch = true;
   }
   /* --- N bis. Enregistrement du formulaire France & Europe : mêmes champs
      que la Collecte, écrits juste après l'original (retour de Cobey du
