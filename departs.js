@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.58';
+var DEP_VERSION = 'v1.19.59';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1706,6 +1706,28 @@ function injecterEcrans(){
     + '<div id="dep-photos-rapide-box"></div>'
     + '</div>';
   document.body.appendChild(m10);
+
+  /* ---- Modale (v1.19.59) : pays de destination du client France & Europe,
+     même principe que modal-dep-pays-client pour la Collecte (retour de
+     Cobey du 28/08/2026 : "le même parcours depuis le début, là où il
+     commence à choisir Mali et Sénégal"). Champ séparé (paysDestination)
+     du "pays" déjà géré par ce formulaire (pays de départ en Europe, pour
+     le calcul de zone). ---- */
+  var m11 = document.createElement('div');
+  m11.className = 'modal-overlay';
+  m11.id = 'modal-fr-pays-client';
+  m11.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#127760;</div>'
+    + '<div class="modal-confirm-title">Ce client part pour&hellip;</div>'
+    + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Destination du colis, une fois arriv&eacute; &agrave; Dakar.</div>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;">'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depFrChoisirPaysClient(\'SN\')">&#127480;&#127475; S&eacute;n&eacute;gal</button>'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depFrChoisirPaysClient(\'ML\')">&#127474;&#127473; Mali</button>'
+    + '</div>'
+    + '<div class="modal-confirm-btns" style="margin-top:14px;">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-fr-pays-client\');goTo(\'s-france\');">Annuler</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m11);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -1722,6 +1744,25 @@ function _depAfficherBadgePaysClient(){
   var p = DEP_PAYS_DEST[window._depClientPaysChoisi] || null;
   badge.innerHTML = p
     ? ('Destination : <b>'+p.drapeau+' '+p.nom+'</b> &middot; <a href="#" onclick="event.preventDefault();openModal(\'modal-dep-pays-client\');">changer</a>')
+    : '';
+  badge.style.display = p ? 'block' : 'none';
+}
+
+// v1.19.59 : même mécanisme que depChoisirPaysClient, pour France & Europe
+// — voir modal-fr-pays-client et la greffe sur ouvrirAjoutFrance/
+// modifierClientFrance.
+window.depFrChoisirPaysClient = function(pays){
+  window._frClientPaysChoisi = pays;
+  closeModal('modal-fr-pays-client');
+  _depAfficherBadgePaysClientFr();
+};
+
+function _depAfficherBadgePaysClientFr(){
+  var badge = $('dep-pays-client-badge-fr');
+  if(!badge) return;
+  var p = DEP_PAYS_DEST[window._frClientPaysChoisi] || null;
+  badge.innerHTML = p
+    ? ('Destination : <b>'+p.drapeau+' '+p.nom+'</b> &middot; <a href="#" onclick="event.preventDefault();openModal(\'modal-fr-pays-client\');">changer</a>')
     : '';
   badge.style.display = p ? 'block' : 'none';
 }
@@ -1946,6 +1987,111 @@ function injecterChampsClient(){
 
   if(boutons) content.insertBefore(blocSuite, boutons);
   else content.appendChild(blocSuite);
+}
+
+// v1.19.59 : mêmes champs (destinataire/livraison/note + bascule prix),
+// repris à l'identique sur le formulaire France & Europe (fa-*) — retour
+// de Cobey du 28/08/2026 : "on reprend le même formulaire que collecte,
+// sauf ajout des autres pays qu'on garde déjà" (pays d'origine Europe +
+// nombre de colis, tous deux déjà natifs à ce formulaire, inchangés).
+// Seule différence : le libellé de la bascule prix ("à la collecte" au
+// lieu de "sur place", ce concept n'existe pas ici).
+function injecterChampsClientFrance(){
+  var ecran = $('s-france-add');
+  if(!ecran || $('fa-dest-nom')) return;
+  var content = ecran.querySelector('.content');
+  if(!content) return;
+
+  var badgePays = document.createElement('div');
+  badgePays.id = 'dep-pays-client-badge-fr';
+  badgePays.style.cssText = 'display:none;font-size:12.5px;font-weight:600;color:#252599;'
+    + 'background:#EEEEF9;border:1.5px solid #C7C7F0;border-radius:10px;padding:9px 12px;margin-bottom:12px;';
+  content.insertBefore(badgePays, content.firstChild);
+
+  var champPrixFa = $('fa-prix');
+  if(champPrixFa){
+    var blocFa = champPrixFa.closest ? champPrixFa.closest('.fg') : champPrixFa.parentNode;
+    if(blocFa && blocFa.parentNode){
+      var toggleFa = document.createElement('div');
+      toggleFa.style.cssText = 'margin:-6px 0 12px;';
+      toggleFa.innerHTML = '<button type="button" class="dep-st" id="fa-prix-adef" onclick="depTogglePrixIndefiniFrance()" style="width:100%;">&#128337; Prix &agrave; d&eacute;finir &agrave; la collecte</button>';
+      blocFa.parentNode.insertBefore(toggleFa, blocFa.nextSibling);
+    }
+  }
+
+  var boutonsFa = null;
+  var enfantsFa = content.children;
+  for(var i=0; i<enfantsFa.length; i++){
+    if(enfantsFa[i].querySelector && enfantsFa[i].querySelector('button.btn-green')) boutonsFa = enfantsFa[i];
+  }
+
+  var blocSuiteFa = document.createElement('div');
+  blocSuiteFa.innerHTML = ''
+    + '<div class="dep-sec">Destinataire &agrave; Dakar</div>'
+    + '<div class="fg"><label class="fl">Nom du destinataire</label>'
+    +   '<input class="fi" id="fa-dest-nom" placeholder="Awa Ndiaye"></div>'
+    + '<div class="fg"><label class="fl">Num&eacute;ro du destinataire</label>'
+    +   '<input class="fi" id="fa-dest-tel" type="tel" placeholder="77 000 00 00"></div>'
+    + '<div class="fg"><label class="fl">Deuxi&egrave;me num&eacute;ro du destinataire <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+    +   '<input class="fi" id="fa-dest-tel2" type="tel" placeholder="77 000 00 00"></div>'
+
+    + '<div class="dep-sec">Livraison &agrave; Dakar</div>'
+    + '<div class="fg"><label class="fl">Le colis doit-il &ecirc;tre livr&eacute; ?</label>'
+    +   '<div style="display:flex;gap:8px;">'
+    +     '<button type="button" class="dep-st" id="fa-liv-non" onclick="depSetLivraisonFrance(false)">Non &middot; retrait sur place</button>'
+    +     '<button type="button" class="dep-st" id="fa-liv-oui" onclick="depSetLivraisonFrance(true)">Oui &middot; livraison</button>'
+    +   '</div></div>'
+    + '<div id="fa-liv-bloc" style="display:none;">'
+    +   '<div class="fg"><label class="fl">Ville / adresse de livraison</label>'
+    +     '<input class="fi" id="fa-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+    +   '<div class="fg"><label class="fl">Prix de la livraison (&euro;) '
+    +     '<span style="color:#aaa;font-weight:500;">&middot; peut &ecirc;tre ajout&eacute; plus tard</span></label>'
+    +     '<input class="fi" id="fa-liv-prix" type="number" min="0" placeholder="0"></div>'
+    +   '<div style="font-size:11.5px;color:var(--text3);background:#f7f7f7;border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.5;">'
+    +     '&#8505;&#65039; La livraison est factur&eacute;e au client mais reste <b>hors comptabilit&eacute; DCT</b>.</div>'
+    + '</div>'
+
+    + '<div class="dep-sec">Note</div>'
+    + '<div class="fg"><label class="fl">Note '
+    +   '<span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+    +   '<textarea class="fi" id="fa-note" rows="2" placeholder="Remarque sur le colis, le client..." style="resize:none;"></textarea></div>';
+
+  if(boutonsFa) content.insertBefore(blocSuiteFa, boutonsFa);
+  else content.appendChild(blocSuiteFa);
+}
+
+var _frLivraison = false;
+var _frPrixIndefini = false;
+
+window.depSetLivraisonFrance = function(oui){
+  var bOui = $('fa-liv-oui'), bNon = $('fa-liv-non'), bloc = $('fa-liv-bloc');
+  if(bOui) bOui.className = 'dep-st' + (oui ? ' on' : '');
+  if(bNon) bNon.className = 'dep-st' + (oui ? '' : ' on');
+  if(bloc) bloc.style.display = oui ? 'block' : 'none';
+  _frLivraison = oui;
+};
+
+window.depTogglePrixIndefiniFrance = function(){
+  _frPrixIndefini = !_frPrixIndefini;
+  depAppliquerPrixIndefiniFrance();
+};
+function depAppliquerPrixIndefiniFrance(){
+  var btn = $('fa-prix-adef'), champ = $('fa-prix');
+  if(btn) btn.className = 'dep-st' + (_frPrixIndefini ? ' on' : '');
+  if(champ){
+    champ.disabled = _frPrixIndefini;
+    champ.style.background = _frPrixIndefini ? '#f5f5f5' : '';
+    if(_frPrixIndefini) champ.value = '';
+  }
+}
+
+function _depReinitialiserChampsFrance(){
+  ['fa-dest-nom','fa-dest-tel','fa-dest-tel2','fa-liv-adresse','fa-liv-prix','fa-note'].forEach(function(id){
+    var e = $(id); if(e) e.value = '';
+  });
+  depSetLivraisonFrance(false);
+  _frPrixIndefini = false;
+  depAppliquerPrixIndefiniFrance();
 }
 
 /* ─────────────────────────────────────────────
@@ -7770,6 +7916,16 @@ function greffer(){
         _depAdresseAutocompleteInit('fa', 'fa-adresse');
         _depCpVilleInit('fa');
       }catch(e){ console.error('departs: autocomplete fa- (ajout)', e); }
+      // v1.19.59 : même parcours que la Collecte — choix du pays de
+      // destination (Sénégal/Mali) demandé dès l'ouverture du formulaire
+      // (retour de Cobey du 28/08/2026), + remise à zéro des nouveaux
+      // champs (destinataire/livraison/note/prix).
+      try{
+        window._frClientPaysChoisi = null;
+        _depAfficherBadgePaysClientFr();
+        _depReinitialiserChampsFrance();
+        openModal('modal-fr-pays-client');
+      }catch(e2){ console.error('departs: modale pays client france', e2); }
     };
     window.ouvrirAjoutFrance._depPatch = true;
   }
@@ -7781,8 +7937,65 @@ function greffer(){
         _depAdresseAutocompleteInit('fa', 'fa-adresse');
         _depCpVilleInit('fa');
       }catch(e){ console.error('departs: autocomplete fa- (modif)', e); }
+      // v1.19.59 : pré-remplissage des nouveaux champs + pays déjà choisi
+      // (pas de modale forcée en modification, juste le badge — "changer"
+      // rouvre la modale si besoin).
+      try{
+        var c = ((window.franceData||{}).clients || {})[window.franceClientId] || {};
+        var g = function(id, v){ var e = $(id); if(e) e.value = v || ''; };
+        g('fa-dest-nom', c.destinataireNom);
+        g('fa-dest-tel', c.destinataireTel);
+        g('fa-dest-tel2', c.destinataireTel2);
+        g('fa-note', c.note);
+        depSetLivraisonFrance(!!c.livraisonDakar);
+        if(c.livraisonDakar){ g('fa-liv-adresse', c.livraisonAdresse); g('fa-liv-prix', c.prixLivraison ? String(c.prixLivraison) : ''); }
+        _frPrixIndefini = !!c.prixADefinir;
+        depAppliquerPrixIndefiniFrance();
+        window._frClientPaysChoisi = c.paysDestination || null;
+        _depAfficherBadgePaysClientFr();
+      }catch(e3){ console.error('departs: pré-remplissage fa- (modif)', e3); }
     };
     window.modifierClientFrance._depPatch = true;
+  }
+  /* --- N bis. Enregistrement du formulaire France & Europe : mêmes champs
+     que la Collecte, écrits juste après l'original (retour de Cobey du
+     28/08/2026). Le pays de destination doit être choisi avant d'enregistrer
+     — même garde que saveClient pour la Collecte. Diff avant/après pour
+     retrouver l'id créé (l'original ne le renvoie pas), édition via
+     window.franceClientId (déjà connu de _faEditId côté natif). --- */
+  if(typeof window.saveClientFrance === 'function' && !window.saveClientFrance._depPatch){
+    var origSaveFrance = window.saveClientFrance;
+    window.saveClientFrance = function(){
+      if(!window._frClientPaysChoisi){
+        toast('⚠️ Choisissez d\'abord le pays de destination.');
+        openModal('modal-fr-pays-client');
+        return;
+      }
+      var editId = window._faEditId || null;
+      var avant = Object.keys((window.franceData||{}).clients || {});
+      origSaveFrance.apply(this, arguments);
+      try{
+        var id = editId;
+        if(!id){
+          var apres = Object.keys((window.franceData||{}).clients || {});
+          id = apres.filter(function(k){ return avant.indexOf(k) < 0; })[0];
+        }
+        if(id && window.db && window.firebaseReady){
+          var maj = {};
+          maj['clients/'+id+'/paysDestination']  = window._frClientPaysChoisi;
+          maj['clients/'+id+'/destinataireNom']   = (($('fa-dest-nom')||{}).value || '').trim();
+          maj['clients/'+id+'/destinataireTel']   = (($('fa-dest-tel')||{}).value || '').trim();
+          maj['clients/'+id+'/destinataireTel2']  = (($('fa-dest-tel2')||{}).value || '').trim();
+          maj['clients/'+id+'/note']              = (($('fa-note')||{}).value || '').trim();
+          maj['clients/'+id+'/livraisonDakar']    = !!_frLivraison;
+          maj['clients/'+id+'/livraisonAdresse']  = _frLivraison ? (($('fa-liv-adresse')||{}).value || '').trim() : '';
+          maj['clients/'+id+'/prixLivraison']     = _frLivraison ? (parseFloat(($('fa-liv-prix')||{}).value) || 0) : 0;
+          maj['clients/'+id+'/prixADefinir']      = !!_frPrixIndefini;
+          db.ref('france').update(maj);
+        }
+      }catch(e4){ console.error('departs: extras france', e4); }
+    };
+    window.saveClientFrance._depPatch = true;
   }
 
   /* --- O. Liste des clients d'une collecte (onglet "Clients", écran
@@ -7951,6 +8164,7 @@ function demarrer(){
   try{ injecterStyles(); }catch(e){ console.error('departs: styles', e); }
   try{ injecterEcrans(); }catch(e){ console.error('departs: écrans', e); }
   try{ injecterChampsClient(); }catch(e){ console.error('departs: champs', e); }
+  try{ injecterChampsClientFrance(); }catch(e){ console.error('departs: champs france', e); }
   try{ injecterChampsFiche(); }catch(e){ console.error('departs: champs fiche', e); }
   try{ injecterBoutonsClient(); }catch(e){ console.error('departs: boutons client', e); }
   try{ cacherOngletClientAccueil(); }catch(e){ console.error('departs: onglet client', e); }
