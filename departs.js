@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.73';
+var DEP_VERSION = 'v1.19.74';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1019,7 +1019,11 @@ function injecterEcrans(){
   + '<div class="screen" id="s-espaces">'
   +   '<div class="header">'
   +     '<div><div class="h-title">Dakar City Transport</div>'
-  +     '<div class="h-sub" id="dep-esp-greet">Bonjour !</div></div>'
+  +     '<div class="h-sub" id="dep-esp-greet">Bonjour !</div>'
+  // v1.19.74 : numéro de version affiché ici (retour de Cobey du
+  // 29/08/2026 : "comme ça je sais direct si c'est le bon ou pas") — rempli
+  // par depRenderEspaces, seul endroit visible dès l'ouverture de l'appli.
+  +     '<div id="dep-esp-version" style="font-size:9.5px;color:#c2c2c2;font-weight:600;margin-top:1px;"></div></div>'
   +     '<div style="display:flex;align-items:center;gap:8px;">'
   // v1.19.58 : pastille de notification manquante sur ce bouton depuis
   // que les carrés ont remplacé la barre de navigation native comme
@@ -1514,6 +1518,8 @@ function injecterEcrans(){
   +     '.fac-suivi-infos{margin-top:8px;background:#fff;border:1.5px dashed #C8E6D0;border-radius:9px;'
   +       'padding:10px 12px;font-size:11.5px;color:#444;line-height:1.7;}'
   +     '.fac-suivi-infos b{color:#006b2d;}'
+  +     '.fac-suivi-alerte{margin-top:8px;background:#FFF1DE;border:1.5px solid #F5C377;border-radius:9px;'
+  +       'padding:10px 12px;font-size:11.5px;color:#8a4a00;font-weight:700;line-height:1.6;}'
   +     '@media (max-width:480px){'
   +       '.fac-parties{grid-template-columns:1fr;}'
   +     '}'
@@ -2341,6 +2347,7 @@ function ecouterDeparts(){
 window.depRenderEspaces = function(){
   var u = window.currentUser || {};
   var g = $('dep-esp-greet');   if(g) g.textContent = 'Bonjour ' + (u.name||'') + ' !';
+  var vv = $('dep-esp-version'); if(vv) vv.textContent = 'Module départs ' + DEP_VERSION;
   var a = $('dep-esp-av');
   if(a){
     a.textContent = u.id || '';
@@ -4536,7 +4543,12 @@ function depRenderSuiviTransportPublic(c){
         + '&#128205; <b>Adresse du d&eacute;p&ocirc;t</b> : ' + esc(DEP_ADRESSE_DEPOT) + '<br>'
         + '&#9742;&#65039; <b>Contact sur place</b> : ' + esc(DEP_CONTACT_DEPOT.nom)
         + (DEP_CONTACT_DEPOT.tel ? ' &mdash; ' + _depLienTel(DEP_CONTACT_DEPOT.tel, DEP_CONTACT_DEPOT.tel) : ' (num&eacute;ro &agrave; venir)')
-        + '</div>';
+        + '</div>'
+        // v1.19.74 : mention frais de stationnement, sous le contact de
+        // Niass — sur fond orange pour qu'elle saute aux yeux (retour de
+        // Cobey du 29/08/2026 : "il faut vraiment quelque chose qui
+        // percute").
+        + '<div class="fac-suivi-alerte">&#9200; Merci de r&eacute;cup&eacute;rer votre colis rapidement. Pass&eacute; 48h ouvr&eacute;es apr&egrave;s l\'arriv&eacute;e, des frais de stationnement seront appliqu&eacute;s.</div>';
     }
     h += '<div class="fac-suivi-etape ' + cls + '">'
       +   '<div class="fac-suivi-ligne"></div>'
@@ -8498,6 +8510,15 @@ function greffer(){
     var origOuvrirFrance = window.ouvrirAjoutFrance;
     window.ouvrirAjoutFrance = function(){
       origOuvrirFrance.apply(this, arguments);
+      // v1.19.74 : "Inscrire un client" partage l'écran (s-france-add) avec
+      // "Modifier la fiche" (voir le patch de modifierClientFrance
+      // ci-dessous, qui personnalise le bouton retour) — sans cette remise
+      // à zéro systématique, un précédent "← Départ"/"← Dépôt" pouvait
+      // rester affiché par erreur sur un formulaire d'ajout tout neuf.
+      try{
+        var btnAdd = document.querySelector('#s-france-add .header .btn-back');
+        if(btnAdd){ btnAdd.textContent = '← Retour'; btnAdd.onclick = function(){ goTo('s-france'); }; }
+      }catch(eBtn){ console.error('departs: reset retour ajout france', eBtn); }
       try{
         _depSuggestionsInit('fa', 'fa-ligne-nom');
         _depAdresseAutocompleteInit('fa', 'fa-adresse');
@@ -8520,6 +8541,32 @@ function greffer(){
     var origModifierFrance = window.modifierClientFrance;
     window.modifierClientFrance = function(){
       origModifierFrance.apply(this, arguments);
+      // v1.19.74 : même bug que la fiche en lecture seule (voir le patch de
+      // ouvrirFicheFrance plus bas) — "Modifier la fiche", ouverte depuis
+      // un container, ramenait à tort vers l'écran France & Europe au lieu
+      // du container d'origine (retour de Cobey du 29/08/2026 : "peu
+      // importe le client vient de quel dépôt il faut que le retour reste
+      // dans le carré de départ"). _depFicheFranceRetour est simplement lu
+      // ici (pas consommé) — il reste valable tant qu'on n'est pas revenu
+      // sur le hub France & Europe (voir renderFrance).
+      try{
+        var retourM = _depFicheFranceRetour;
+        var btnM = document.querySelector('#s-france-add .header .btn-back');
+        if(btnM){
+          if(retourM && retourM.type === 'depart'){
+            var depIdM1 = retourM.id;
+            btnM.textContent = '← Départ';
+            btnM.onclick = function(){ depDetail(depIdM1); };
+          } else if(retourM && retourM.type === 'carre'){
+            var depIdM2 = retourM.id;
+            btnM.textContent = '← Dépôt';
+            btnM.onclick = function(){ depCarreDepotContainer(depIdM2); };
+          } else {
+            btnM.textContent = '← Retour';
+            btnM.onclick = function(){ goTo('s-france'); };
+          }
+        }
+      }catch(eRetourM){ console.error('departs: retour modif france', eRetourM); }
       try{
         _depAdresseAutocompleteInit('fa', 'fa-adresse');
         _depCpVilleInit('fa');
@@ -8602,8 +8649,14 @@ function greffer(){
     window.ouvrirFicheFrance = function(){
       origOuvrirFicheFrance.apply(this, arguments);
       try{
+        // v1.19.74 : NE PLUS consommer _depFicheFranceRetour ici (avant :
+        // remis à null immédiatement) — sinon le contexte était perdu dès
+        // que la fiche s'affichait, et "Modifier la fiche" juste après
+        // retombait sur le retour natif (retour de Cobey du 29/08/2026,
+        // même bug que celui déjà réglé sur cette fiche). Il reste donc
+        // valable tant qu'on ne revient pas sur l'écran France & Europe
+        // (voir la remise à zéro dans le patch de renderFrance plus bas).
         var retour = _depFicheFranceRetour;
-        _depFicheFranceRetour = null;
         var btn = document.querySelector('#s-france-client .header .btn-back');
         if(btn){
           if(retour && retour.type === 'depart'){
@@ -8901,6 +8954,11 @@ function greffer(){
     var origRenderFrance = window.renderFrance;
     window.renderFrance = function(){
       origRenderFrance.apply(this, arguments);
+      // v1.19.74 : de retour sur le hub France & Europe, le contexte
+      // "container d'origine" ne vaut plus (voir _depFicheFranceRetour,
+      // consommé désormais sans être remis à null par ouvrirFicheFrance) —
+      // un client ouvert depuis ici doit reprendre le comportement natif.
+      _depFicheFranceRetour = null;
       try{
         var box = $('france-content');
         if(!box) return;
