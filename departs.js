@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.77';
+var DEP_VERSION = 'v1.19.78';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -998,7 +998,41 @@ function injecterStyles(){
     +   '#s-depot-form .content, #s-facture .content, #s-dep-suivi .content, #s-dep-valider .content, '
     +   '#s-dep-fiche-lecture .content, #s-client-fiche .content, #s-dep-historique-contact .content, '
     +   '#s-dep-impression .content, #s-espaces .content, #s-etiquette .content, #s-archive .content, '
-    +   '#s-stats .content { padding-bottom: 90px; }';
+    +   '#s-stats .content { padding-bottom: 90px; }'
+    // v1.19.78 : écran d'accueil (choix de l'espace) — DCT en carte "hero"
+    // pleine couleur (l'espace principal), les partenaires (Global
+    // Logistique, futur Mamadou Niass) groupés en dessous sous un
+    // intertitre "Partenaires", Administration réduite à un accès discret.
+    + '.dep-esp-hero{background:linear-gradient(135deg,var(--green),var(--green-dark));border-radius:16px;'
+    +   'padding:18px 16px;color:#fff;margin-bottom:16px;box-shadow:0 6px 18px rgba(0,154,68,.28);'
+    +   'position:relative;cursor:pointer;}'
+    + '.dep-esp-hero:active{transform:scale(.98);}'
+    + '.dep-esp-hero.suspendu{background:linear-gradient(135deg,#c0392b,#8e2a1e);}'
+    + '.dep-esp-hero-tag{position:absolute;top:10px;right:12px;font-size:9.5px;font-weight:800;'
+    +   'letter-spacing:.4px;background:rgba(255,255,255,.22);padding:3px 9px;border-radius:20px;}'
+    + '.dep-esp-hero-top{display:flex;align-items:center;gap:12px;}'
+    + '.dep-esp-hero-ic{width:52px;height:52px;border-radius:50%;background:#fff;flex:none;'
+    +   'overflow:hidden;display:flex;align-items:center;justify-content:center;}'
+    + '.dep-esp-hero-ttl{font-weight:800;font-size:16.5px;margin-bottom:2px;}'
+    + '.dep-esp-hero-sub{font-size:12px;opacity:.85;}'
+    + '.dep-esp-hero-badge{font-size:10.5px;font-weight:700;background:rgba(255,255,255,.2);'
+    +   'padding:3px 10px;border-radius:20px;display:inline-block;margin-top:6px;}'
+    + '.dep-esp-section-lbl{font-size:11px;letter-spacing:.5px;font-weight:800;color:#9a9a9a;'
+    +   'margin:4px 2px 8px;text-transform:uppercase;}'
+    + '.dep-esp-mini{background:var(--white);border-radius:13px;padding:11px 12px;display:flex;'
+    +   'align-items:center;gap:10px;margin-bottom:9px;box-shadow:var(--shadow);cursor:pointer;}'
+    + '.dep-esp-mini:active{transform:scale(.98);}'
+    + '.dep-esp-mini.suspendu{opacity:.55;}'
+    + '.dep-esp-mini-ic{width:38px;height:38px;border-radius:10px;background:#f2f2f2;flex:none;'
+    +   'overflow:hidden;display:flex;align-items:center;justify-content:center;}'
+    + '.dep-esp-mini-ttl{font-weight:700;font-size:13.5px;color:var(--text);}'
+    + '.dep-esp-mini-sub{font-size:11px;color:var(--text3);}'
+    + '.dep-esp-mini-badge{font-size:9.5px;font-weight:700;color:#7a7a7a;background:#f0f0f0;'
+    +   'padding:2px 8px;border-radius:20px;display:inline-block;margin-top:4px;}'
+    + '.dep-esp-admin-discret{text-align:center;margin-top:6px;padding:10px 0;font-size:12px;'
+    +   'color:#aaa;font-weight:600;display:flex;align-items:center;justify-content:center;gap:5px;'
+    +   'cursor:pointer;}'
+    + '.dep-esp-admin-discret:active{opacity:.6;}';
   document.head.appendChild(s);
 }
 
@@ -7997,6 +8031,97 @@ function greffer(){
       return r;
     };
     window.buildLogin._depPatch = true;
+  }
+
+  /* --- A quinquies. Écran d'accueil (niveau 1, choix de l'espace) :
+     Dakar City Transport en carte "hero" pleine couleur (l'espace
+     principal), les partenaires (Global Logistique, + Mamadou Niass en
+     vitrine — son vrai compte sera créé "sur le tas" plus tard) groupés
+     sous un intertitre "Partenaires", Administration réduite à un accès
+     discret en bas d'écran plutôt qu'une carte à part entière. --- */
+  function _depVisuelSocieteIcone(so){
+    if(so.id === 'DCT'){
+      var lg = document.getElementById('dct-logo');
+      var src = lg ? lg.getAttribute('src') : '';
+      return '<img src="' + src + '" style="width:100%;height:100%;object-fit:cover;">';
+    }
+    if(so.id === 'GL' && typeof _logoGL === 'function') return _logoGL(28);
+    return '<span style="font-size:18px;">🔐</span>';
+  }
+  if(typeof window.retourEspaces === 'function' && !window.retourEspaces._depPatch){
+    window.retourEspaces = function(){
+      _espaceOuvertUI = '';
+      var esp = document.getElementById('login-espaces');
+      var cards = document.getElementById('login-cards');
+      var ret = document.getElementById('login-retour');
+      var titre = document.getElementById('login-titre');
+      if(titre) titre.textContent = 'Choisissez votre espace';
+      if(ret) ret.style.display = 'none';
+      if(cards){ cards.innerHTML = ''; cards.style.display = 'none'; }
+      if(!esp) return;
+      esp.style.display = 'block';
+
+      var dct = SOCIETES.find(function(s){ return s.id === 'DCT'; });
+      var adm = SOCIETES.find(function(s){ return s.id === 'ADM'; });
+      var partenaires = SOCIETES.filter(function(s){ return s.id !== 'DCT' && s.id !== 'ADM'; });
+
+      var html = '';
+
+      if(dct){
+        var suspDct = _societeSuspendue(dct.id);
+        var detailDct = _detailSociete(dct.id);
+        html += '<div class="dep-esp-hero' + (suspDct ? ' suspendu' : '') + '" onclick="'
+          + (suspDct ? 'showToastNew(\'🔒 Accès suspendu.\')' : 'ouvrirEspaceProtege(\'' + dct.id + '\')') + '">'
+          + '<div class="dep-esp-hero-tag">ESPACE PRINCIPAL</div>'
+          + '<div class="dep-esp-hero-top">'
+          +   '<div class="dep-esp-hero-ic">' + _depVisuelSocieteIcone(dct) + '</div>'
+          +   '<div style="flex:1;">'
+          +     '<div class="dep-esp-hero-ttl">' + dct.nom + '</div>'
+          +     (dct.sous ? ('<div class="dep-esp-hero-sub">' + dct.sous + '</div>') : '')
+          +     (detailDct ? ('<span class="dep-esp-hero-badge">' + detailDct + '</span>') : '')
+          +   '</div>'
+          + '</div></div>';
+      }
+
+      html += '<div class="dep-esp-section-lbl">Partenaires</div>';
+      partenaires.forEach(function(so){
+        var susp = _societeSuspendue(so.id);
+        var d = _detailSociete(so.id), v = (_espaceProtege(so.id) ? '🔒 ' : '') + d;
+        html += '<div class="dep-esp-mini' + (susp ? ' suspendu' : '') + '" onclick="'
+          + (susp ? 'showToastNew(\'🔒 Accès suspendu par Dakar City Transport.\')' : 'ouvrirEspaceProtege(\'' + so.id + '\')') + '">'
+          + '<div class="dep-esp-mini-ic">' + _depVisuelSocieteIcone(so) + '</div>'
+          + '<div style="flex:1;">'
+          +   '<div class="dep-esp-mini-ttl">' + so.nom + '</div>'
+          +   (so.sous ? ('<div class="dep-esp-mini-sub">' + so.sous + '</div>') : '')
+          +   (v.trim() ? ('<span class="dep-esp-mini-badge">' + v + '</span>') : '')
+          + '</div>'
+          + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="' + so.color + '" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>'
+          + '</div>';
+      });
+      // Mamadou Niass : carte en vitrine, pas encore de compte réel derrière
+      // (son espace sera construit progressivement).
+      html += '<div class="dep-esp-mini" onclick="showToastNew(\'🚧 Espace Mamadou Niass en cours de création.\')">'
+        + '<div class="dep-esp-mini-ic" style="font-size:17px;">📦</div>'
+        + '<div style="flex:1;">'
+        +   '<div class="dep-esp-mini-ttl">Mamadou Niass</div>'
+        +   '<div class="dep-esp-mini-sub">Dépôt Parcelle Assainie</div>'
+        +   '<span class="dep-esp-mini-badge">🚧 Bientôt disponible</span>'
+        + '</div>'
+        + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#c7c7c7" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>'
+        + '</div>';
+
+      if(adm){
+        html += '<div class="dep-esp-admin-discret" onclick="ouvrirEspaceProtege(\'' + adm.id + '\')">🔒 Administration</div>';
+      }
+
+      esp.innerHTML = html;
+    };
+    window.retourEspaces._depPatch = true;
+    // L'appel natif buildLogin() du tout premier chargement (avant que ce
+    // patch n'existe) a déjà rendu l'ancien écran 3-cartes — on rafraîchit
+    // donc tout de suite, sauf si l'utilisateur a déjà ouvert un espace
+    // dans ce court intervalle.
+    if(!_espaceOuvertUI){ try{ window.retourEspaces(); }catch(e){} }
   }
 
   /* --- B. Après la connexion : bifurcation pour tout le monde
