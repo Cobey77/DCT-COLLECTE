@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.63';
+var DEP_VERSION = 'v1.19.64';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -364,20 +364,28 @@ function _depClientFacture(ctx){
 // quelle que soit sa source — même centralisation que ci-dessus.
 function _depEcrireFacture(ctx, champs){
   if(!ctx) return;
+  // v1.19.64 : même protection que _depEcrireClient — Firebase (update)
+  // rejette toute valeur undefined avec une exception SYNCHRONE, un seul
+  // champ undefined dans l'objet fait planter tout l'appel. On neutralise
+  // ça ici aussi, pour les 3 sources (france/dépôt/collecte).
+  var champsSurs = {};
+  Object.keys(champs || {}).forEach(function(k){
+    champsSurs[k] = (champs[k] === undefined) ? null : champs[k];
+  });
   if(ctx.france){
     if(window.db && window.firebaseReady){
       var majF = {};
-      Object.keys(champs).forEach(function(k){ majF['clients/'+ctx.clientId+'/'+k] = champs[k]; });
+      Object.keys(champsSurs).forEach(function(k){ majF['clients/'+ctx.clientId+'/'+k] = champsSurs[k]; });
       db.ref('france').update(majF);
     }
     return;
   }
   if(ctx.depot){
-    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update(champs);
+    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update(champsSurs);
     return;
   }
   if(window.db && window.firebaseReady){
-    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update(champs)
+    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update(champsSurs)
       .catch(function(e){ console.error('departs: échec écriture facture', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
   }
   try{ sauvegarder(); }catch(e){}
@@ -4386,9 +4394,7 @@ window._depEtiquetteCtx = null;
 window.depOuvrirEtiquette = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(!c){ toast('⚠️ Client introuvable.'); return; }
   // v1.19.44 : le Dépôt n'est pas un vrai container (pas de date de
   // départ) — pas d'étiquette tant que le client n'est pas replacé dans
@@ -4417,9 +4423,7 @@ window.depRetourEtiquette = function(){
 window.depGenererEtiquettes = function(){
   var ctx = window._depEtiquetteCtx;
   if(!ctx){ toast('⚠️ Étiquette introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
   var inp = $('dep-etq-nb');
@@ -4734,7 +4738,7 @@ window.depSupprimerVersement = function(idx){
   toast('🗑️ Versement supprimé');
   // Rafraîchit l'écran actuellement affiché (Suivi ou Facture directement).
   var ecranSuivi = $('s-dep-suivi');
-  if(ecranSuivi && ecranSuivi.classList.contains('active')) depRenderSuivi(c, ctx.depot ? '' : ctx.collecteId);
+  if(ecranSuivi && ecranSuivi.classList.contains('active')) depRenderSuivi(c, (ctx.depot || ctx.france) ? '' : ctx.collecteId);
   else depRenderFacture(c);
 };
 
@@ -4861,7 +4865,12 @@ function depRenderFacture(c){
   // de Cobey du 22/08/2026). Les encarts "Total colis" / PAYÉ / RESTE
   // ci-dessous restent, eux, propres au colis (pay reste inchangé).
   var payCombine = depCalculerPaiementCombine(c);
-  var st = prixIndefini ? { bg:'#FFF3CD', color:'#856404', label:'Prix à définir sur place' } : STATUTS_PAIEMENT[payCombine.statut];
+  // v1.19.64 : côté France & Europe, le prix "à définir" se fixe "à la
+  // collecte" (même vocabulaire que le toggle d'inscription, voir
+  // injecterChampsClientFrance) — pas "sur place", propre à Collecte/Dépôt
+  // (retour de Cobey du 29/08/2026).
+  var ctxBadge = _depFactureCtx || {};
+  var st = prixIndefini ? { bg:'#FFF3CD', color:'#856404', label: ctxBadge.france ? 'Prix à définir à la collecte' : 'Prix à définir sur place' } : STATUTS_PAIEMENT[payCombine.statut];
   var prixLivraison = parseFloat(c.prixLivraison) || 0;
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
 
@@ -4945,7 +4954,16 @@ function depRenderFacture(c){
   h += '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:16px;margin:16px 0;text-align:center;">'
     + '<div style="font-size:11px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;">Total colis</div>'
     + (prixIndefini
-        ? '<div style="font-size:19px;font-weight:800;color:#856404;margin:6px 0;">&#128337; &Agrave; d&eacute;finir sur place</div>'
+        ? ('<div style="font-size:19px;font-weight:800;color:#856404;margin:6px 0;">&#128337; &Agrave; d&eacute;finir '+(ctxFact.france?'&agrave; la collecte':'sur place')+'</div>'
+           // v1.19.64 : côté France & Europe, aucun écran "Valider" en amont
+           // (contrairement à la Collecte) — c'est ici, à la facture, qu'il
+           // faut pouvoir fixer le prix (retour de Cobey du 29/08/2026).
+           + (ctxFact.france
+              ? ('<div style="display:flex;gap:8px;margin-top:10px;justify-content:center;">'
+                 + '<input class="fi" id="dep-fr-prix-input" type="number" min="0" step="1" placeholder="Prix en €" style="max-width:130px;text-align:center;">'
+                 + '<button type="button" class="btn btn-green" style="width:auto;padding:0 16px;" onclick="depFranceFixerPrix()">&#9989; Fixer le prix</button>'
+                 + '</div>')
+              : ''))
         : '<div style="font-size:28px;font-weight:800;color:var(--text);margin:4px 0;">' + pay.total + ' &euro;</div>')
     + '</div>';
 
@@ -5111,6 +5129,14 @@ function depRenderFacture(c){
   // vivent désormais uniquement sur l'écran "Documents"). Retour de
   // Cobey : "si on revient sur cette page, c'est pour modifier un
   // paiement [...] pas logique de mélanger paiement et impression".
+  // v1.19.64 : côté France & Europe, pas de camion à valider (gatePrint ne
+  // s'applique pas) — mais les documents ne doivent pas non plus être
+  // imprimables avant que le départ pour Dakar soit déclaré ci-dessus,
+  // même logique que la Collecte (retour de Cobey du 29/08/2026 : "les
+  // boutons d'impression ne doivent apparaître qu'après la validation de
+  // la facture").
+  var franceNonValide = !!(ctxFact.france && c.statut !== 'parti');
+
   if(gatePrint){
     h += '<div style="margin-top:18px;">'
       + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">La collecte n&rsquo;est pas encore valid&eacute;e &mdash; l&rsquo;impression des documents sera disponible juste apr&egrave;s.</div>'
@@ -5121,9 +5147,11 @@ function depRenderFacture(c){
       + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Facture d&eacute;j&agrave; valid&eacute;e. Modifiez un paiement si besoin, puis retrouvez les documents &agrave; imprimer.</div>'
       + '<button class="btn btn-green" onclick="depValiderFactureFinale()">&#128196; Voir les documents</button>'
       + '</div>';
+  } else if(franceNonValide){
+    h += '<div style="margin-top:18px;font-size:12px;color:var(--text3);text-align:center;">Les documents (facture imprimable, &eacute;tiquette, QR) seront disponibles une fois le d&eacute;part pour Dakar d&eacute;clar&eacute; ci-dessus.</div>';
   } else {
-    // Dépôt direct (pas de notion de validation camion) : comportement
-    // inchangé, impression accessible directement depuis la facture.
+    // Dépôt direct (pas de notion de validation camion) et France & Europe
+    // une fois le départ déclaré : impression accessible directement.
     h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
       +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
       // v1.19.21 : étiquette(s) colis — voir depOuvrirEtiquette.
@@ -5147,7 +5175,7 @@ function depRenderFacture(c){
   // désormais sur la facture imprimable (voir depRenderFacturePublique),
   // pas ici (même logique que ci-dessus : plus de doublon paiement/
   // impression sur cette page-là).
-  if(!gatePrint && !estCollecteValidee){
+  if(!gatePrint && !estCollecteValidee && !franceNonValide){
     h += '<div class="dep-sec">QR code (r&eacute;serv&eacute; aux employ&eacute;s DCT)</div>'
       + '<div style="text-align:center;padding:6px 0 10px;">'
       +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
@@ -5190,6 +5218,33 @@ window.depFranceValiderDepart = function(){
 
   toast('✈️ Client déclaré parti pour Dakar');
   depActivite('&#9992;&#65039;', 'a d&eacute;clar&eacute; <strong>'+esc(c.name||((c.prenom||'')+' '+(c.nom||'')))+'</strong> parti pour Dakar &mdash; <strong>'+esc(nomDepart(departId))+'</strong>');
+  depRenderFacture(c);
+};
+
+// v1.19.64 : fixe le prix d'un client France & Europe inscrit avec "Prix à
+// définir à la collecte" — contrairement à la Collecte, il n'y a pas
+// d'écran "Valider" en amont pour le faire, donc c'est ici, à la facture
+// (retour de Cobey du 29/08/2026).
+window.depFranceFixerPrix = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx || !ctx.france) return;
+  var c = ((window.franceData||{}).clients||{})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  var inp = $('dep-fr-prix-input');
+  var v = parseFloat(inp && inp.value);
+  if(isNaN(v) || v < 0){ toast('⚠️ Entrez un prix valide.'); return; }
+
+  var u = window.currentUser || {};
+  var hist = (c.hist||[]).slice();
+  hist.push({ q: u.name||'', a: 'a fix&eacute; le prix &agrave; <strong>'+v+' &euro;</strong>', ts: Date.now(), type:'prix' });
+
+  c.prix = v;
+  c.prixADefinir = false;
+  c.hist = hist;
+
+  _depEcrireFacture(ctx, { prix: v, prixADefinir: false, hist: hist });
+
+  toast('✅ Prix fixé : ' + v + ' €');
   depRenderFacture(c);
 };
 
@@ -8074,16 +8129,23 @@ function greffer(){
           // Mitry-Mory — c'est là (et seulement là) que DCT choisit le
           // départ/container et déclare le départ pour Dakar (retour de
           // Cobey du 29/08/2026).
+          // v1.19.64 : déplacé en bas de fiche (groupé avec les autres
+          // actions Modifier/Notes/Supprimer, au lieu d'être tout en haut
+          // au-dessus des infos) et libellé unifié en simple "🧾 Facture",
+          // pour rester cohérent avec le bouton équivalent de la Collecte
+          // (retour de Cobey du 29/08/2026 : "il faut une cohérence pour
+          // les mêmes actions").
           var cFiche = ((window.franceData||{}).clients||{})[window.franceClientId];
           if(cFiche && typeof _peutGererFrance === 'function' && _peutGererFrance()
              && (cFiche.lieu === 'mitry' || cFiche.statut === 'parti')){
             var bFact = document.createElement('button');
             bFact.className = 'btn';
             bFact.style.cssText = 'background:#1a237e;color:#fff;';
-            bFact.innerHTML = cFiche.statut === 'parti' ? '🧾 Facture' : '🧾 Facture — Départ pour Dakar';
+            bFact.innerHTML = '🧾 Facture';
             var idFiche = window.franceClientId;
             bFact.onclick = function(){ depOuvrirFactureFrance(idFiche); };
-            box.insertBefore(bFact, box.firstChild);
+            var premierBtn = box.querySelector('button');
+            if(premierBtn) box.insertBefore(bFact, premierBtn); else box.appendChild(bFact);
           }
         }
       }catch(e){ console.error('departs: retrait photos fiche france', e); }
