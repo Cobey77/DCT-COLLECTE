@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.67';
+var DEP_VERSION = 'v1.19.68';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -347,6 +347,15 @@ var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
 var _depFactureCtx = null;      // { collecteId, clientId, depot, france } — facture actuellement affichée
+// v1.19.68 : la fiche client France & Europe (écran natif s-france-client)
+// a un bouton "← Suivi" toujours codé en dur vers l'écran France & Europe
+// — quand on l'ouvre depuis un container (Départ ou carré Dépôt), "retour"
+// doit plutôt ramener au container, pas au Suivi (retour de Cobey du
+// 29/08/2026 : "au lieu de revenir sur le container [...] il revient sur
+// les clients de la case France Europe"). { type:'depart'|'carre', id }
+// posé juste avant d'appeler la fiche, consommé une seule fois (voir
+// patch de window.ouvrirFicheFrance dans greffer()).
+var _depFicheFranceRetour = null;
 
 // v1.19.63 : résolution du client au centre de l'écran facture, désormais
 // sur 3 sources possibles (collecte, dépôt direct, France & Europe) au
@@ -1944,7 +1953,7 @@ function _depDepotCarreRenderListe(filtre){
       var clic = x.depot
         ? "depOuvrirDepotForm('"+departId+"','"+x.clientId+"',true)"
         : (x.france
-          ? "ouvrirFicheFrance('"+x.clientId+"')"
+          ? "depOuvrirFicheFranceDepuisCarre('"+x.clientId+"','"+departId+"')"
           : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"',true)");
       h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
         +   '<div style="flex:1;min-width:0;">'
@@ -3345,7 +3354,7 @@ window.depDetail = function(id, gardeFiltres){
       var clic = x.depot
         ? "depOuvrirDepotForm('"+id+"','"+x.clientId+"')"
         : (x.france
-          ? "ouvrirFicheFrance('"+x.clientId+"')"
+          ? "depOuvrirFicheFranceDepuisDepart('"+x.clientId+"','"+id+"')"
           : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"')");
       // v1.19.43 : le numéro n'est plus dans le texte de la ligne (trop
       // près des boutons juste en dessous, risque de mauvaise
@@ -3635,6 +3644,19 @@ window.depOuvrirFactureFrance = function(clientId){
   }
   depRenderFacture(c);
   goTo('s-facture');
+};
+
+// v1.19.68 : ouvre la fiche d'un client France & Europe depuis un
+// container (écran Départ ou carré Dépôt) en gardant le bon "retour" —
+// voir le patch de window.ouvrirFicheFrance dans greffer() qui lit
+// _depFicheFranceRetour juste après.
+window.depOuvrirFicheFranceDepuisDepart = function(clientId, departId){
+  _depFicheFranceRetour = { type: 'depart', id: departId };
+  ouvrirFicheFrance(clientId);
+};
+window.depOuvrirFicheFranceDepuisCarre = function(clientId, departId){
+  _depFicheFranceRetour = { type: 'carre', id: departId };
+  ouvrirFicheFrance(clientId);
 };
 
 // v1.19.23 : validation réelle de la collecte, déplacée ici (avant : au
@@ -8236,6 +8258,40 @@ function greffer(){
       }catch(e){ console.error('departs: retrait photos fiche france', e); }
     };
     window._renderFicheFrance._depPatch = true;
+  }
+  /* --- N ter bis (v1.19.68). Bouton "← Suivi" de la fiche client France &
+     Europe : codé en dur en natif vers l'écran France & Europe — ouvert
+     depuis un container (Départ ou carré Dépôt, voir
+     depOuvrirFicheFranceDepuisDepart/Carre ci-dessus), "retour" doit
+     plutôt ramener à ce container (retour de Cobey du 29/08/2026 : "au
+     lieu de revenir sur le container [...] il revient sur les clients de
+     la case France Europe"). _depFicheFranceRetour est consommé une
+     seule fois ici, sinon la fiche retombe sur son comportement natif. --- */
+  if(typeof window.ouvrirFicheFrance === 'function' && !window.ouvrirFicheFrance._depPatch){
+    var origOuvrirFicheFrance = window.ouvrirFicheFrance;
+    window.ouvrirFicheFrance = function(){
+      origOuvrirFicheFrance.apply(this, arguments);
+      try{
+        var retour = _depFicheFranceRetour;
+        _depFicheFranceRetour = null;
+        var btn = document.querySelector('#s-france-client .header .btn-back');
+        if(btn){
+          if(retour && retour.type === 'depart'){
+            var depId1 = retour.id;
+            btn.textContent = '← Départ';
+            btn.onclick = function(){ depDetail(depId1); };
+          } else if(retour && retour.type === 'carre'){
+            var depId2 = retour.id;
+            btn.textContent = '← Dépôt';
+            btn.onclick = function(){ depCarreDepotContainer(depId2); };
+          } else {
+            btn.textContent = '← Suivi';
+            btn.onclick = function(){ goTo('s-france'); };
+          }
+        }
+      }catch(e){ console.error('departs: retour fiche france', e); }
+    };
+    window.ouvrirFicheFrance._depPatch = true;
   }
   /* --- N quater (v1.19.62). Espace de Danny Diop (partenaire ramassage) :
      retrait du bouton "📷 Photos" sur chaque client du vivier ("Disponibles")
