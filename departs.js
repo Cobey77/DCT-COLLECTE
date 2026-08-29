@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.89';
+var DEP_VERSION = 'v1.19.90';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1846,8 +1846,12 @@ function injecterEcrans(){
   +     '<div class="h-title">Devis</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
+  // v1.19.90 : marge basse ajoutée sous les boutons (Exporter PDF / Modifier
+  // / Retour) — ils collaient contre le bas de l'écran (retour de Cobey du
+  // 30/08/2026), .content ne donnant que 20px alors que la facture publique
+  // (qui n'est pas encapsulée dans .content) en a 30 via .pub-wrap.
   +   '<div class="content">'
-  +     '<div class="pub-wrap" style="padding:0;" id="devis-doc-contenu"></div>'
+  +     '<div class="pub-wrap" style="padding:0 0 24px;" id="devis-doc-contenu"></div>'
   +   '</div>'
   + '</div>';
 
@@ -9599,7 +9603,14 @@ window.depRenderListeDevis = function(){
     var nomAffiche = _composeNom(d.civilite, d.prenom, d.nom) || 'Client';
     h += '<div class="dep-card">'
       +   '<div class="dep-card-top"><div class="dep-nom">'+pays.drapeau+' '+esc(nomAffiche)+'</div>'
-      +     '<div class="dep-badge" style="background:#E0F2F1;color:#00695C;">'+(parseFloat(d.montant)||0)+' &euro;</div></div>'
+      // v1.19.90 : le prix du colis et celui de la livraison sont désormais
+      // tous les deux visibles dans ce petit rectangle (l'un sous l'autre),
+      // pour que ce soit clair en un coup d'œil sans devoir lire tout le
+      // reste de la carte — retour de Cobey du 30/08/2026.
+      +     '<div class="dep-badge" style="background:#E0F2F1;color:#00695C;border-radius:10px;white-space:normal;text-align:right;line-height:1.3;padding:5px 9px;">'
+      +       '<div>'+(parseFloat(d.montant)||0)+' &euro;</div>'
+      +       (d.livraison ? ('<div style="font-size:9.5px;font-weight:700;color:#00838F;margin-top:2px;">+ '+(parseFloat(d.livraisonPrix)||0)+' &euro; livraison</div>') : '')
+      +     '</div></div>'
       +   '<div class="dep-meta"><span>'+_depLienTel(d.tel, d.tel||'—')+'</span><span>'+pays.nom+'</span></div>'
       +   '<div class="dep-meta" style="margin-top:4px;color:#999;"><span>Par '+esc(d.creeParNom||'—')+'</span><span>Le '+dateHeureFr(d.creeLe)+'</span></div>'
       +   (d.colis ? ('<div class="dep-meta" style="margin-top:4px;"><span>&#128230; '+esc(d.colis)+'</span></div>') : '')
@@ -9826,26 +9837,34 @@ function depRenderDevisDoc(d){
     +       '</tbody>'
     +     '</table></div>'
 
-    // v1.19.88 : la livraison ne s'additionne plus au MONTANT principal du
-    // devis (celui-ci reste le montant transport/colis, comme le TOTAL de
-    // la facture définitive reste colis-only) — retour de Cobey du
-    // 29/08/2026 : "ça tout additionner c'est pas bon".
-    // v1.19.89 : mais le client a besoin de voir le total qu'il va payer,
-    // donc on réaffiche une ligne informative "Total avec livraison" (même
-    // principe que depRenderFacturePublique) — retour de Cobey du
-    // 29/08/2026 : "le client a besoin de savoir le total de ce qu'il va
-    // payer". Ceci ne change QUE l'affichage du devis : depDevisValiderVers
+    // v1.19.88 : la livraison ne s'additionne plus au montant du devis dans
+    // le champ "montant" lui-même, ni dans le préremplissage vers Collecte/
+    // France (caisse à part DCT) — retour de Cobey du 29/08/2026 : "ça tout
+    // additionner c'est pas bon".
+    // v1.19.89 : le client a besoin de voir le total qu'il va payer → ajout
+    // d'une ligne informative "Total avec livraison".
+    // v1.19.90 : ce total (avec livraison) doit être LE chiffre mis en avant
+    // sur le devis — c'est lui que le client regarde pour savoir combien il
+    // va payer au global, pas le montant colis seul, qui peut prêter à
+    // confusion s'il est affiché en gras — retour de Cobey du 30/08/2026.
+    // Même schéma qu'avant (bloc secondaire, pointillés, petits caractères
+    // gris) mais inversé : le total avec livraison passe en ligne
+    // principale, le détail montant/livraison passe en second plan.
+    // ⚠️ Ceci ne change QUE l'affichage du devis : depDevisValiderVers
     // continue de préremplir montant et livraison dans des champs séparés
     // (caisse à part DCT pour les livraisons) — inchangé.
     +     '<div class="fac-bas">'
     +       '<div class="fac-lettres">Devis &agrave; titre indicatif, sans engagement &mdash; valable 15 jours.</div>'
     +       '<div class="fac-totaux">'
-    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>MONTANT</span><span>'+montantTransport+' &euro;</span></div>'
-    +         (d.livraison ? ('<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
-                + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+'</span><span>'+totalLivraison+' &euro;</span></div>'
-                + '<div style="font-size:10px;color:#aaa;padding:1.5px 4px;">Livraison hors comptabilit&eacute; DCT, r&eacute;gl&eacute;e &agrave; part</div>'
-                + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;margin-top:4px;"><span>Total avec livraison</span><span>'+(montantTransport+totalLivraison)+' &euro;</span></div>'
-                + '</div>') : '')
+    +         (d.livraison
+                ? (  '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL &Agrave; PAYER</span><span>'+(montantTransport+totalLivraison)+' &euro;</span></div>'
+                   + '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Montant colis / transport</span><span>'+montantTransport+' &euro;</span></div>'
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+'</span><span>'+totalLivraison+' &euro;</span></div>'
+                   + '<div style="font-size:10px;color:#aaa;padding:1.5px 4px;">Livraison hors comptabilit&eacute; DCT, r&eacute;gl&eacute;e &agrave; part</div>'
+                   + '</div>')
+                : ('<div class="fac-totaux-ligne fac-totaux-total"><span>MONTANT</span><span>'+montantTransport+' &euro;</span></div>')
+              )
     +       '</div>'
     +     '</div>'
 
