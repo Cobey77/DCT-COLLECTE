@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.84';
+var DEP_VERSION = 'v1.19.86';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1131,6 +1131,14 @@ function injecterEcrans(){
   +         '<div class="dep-case-tit" style="color:#B8720C;">INSCRIPTION AU D&Eacute;P&Ocirc;T</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-depot">—</div>'
   +       '</div>'
+  // v1.19.85 : nouveau carré DEVIS, ouvert à tout le monde (retour de
+  // Cobey du 29/08/2026) — permet d'établir un devis avant même
+  // l'inscription complète du client, avec export PDF à lui envoyer.
+  +       '<div class="dep-case" id="dep-case-devis" style="border-color:#00838F;" onclick="depOuvrirEspaceDevis()">'
+  +         '<div class="dep-case-ico">&#128203;</div>'
+  +         '<div class="dep-case-tit" style="color:#00838F;">DEVIS</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-devis">—</div>'
+  +       '</div>'
   +       '<div class="dep-case" style="border-color:#006b2d;" onclick="depOuvrirScanQR()">'
   +         '<div class="dep-case-ico">&#128247;</div>'
   +         '<div class="dep-case-tit" style="color:#006b2d;">QR CODE</div>'
@@ -1763,6 +1771,72 @@ function injecterEcrans(){
   +       '<button class="btn btn-gray" onclick="depValiderAnnuler()">&#10005; Annuler</button>'
   +     '</div>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN (v1.19.85) : liste des devis en attente — carré ouvert à
+     tout le monde, placé après "Inscription au dépôt". ---- */
+  + '<div class="screen" id="s-devis">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
+  +     '<div class="h-title">Devis</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<button class="btn btn-green" style="margin-bottom:16px;" onclick="depDevisNouveau()">+ Nouveau devis</button>'
+  +     '<div id="dep-devis-liste"></div>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN (v1.19.85) : nouveau devis — étape 2 (infos minimales),
+     le pays (étape 1) est choisi via modal-devis-pays avant d'arriver ici. ---- */
+  + '<div class="screen" id="s-devis-form">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-devis\');depRenderListeDevis();">&larr; Devis</button>'
+  +     '<div class="h-title">Nouveau devis</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div id="devis-pays-badge" style="font-size:12.5px;font-weight:600;color:#00695C;'
+  +       'background:#E0F2F1;border:1.5px solid #B2DFDB;border-radius:10px;padding:9px 12px;margin-bottom:14px;"></div>'
+  +     '<div class="fg"><label class="fl">Pr&eacute;nom ou nom du client</label>'
+  +       '<input class="fi" id="devis-f-nom" placeholder="Awa Ndiaye"></div>'
+  +     '<div class="fg"><label class="fl">T&eacute;l&eacute;phone</label>'
+  +       '<input class="fi" id="devis-f-tel" type="tel" placeholder="77 000 00 00"></div>'
+
+  +     '<div class="dep-sec">Livraison &agrave; Dakar</div>'
+  +     '<div class="fg"><label class="fl">Le colis doit-il &ecirc;tre livr&eacute; ?</label>'
+  +       '<div style="display:flex;gap:8px;">'
+  +         '<button type="button" class="dep-st" id="devis-f-liv-non" onclick="depDevisSetLivraison(false)">Non &middot; retrait sur place</button>'
+  +         '<button type="button" class="dep-st" id="devis-f-liv-oui" onclick="depDevisSetLivraison(true)">Oui &middot; livraison</button>'
+  +       '</div></div>'
+  +     '<div id="devis-f-liv-bloc" style="display:none;">'
+  +       '<div class="fg"><label class="fl">Ville / adresse de livraison</label>'
+  +         '<input class="fi" id="devis-f-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+  +       '<div class="fg"><label class="fl">Prix de la livraison (&euro;) '
+  +         '<span style="color:#aaa;font-weight:500;">&middot; peut &ecirc;tre ajout&eacute; plus tard</span></label>'
+  +         '<input class="fi" id="devis-f-liv-prix" type="number" min="0" placeholder="0"></div>'
+  +     '</div>'
+
+  +     '<div class="dep-sec">Montant du devis</div>'
+  +     '<div class="fg"><label class="fl">Montant (&euro;)</label>'
+  +       '<input class="fi" id="devis-f-montant" type="number" min="0" placeholder="0"></div>'
+
+  +     '<button class="btn btn-green" style="margin-top:14px;" onclick="depDevisEnregistrer()">Enregistrer le devis</button>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN (v1.19.85) : document du devis — mise en page reprise de
+     la facture publique (.fac-doc et consorts, voir #s-facture-publique),
+     avec export PDF pour l'envoyer au client. ---- */
+  + '<div class="screen" id="s-devis-doc">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-devis\');depRenderListeDevis();">&larr; Devis</button>'
+  +     '<div class="h-title">Devis</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div class="pub-wrap" style="padding:0;" id="devis-doc-contenu"></div>'
+  +   '</div>'
   + '</div>';
 
   while(w.firstChild) parent.appendChild(w.firstChild);
@@ -1968,6 +2042,59 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-fr-pays-client\');goTo(\'s-france\');">Annuler</button>'
     + '</div></div></div>';
   document.body.appendChild(m11);
+
+  /* ---- Modale (v1.19.85) : étape 1 du devis — choix du pays, ouverte
+     AVANT de quitter l'écran s-devis (contrairement aux modales pays
+     ci-dessus, on n'est donc jamais "coincé" ailleurs si on annule ici :
+     Annuler se contente de fermer la modale). ---- */
+  var m12 = document.createElement('div');
+  m12.className = 'modal-overlay';
+  m12.id = 'modal-devis-pays';
+  m12.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#127760;</div>'
+    + '<div class="modal-confirm-title">Devis pour&hellip;</div>'
+    + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Choisissez la destination du client.</div>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;">'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisChoisirPays(\'SN\')">&#127480;&#127475; S&eacute;n&eacute;gal</button>'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisChoisirPays(\'ML\')">&#127474;&#127473; Mali</button>'
+    + '</div>'
+    + '<div class="modal-confirm-btns" style="margin-top:14px;">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-devis-pays\')">Annuler</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m12);
+
+  /* ---- Modale (v1.19.85) : validation d'un devis — le parcours
+     (Collecte ou France & Europe) se choisit ICI, au moment de valider,
+     pas à la création du devis (retour de Cobey du 29/08/2026). ---- */
+  var m13 = document.createElement('div');
+  m13.className = 'modal-overlay';
+  m13.id = 'modal-devis-valider';
+  m13.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#128666;</div>'
+    + '<div class="modal-confirm-title">Valider ce devis</div>'
+    + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Dans quel parcours faut-il inscrire ce client ?</div>'
+    + '<div style="display:flex;flex-direction:column;gap:10px;">'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisValiderVers(\'collecte\')">&#128197; Collecte</button>'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisValiderVers(\'france\')">&#127467;&#127479;&#127466;&#127482; France &amp; Europe</button>'
+    + '</div>'
+    + '<div class="modal-confirm-btns" style="margin-top:14px;">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-devis-valider\')">Annuler</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m13);
+
+  /* ---- Modale (v1.19.85) : refus d'un devis — suppression définitive. ---- */
+  var m14 = document.createElement('div');
+  m14.className = 'modal-overlay';
+  m14.id = 'modal-devis-refuser';
+  m14.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#128465;&#65039;</div>'
+    + '<div class="modal-confirm-title">Refuser ce devis ?</div>'
+    + '<div style="font-size:13px;color:#555;margin:8px 0 12px;">Le devis sera d&eacute;finitivement supprim&eacute;.</div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-devis-refuser\')">Annuler</button>'
+    +   '<button class="btn-sm" style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;" onclick="depDevisConfirmerRefuser()">Refuser</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m14);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -2373,6 +2500,13 @@ function ecouterDeparts(){
     try{ if($('s-add') && $('s-add').classList.contains('active')) depRemplirSelect(); }catch(e){}
   });
 
+  // v1.19.85 : devis en attente — voir carré DEVIS.
+  db.ref('devis').on('value', function(snap){
+    window.devisData = snap.val() || {};
+    try{ if($('s-devis') && $('s-devis').classList.contains('active')) depRenderListeDevis(); }catch(e){}
+    try{ if($('s-espaces') && $('s-espaces').classList.contains('active')) depRenderEspaces(); }catch(e){}
+  });
+
   // Clients inscrits directement au dépôt, hors collecte
   db.ref('dct_depot').on('value', function(snap){
     window.depotClients = snap.val() || {};
@@ -2470,6 +2604,13 @@ window.depRenderEspaces = function(){
   if(sdp){
     var nbDp = Object.keys(window.depotClients||{}).length;
     sdp.innerHTML = nbDp === 0 ? 'Aucun client' : '<b style="color:#B8720C;">'+nbDp+'</b> client'+(nbDp>1?'s':'')+'<br>au d&eacute;p&ocirc;t';
+  }
+
+  // Case DEVIS (v1.19.85)
+  var sdv = $('dep-case-sub-devis');
+  if(sdv){
+    var nbDv = Object.keys(window.devisData||{}).length;
+    sdv.innerHTML = nbDv === 0 ? 'Aucun devis' : '<b style="color:#00838F;">'+nbDv+'</b> en attente';
   }
 
   // Case ARCHIVAGE (v1.19.0)
@@ -8247,6 +8388,12 @@ function greffer(){
     var origOuvrir = window.ouvrirAjoutClient;
     window.ouvrirAjoutClient = function(){
       origOuvrir.apply(this, arguments);
+      // v1.19.86 : nouvelle ouverture "normale" (pas via un devis) — on
+      // oublie tout devis en cours de redirection, pour ne jamais le
+      // supprimer par erreur au prochain enregistrement (voir
+      // depDevisValiderVers, qui reposera ce marqueur juste après cet
+      // appel s'il s'agit bien d'une redirection depuis un devis).
+      window._depDevisEnCoursId = null;
       try{ reinitialiserNouveauxChamps(); }catch(e){}
       // v1.19.15 : les suggestions de contact existent déjà nativement sur ce
       // formulaire (f-prenom/f-nom/f-tel → _showSuggestionsCombo) — on ajoute
@@ -8372,6 +8519,16 @@ function greffer(){
           // La photo du colis n'est plus prise ici : elle se prend au moment
           // de la validation de la collecte (voir depOuvrirPhotoValider).
           sauvegarder();
+          // v1.19.86 : le devis d'origine (voir depDevisValiderVers) n'est
+          // supprimé qu'ICI, une fois la fiche vraiment enregistrée — pas
+          // au moment du clic sur "Valider" (retour de Cobey du
+          // 29/08/2026 : "il faut garder le devis si jamais le
+          // collaborateur quitte en cours de parcours"). S'il abandonne en
+          // route, le devis reste tel quel dans la liste.
+          if(window._depDevisEnCoursId){
+            try{ db.ref('devis/'+window._depDevisEnCoursId).remove(); }catch(eDv){}
+            window._depDevisEnCoursId = null;
+          }
         }
       }catch(e){}
 
@@ -8765,6 +8922,8 @@ function greffer(){
     var origOuvrirFrance = window.ouvrirAjoutFrance;
     window.ouvrirAjoutFrance = function(){
       origOuvrirFrance.apply(this, arguments);
+      // v1.19.86 : idem Collecte — voir le patch de ouvrirAjoutClient.
+      window._depDevisEnCoursId = null;
       // v1.19.74 : "Inscrire un client" partage l'écran (s-france-add) avec
       // "Modifier la fiche" (voir le patch de modifierClientFrance
       // ci-dessous, qui personnalise le bouton retour) — sans cette remise
@@ -9023,6 +9182,13 @@ function greffer(){
             maj['clients/'+id+'/notes'] = listeNotes;
           }
           db.ref('france').update(maj);
+          // v1.19.86 : idem Collecte — le devis d'origine n'est supprimé
+          // qu'une fois la fiche vraiment enregistrée (voir
+          // depDevisValiderVers et le patch de saveClientConfirme).
+          if(!editId && window._depDevisEnCoursId){
+            try{ db.ref('devis/'+window._depDevisEnCoursId).remove(); }catch(eDv){}
+            window._depDevisEnCoursId = null;
+          }
         }
       }catch(e4){ console.error('departs: extras france', e4); }
     };
@@ -9385,6 +9551,263 @@ function depActivite(emoji, texte){
     }
   }catch(e){}
 }
+
+/* ─────────────────────────────────────────────
+   13bis (v1.19.85). CARRÉ "DEVIS" — devis avant inscription complète,
+   ouvert à tout le monde (retour de Cobey du 29/08/2026). Étape 1 : choix
+   du pays (modal-devis-pays). Étape 2 : infos minimales (nom/prénom,
+   téléphone obligatoire, livraison éventuelle, montant libre). Génère un
+   document PDF similaire à la facture (voir #s-facture-publique / .fac-*).
+   À la validation, le parcours (Collecte ou France & Europe) est choisi
+   à ce moment-là (pas à la création) — le client est redirigé dans ce
+   parcours avec les infos déjà connues pré-remplies ; il ne reste plus
+   qu'à compléter le reste (date de collecte, destinataire, photos,
+   adresse...). Au refus, le devis est simplement supprimé.
+   ───────────────────────────────────────────── */
+
+window.depOuvrirEspaceDevis = function(){
+  goTo('s-devis');
+  depRenderListeDevis();
+};
+
+window.depRenderListeDevis = function(){
+  var box = $('dep-devis-liste');
+  if(!box) return;
+  var data = window.devisData || {};
+  var ids = Object.keys(data);
+  if(!ids.length){
+    box.innerHTML = '<div class="dep-vide" style="padding:28px 16px;">Aucun devis en attente pour l\'instant.</div>';
+    return;
+  }
+  var items = ids.map(function(k){ return Object.assign({_id:k}, data[k]); })
+    .sort(function(a,b){ return (b.creeLe||0) - (a.creeLe||0); });
+  var h = '';
+  items.forEach(function(d){
+    var pays = DEP_PAYS_DEST[d.pays] || DEP_PAYS_DEST[DEP_PAYS_DEFAUT];
+    h += '<div class="dep-card">'
+      +   '<div class="dep-card-top"><div class="dep-nom">'+pays.drapeau+' '+esc(d.nom||'Client')+'</div>'
+      +     '<div class="dep-badge" style="background:#E0F2F1;color:#00695C;">'+(parseFloat(d.montant)||0)+' &euro;</div></div>'
+      +   '<div class="dep-meta"><span>'+_depLienTel(d.tel, d.tel||'—')+'</span><span>'+pays.nom+'</span></div>'
+      +   '<div class="dep-meta" style="margin-top:4px;color:#999;"><span>Par '+esc(d.creeParNom||'—')+'</span><span>Le '+dateHeureFr(d.creeLe)+'</span></div>'
+      +   (d.livraison ? ('<div class="dep-meta" style="margin-top:4px;"><span>&#128666; Livraison'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+(d.livraisonPrix ? (' &middot; '+d.livraisonPrix+' &euro;') : '')+'</span></div>') : '')
+      +   '<div class="dep-cli-btns">'
+      +     '<button class="dep-cli-btn" onclick="depOuvrirDevisDoc(\''+d._id+'\')">&#128196; PDF</button>'
+      +     '<button class="dep-cli-btn" style="background:var(--green-light);border-color:#C8E6D0;color:var(--green-dark);" onclick="depDevisDemanderValider(\''+d._id+'\')">&#10003; Valider</button>'
+      +     '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" onclick="depDevisDemanderRefuser(\''+d._id+'\')">&#10005; Refuser</button>'
+      +   '</div>'
+      + '</div>';
+  });
+  box.innerHTML = h;
+};
+
+window.depDevisNouveau = function(){
+  window._depDevisPaysChoisi = null;
+  openModal('modal-devis-pays');
+};
+
+window.depDevisChoisirPays = function(pays){
+  window._depDevisPaysChoisi = pays;
+  closeModal('modal-devis-pays');
+  ['devis-f-nom','devis-f-tel','devis-f-liv-adresse','devis-f-liv-prix','devis-f-montant'].forEach(function(id){
+    var e = $(id); if(e) e.value = '';
+  });
+  depDevisSetLivraison(false);
+  var badge = $('devis-pays-badge');
+  if(badge){
+    var p = DEP_PAYS_DEST[pays] || {};
+    badge.innerHTML = 'Destination : <b>'+(p.drapeau||'')+' '+(p.nom||'')+'</b> &middot; '
+      + '<a href="#" onclick="event.preventDefault();openModal(\'modal-devis-pays\');">changer</a>';
+  }
+  goTo('s-devis-form');
+};
+
+window.depDevisSetLivraison = function(oui){
+  var bOui = $('devis-f-liv-oui'), bNon = $('devis-f-liv-non'), bloc = $('devis-f-liv-bloc');
+  if(bOui) bOui.className = 'dep-st' + (oui ? ' on' : '');
+  if(bNon) bNon.className = 'dep-st' + (oui ? '' : ' on');
+  if(bloc) bloc.style.display = oui ? 'block' : 'none';
+  window._depDevisLivraison = oui;
+};
+
+window.depDevisEnregistrer = function(){
+  if(!window._depDevisPaysChoisi){
+    toast('⚠️ Choisissez d\'abord le pays de destination.');
+    openModal('modal-devis-pays');
+    return;
+  }
+  var nom = (($('devis-f-nom')||{}).value || '').trim();
+  var tel = (($('devis-f-tel')||{}).value || '').trim();
+  var montant = parseFloat(($('devis-f-montant')||{}).value) || 0;
+  if(!nom){ toast('⚠️ Indiquez le nom ou le prénom du client.'); return; }
+  if(!tel){ toast('⚠️ Le téléphone est obligatoire.'); return; }
+  if(!montant){ toast('⚠️ Indiquez le montant du devis.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
+  var liv = !!window._depDevisLivraison;
+  var obj = {
+    nom: nom,
+    tel: tel,
+    pays: window._depDevisPaysChoisi,
+    livraison: liv,
+    livraisonAdresse: liv ? (($('devis-f-liv-adresse')||{}).value || '').trim() : '',
+    livraisonPrix: liv ? (parseFloat(($('devis-f-liv-prix')||{}).value) || 0) : 0,
+    montant: montant,
+    creeLe: Date.now(),
+    creePar: (window.currentUser||{}).id || '',
+    creeParNom: (window.currentUser||{}).name || ''
+  };
+  db.ref('devis').push(obj).then(function(ref){
+    toast('✅ Devis enregistré.');
+    try{ depOuvrirDevisDoc(ref.key); }catch(e){ goTo('s-devis'); depRenderListeDevis(); }
+  }).catch(function(e){
+    console.error('departs: enregistrement devis', e);
+    toast('❌ Échec de l\'enregistrement, réessayez.');
+  });
+};
+
+window.depOuvrirDevisDoc = function(id){
+  var d = (window.devisData||{})[id];
+  if(!d){ toast('⚠️ Devis introuvable.'); return; }
+  window._depDevisDocId = id;
+  depRenderDevisDoc(d);
+  goTo('s-devis-doc');
+};
+
+function depRenderDevisDoc(d){
+  var box = $('devis-doc-contenu');
+  if(!box) return;
+  var pays = DEP_PAYS_DEST[d.pays] || DEP_PAYS_DEST[DEP_PAYS_DEFAUT];
+  var totalLivraison = d.livraison ? (parseFloat(d.livraisonPrix) || 0) : 0;
+  var totalGeneral = (parseFloat(d.montant) || 0) + totalLivraison;
+  var h = '<div class="fac-doc">'
+    +   '<div class="fac-topbar"></div>'
+    +   '<div class="fac-body">'
+
+    +     '<div class="fac-header">'
+    +       '<div class="fac-brand">'
+    +         '<img class="fac-brand-logo" src="'+DEP_LOGO_B64+'" alt="Dakar City Transport">'
+    +         '<div>'
+    +           '<div class="fac-brand-nom">DAKAR CITY TRANSPORT</div>'
+    +           '<div class="fac-brand-sub">Paris<br>T&eacute;l&nbsp;: +33 6 69 18 30 01 / +33 6 03 67 04 98<br>Email&nbsp;: contact@dakarcitytransport.com<br>Site web&nbsp;: dakarcitytransport.com<br>TikTok &amp; Instagram&nbsp;: @dakar_ct</div>'
+    +         '</div>'
+    +       '</div>'
+    +       '<div class="fac-info">'
+    +         '<div class="fac-info-box">'
+    +           '<div class="fac-info-titre">DEVIS</div>'
+    +           '<div class="fac-info-ligne"><span>Destination</span><strong>'+pays.drapeau+' '+pays.nom+'</strong></div>'
+    +           '<div class="fac-info-ligne"><span>Date</span><strong>'+esc(dateHeureFr(d.creeLe))+'</strong></div>'
+    +           '<div class="fac-info-ligne"><span>&Eacute;tabli par</span><strong>'+esc(d.creeParNom||'—')+'</strong></div>'
+    +         '</div>'
+    +       '</div>'
+    +     '</div>'
+
+    +     '<hr class="fac-sep">'
+
+    +     '<div class="fac-parties">'
+    +       '<div>'
+    +         '<div class="fac-partie-titre">CLIENT</div>'
+    +         '<div class="fac-partie-nom">'+esc(d.nom||'—')+'</div>'
+    +         '<div class="fac-partie-detail">'+_depLienTel(d.tel, d.tel||'—')+'</div>'
+    +       '</div>'
+    +     '</div>'
+
+    +     '<div class="fac-tbl-wrap"><table class="fac-table">'
+    +       '<thead><tr><th>N&deg;</th><th>Description</th><th>Montant</th></tr></thead>'
+    +       '<tbody>'
+    +         '<tr><td>1</td><td>Transport '+pays.drapeau+' '+pays.nom+'</td><td>'+(parseFloat(d.montant)||0)+' &euro;</td></tr>'
+    +         (d.livraison ? ('<tr><td>2</td><td>Livraison &agrave; Dakar'+(d.livraisonAdresse ? (' &mdash; '+esc(d.livraisonAdresse)) : '')+'</td><td>'+totalLivraison+' &euro;</td></tr>') : '')
+    +       '</tbody>'
+    +     '</table></div>'
+
+    +     '<div class="fac-bas">'
+    +       '<div class="fac-lettres">Devis &agrave; titre indicatif, sans engagement &mdash; valable 15 jours.</div>'
+    +       '<div class="fac-totaux">'
+    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL ESTIM&Eacute;</span><span>'+totalGeneral+' &euro;</span></div>'
+    +       '</div>'
+    +     '</div>'
+
+    +   '</div>' // fac-body
+    +   '<div class="fac-footer">DAKAR CITY TRANSPORT &middot; Paris &middot; T&eacute;l&nbsp;: +33 6 69 18 30 01 / +33 6 03 67 04 98<br>Email&nbsp;: contact@dakarcitytransport.com &middot; Site web&nbsp;: dakarcitytransport.com &middot; TikTok &amp; Instagram&nbsp;: @dakar_ct</div>'
+    + '</div>' // fin .fac-doc
+
+    + '<div class="fac-actions">'
+    +   '<button type="button" class="fac-btn fac-btn-print" onclick="depExporterDevisPDF()">&#128196; Exporter en PDF</button>'
+    +   '<button type="button" class="fac-btn fac-btn-retour" onclick="goTo(\'s-devis\');depRenderListeDevis();">&larr; Retour aux devis</button>'
+    + '</div>';
+  box.innerHTML = h;
+}
+
+window.depExporterDevisPDF = function(){
+  var id = window._depDevisDocId;
+  var d = (window.devisData||{})[id];
+  var box = $('devis-doc-contenu');
+  var el = box ? box.querySelector('.fac-doc') : null;
+  var nom = d ? (d.nom||'Client') : 'Client';
+  _depExporterFacturePDFViaCanvas(el, 'Devis - ' + nom + '.pdf');
+};
+
+window.depDevisDemanderValider = function(id){
+  window._depDevisAValider = id;
+  openModal('modal-devis-valider');
+};
+
+// v1.19.85 : le parcours (Collecte / France & Europe) se choisit ici, au
+// moment de valider — voir modal-devis-valider.
+// v1.19.86 : le devis n'est PLUS supprimé ici — seulement une fois la
+// fiche vraiment enregistrée dans le parcours choisi (voir le patch de
+// saveClientConfirme pour la Collecte et de saveClientFrance pour France
+// & Europe) — retour de Cobey du 29/08/2026 : "il faut garder le devis
+// si jamais le collaborateur quitte en cours de parcours". On se
+// contente ici de mémoriser QUEL devis est en train d'être transformé
+// (window._depDevisEnCoursId), remis à zéro à chaque nouvelle ouverture
+// "normale" du formulaire (voir ouvrirAjoutClient/ouvrirAjoutFrance) pour
+// ne jamais en supprimer un par erreur.
+window.depDevisValiderVers = function(parcours){
+  var id = window._depDevisAValider;
+  var d = (window.devisData||{})[id];
+  closeModal('modal-devis-valider');
+  if(!d){ toast('⚠️ Devis introuvable.'); return; }
+  var snap = Object.assign({}, d);
+
+  if(parcours === 'france'){
+    ouvrirAjoutFrance();
+    window._depDevisEnCoursId = id;
+    try{ depFrChoisirPaysClient(snap.pays); }catch(e){}
+    var fnom = $('fa-nom'); if(fnom) fnom.value = snap.nom || '';
+    var ftel = $('fa-tel'); if(ftel) ftel.value = snap.tel || '';
+    var fprix = $('fa-prix'); if(fprix) fprix.value = snap.montant || '';
+    if(snap.livraison){
+      depSetLivraisonFrance(true);
+      var fla = $('fa-liv-adresse'); if(fla) fla.value = snap.livraisonAdresse || '';
+      var flp = $('fa-liv-prix'); if(flp) flp.value = snap.livraisonPrix || '';
+    }
+  } else {
+    ouvrirAjoutClient();
+    window._depDevisEnCoursId = id;
+    try{ depChoisirPaysClient(snap.pays); }catch(e){}
+    var nom = $('f-nom'); if(nom) nom.value = snap.nom || '';
+    var tel = $('f-tel'); if(tel) tel.value = snap.tel || '';
+    var prix = $('f-prix'); if(prix) prix.value = snap.montant || '';
+    if(snap.livraison){
+      depSetLivraison(true);
+      var la = $('f-liv-adresse'); if(la) la.value = snap.livraisonAdresse || '';
+      var lp = $('f-liv-prix'); if(lp) lp.value = snap.livraisonPrix || '';
+    }
+  }
+  toast('✅ Devis transformé — complétez les informations manquantes (date de collecte, destinataire, photos...).');
+};
+
+window.depDevisDemanderRefuser = function(id){
+  window._depDevisARefuser = id;
+  openModal('modal-devis-refuser');
+};
+
+window.depDevisConfirmerRefuser = function(){
+  var id = window._depDevisARefuser;
+  closeModal('modal-devis-refuser');
+  if(!id) return;
+  try{ db.ref('devis/'+id).remove(); }catch(e){}
+  toast('🗑️ Devis refusé et supprimé.');
+};
 
 /* ─────────────────────────────────────────────
    14. DÉMARRAGE
