@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.72';
+var DEP_VERSION = 'v1.19.73';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -962,6 +962,16 @@ function injecterStyles(){
     + '.dep-etape-fait .dep-etape-lbl{color:var(--green-dark);}'
     + '.dep-etape-date{font-size:8.5px;color:var(--text3);margin-top:2px;}'
     + '.dep-etapes-fait{font-size:12.5px;font-weight:700;color:var(--green-dark);text-align:center;flex:1;padding:9px;}'
+    + '.dep-etapes-lecture-seule{font-size:11.5px;color:var(--text3);text-align:center;margin-top:12px;font-style:italic;}'
+    // v1.19.73 : résumé compact (bouton de navigation, aucune action) dans
+    // le détail du départ — remplace l'ancien bloc directement actionnable.
+    + '.dep-etapes-resume{display:flex;align-items:center;gap:12px;background:#fff;border:1.5px solid var(--border);'
+    +   'border-radius:var(--radius);padding:14px;margin-bottom:14px;cursor:pointer;}'
+    + '.dep-etapes-resume-ico{font-size:22px;flex-shrink:0;}'
+    + '.dep-etapes-resume-txt{flex:1;min-width:0;}'
+    + '.dep-etapes-resume-tit{font-size:13.5px;font-weight:800;color:var(--text);}'
+    + '.dep-etapes-resume-sub{font-size:11.5px;color:var(--text3);margin-top:2px;}'
+    + '.dep-etapes-resume-chevron{font-size:22px;color:#ccc;flex-shrink:0;}'
     + '.dep-menu-item{display:flex;align-items:center;gap:12px;width:100%;background:#fff;'
     +   'border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;'
     +   'margin-bottom:9px;font-family:var(--font);cursor:pointer;text-align:left;}'
@@ -984,7 +994,7 @@ function injecterStyles(){
     // dernier bouton touchait le bas de l'écran, vu sur plusieurs fenêtres
     // (retour de Cobey du 24/08/2026). Marge généreuse sur tous les écrans
     // ajoutés par departs.js.
-    + '#s-departs .content, #s-departs-pays .content, #s-depart-form .content, #s-depart-detail .content, '
+    + '#s-departs .content, #s-departs-pays .content, #s-depart-form .content, #s-depart-detail .content, #s-dep-etapes .content, '
     +   '#s-depot-form .content, #s-facture .content, #s-dep-suivi .content, #s-dep-valider .content, '
     +   '#s-dep-fiche-lecture .content, #s-client-fiche .content, #s-dep-historique-contact .content, '
     +   '#s-dep-impression .content, #s-espaces .content, #s-etiquette .content, #s-archive .content, '
@@ -1169,8 +1179,11 @@ function injecterEcrans(){
   +       '<div class="dep-toggle" id="dep-f-toggle"><i></i></div>'
   +     '</div>'
   +     '<div id="dep-f-bloc-statut" style="display:none;">'
-  +       '<div class="dep-sec">Statut du d&eacute;part</div>'
-  +       '<div class="dep-statuts" id="dep-f-statuts"></div>'
+  +       '<div class="dep-switch" onclick="depToggleCloture()" style="border-color:#e8b0b0;">'
+  +         '<div><div class="dep-switch-lab">Cl&ocirc;turer ce container</div>'
+  +         '<div class="dep-switch-sub">Ferme d&eacute;finitivement le container (action administrative)</div></div>'
+  +         '<div class="dep-toggle" id="dep-f-toggle-cloture"><i></i></div>'
+  +       '</div>'
   +     '</div>'
   +     '<div style="margin-top:18px;">'
   +       '<button class="btn btn-green" onclick="depEnregistrer()">&#9989; Enregistrer</button>'
@@ -1191,6 +1204,22 @@ function injecterEcrans(){
   +   '<div class="content">'
   +     '<input class="fi" id="dep-d-recherche" placeholder="&#128269; Rechercher un client (exp&eacute;diteur ou destinataire)" style="margin-bottom:14px;" oninput="depDetailFiltrerRecherche()">'
   +     '<div id="dep-d-content"></div>'
+  +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN 4bis (v1.19.73) : Suivi transport — écran séparé, pour
+     qu'Issyaka ne puisse pas valider une étape par erreur en consultant
+     juste la liste des clients (retour de Cobey du 29/08/2026 : "trop de
+     possibilité de retoucher sans faire exprès"). ---- */
+  + '<div class="screen" id="s-dep-etapes">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="depEtapesRetour()">&larr; Retour</button>'
+  +     '<div style="text-align:center;"><div class="h-title">Suivi transport</div>'
+  +     '<div class="h-sub" id="dep-etapes-nom"></div></div>'
+  +     '<div style="width:52px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div id="dep-etapes-content"></div>'
   +   '</div>'
   + '</div>'
 
@@ -1514,6 +1543,10 @@ function injecterEcrans(){
   +       '.fac-doc{overflow:visible !important;box-shadow:none;border-radius:0;}'
   +       '.pub-wrap{padding:0;max-width:100%;}'
   +       '.fac-parties{grid-template-columns:1fr 1fr !important;}'
+  // v1.19.73 : le document "page 2" (suivi transport) démarre sur une
+  // nouvelle page à l'impression navigateur (Ctrl/Cmd+P) — l'export PDF
+  // "Imprimer / PDF" ci-dessus gère déjà sa propre pagination.
+  +       '.fac-doc-page2{page-break-before:always;margin-top:0 !important;}'
   +     '}'
   +   '</style>'
   +   '<div class="pub-wrap">'
@@ -3126,12 +3159,18 @@ window.depRenderListe = function(){
    ───────────────────────────────────────────── */
 
 var _depFormOuvert = false;
-var _depFormStatut = 'preparation';
+// v1.19.73 : l'ancien choix à 4 valeurs (préparation/parti/arrivé/clôturé)
+// est retiré de ce formulaire — il faisait doublon avec le suivi transport
+// précis (voir depRenderEtapesTransportEcran) et pouvait être changé par
+// erreur (retour de Cobey du 29/08/2026). Ne reste ici qu'un interrupteur
+// "Clôturé", la seule action encore purement administrative (fermer le
+// container) — indépendante du suivi montré au client.
+var _depFormCloture = false;
 
 window.depNouveau = function(){
   _depEditId = null;
   _depFormOuvert = false;
-  _depFormStatut = 'preparation';
+  _depFormCloture = false;
   // v1.19.16 : le pays du nouveau container est celui du sous-carré dans
   // lequel on se trouve déjà (voir depOuvrirDepartsPays) — pas de choix
   // supplémentaire à ce niveau, juste un rappel visuel dans le titre.
@@ -3149,7 +3188,7 @@ window.depModifier = function(id){
   if(!d){ toast('⚠️ Départ introuvable.'); return; }
   _depEditId = id;
   _depFormOuvert = (d.ouvertInscription === true);
-  _depFormStatut = d.statut || 'preparation';
+  _depFormCloture = (d.statut === 'cloture');
   var pM = DEP_PAYS_DEST[depPaysDepart(d)] || {};
   var t = $('dep-form-titre'); if(t) t.innerHTML = 'Modifier le d&eacute;part &middot; ' + pM.drapeau + ' ' + pM.nom;
   var e;
@@ -3158,7 +3197,6 @@ window.depModifier = function(id){
   e = $('dep-f-arrivee'); if(e) e.value = d.dateArriveePrevue || '';
 
   var bs = $('dep-f-bloc-statut'); if(bs) bs.style.display = 'block';
-  depRenderStatuts();
 
   var cp = compteursDepart(id);
   var sp = $('dep-f-suppr');
@@ -3181,27 +3219,17 @@ window.depToggleOuvert = function(){
   depMajToggle();
 };
 
+window.depToggleCloture = function(){
+  _depFormCloture = !_depFormCloture;
+  depMajToggle();
+};
+
 function depMajToggle(){
   var t = $('dep-f-toggle');
   if(t) t.className = 'dep-toggle' + (_depFormOuvert ? ' on' : '');
+  var tc = $('dep-f-toggle-cloture');
+  if(tc) tc.className = 'dep-toggle' + (_depFormCloture ? ' on' : '');
 }
-
-function depRenderStatuts(){
-  var box = $('dep-f-statuts');
-  if(!box) return;
-  var h = '';
-  ORDRE_STATUTS.forEach(function(k){
-    var s = STATUTS_DEPART[k];
-    h += '<button type="button" class="dep-st'+(_depFormStatut===k?' on':'')+'" '
-      +  'onclick="depSetStatut(\''+k+'\')">'+s.label+'</button>';
-  });
-  box.innerHTML = h;
-}
-
-window.depSetStatut = function(k){
-  _depFormStatut = k;
-  depRenderStatuts();
-};
 
 window.depEnregistrer = function(){
   var nom     = ($('dep-f-nom')||{}).value || '';
@@ -3219,7 +3247,7 @@ window.depEnregistrer = function(){
     dateDepart        : date,
     dateArriveePrevue : arrivee || '',
     ouvertInscription : !!_depFormOuvert,
-    statut            : _depFormStatut || 'preparation'
+    statut            : _depFormCloture ? 'cloture' : 'preparation'
   };
 
   // v1.18.0 : le statut du départ (préparation/parti/arrivé/clôturé) n'avait
@@ -3276,11 +3304,27 @@ window.depSupprimer = function(){
 };
 
 /* ─────────────────────────────────────────────
-   9bis. SUIVI TRANSPORT (v1.19.72) — étapes validées une à une par Issyaka
-   depuis le détail du départ, stockées sur le container (departs/{id}/
-   etapesTransport), lues à la fois ici (pour le bouton "étape suivante")
-   et sur la facture publique (voir depRenderSuiviTransportPublic).
+   9bis. SUIVI TRANSPORT (v1.19.72, écran dédié depuis v1.19.73) — étapes
+   validées une à une par Issyaka, stockées sur le container (departs/{id}/
+   etapesTransport), lues à la fois ici et sur la facture publique (voir
+   depRenderSuiviTransportPublic). v1.19.73 : déplacé du détail du départ
+   (mélangé avec la liste des clients) vers un écran séparé (s-dep-etapes),
+   ouvert via un bouton résumé — retour de Cobey du 29/08/2026 : "trop de
+   possibilité de retoucher sans faire exprès" en consultant juste la
+   liste des clients.
    ───────────────────────────────────────────── */
+
+window.depOuvrirEtapesTransport = function(id){
+  var d = (window.departsData||{})[id];
+  if(!d){ toast('⚠️ Départ introuvable.'); return; }
+  var t = $('dep-etapes-nom'); if(t) t.textContent = d.nom || 'Départ';
+  depRenderEtapesTransportEcran(id);
+  goTo('s-dep-etapes');
+};
+
+window.depEtapesRetour = function(){
+  goTo('s-depart-detail'); depDetail(_depDetailIdPublic(), true);
+};
 
 window.depEtapeSuivante = function(){
   if(!estDirection()){ toast('⛔ Réservé à la direction.'); return; }
@@ -3298,7 +3342,7 @@ window.depEtapeSuivante = function(){
   db.ref('departs/'+id+'/etapesTransport').update(maj).then(function(){
     toast('✅ ' + prochaine.label);
     depActivite('🚚', 'a validé l\'étape « ' + esc(prochaine.label) + ' » pour <strong>' + esc(d.nom||'') + '</strong>');
-    depDetail(id, true);
+    depRenderEtapesTransportEcran(id);
   }).catch(function(e){ toast('❌ Échec : ' + ((e && e.message) || 'enregistrement refusé')); });
 };
 
@@ -3315,11 +3359,35 @@ window.depEtapeAnnuler = function(){
   if(!confirm('Annuler l\'étape « ' + derniere.label + ' » ?')) return;
   db.ref('departs/'+id+'/etapesTransport/'+derniere.key).remove().then(function(){
     toast('↩️ Étape annulée');
-    depDetail(id, true);
+    depRenderEtapesTransportEcran(id);
   }).catch(function(e){ toast('❌ Échec : ' + ((e && e.message) || 'annulation refusée')); });
 };
 
-function depRenderEtapesTransportAdmin(d){
+// v1.19.73 : résumé compact affiché dans le détail du départ — un simple
+// bouton de navigation (aucune action déclenchée en un tap), pour ouvrir
+// l'écran dédié ci-dessous.
+function depRenderEtapesTransportResume(d, id){
+  var etapes = depEtapesTransportPour(depPaysDepart(d));
+  var fait = d.etapesTransport || {};
+  var dernierIdx = -1;
+  etapes.forEach(function(e, i){ if(fait[e.key] && fait[e.key].fait) dernierIdx = i; });
+  var etapeTxt = dernierIdx >= 0 ? esc(etapes[dernierIdx].label) : 'Pas encore commenc&eacute;';
+  return '<div class="dep-etapes-resume" onclick="depOuvrirEtapesTransport(\''+id+'\')">'
+    +   '<div class="dep-etapes-resume-ico">&#128667;</div>'
+    +   '<div class="dep-etapes-resume-txt">'
+    +     '<div class="dep-etapes-resume-tit">Suivi transport</div>'
+    +     '<div class="dep-etapes-resume-sub">' + etapeTxt + ' &middot; ' + (dernierIdx + 1) + '/' + etapes.length + '</div>'
+    +   '</div>'
+    +   '<div class="dep-etapes-resume-chevron">&rsaquo;</div>'
+    + '</div>';
+}
+
+function depRenderEtapesTransportEcran(id){
+  var d = (window.departsData||{})[id];
+  var box = $('dep-etapes-content');
+  if(!box) return;
+  if(!d){ box.innerHTML = '<div class="dep-vide">Départ introuvable.</div>'; return; }
+
   var etapes = depEtapesTransportPour(depPaysDepart(d));
   var fait = d.etapesTransport || {};
   var dernierIdx = -1;
@@ -3345,9 +3413,11 @@ function depRenderEtapesTransportAdmin(d){
         : '<div class="dep-etapes-fait">&#9989; Toutes les &eacute;tapes sont valid&eacute;es</div>')
       + (dernierIdx >= 0 ? '<button class="btn btn-gray" style="width:auto;padding:11px 14px;" onclick="depEtapeAnnuler()">Annuler</button>' : '')
       + '</div>';
+  } else {
+    h += '<div class="dep-etapes-lecture-seule">Lecture seule — r&eacute;serv&eacute; &agrave; la direction.</div>';
   }
   h += '</div>';
-  return h;
+  box.innerHTML = h;
 }
 
 /* ─────────────────────────────────────────────
@@ -3431,7 +3501,7 @@ window.depDetail = function(id, gardeFiltres){
   // v1.19.72 : suivi transport (étapes visibles par le client), affiché
   // uniquement pour un vrai container — le Dépôt (DEP_ID_DEPOT) est un
   // simple stockage en attente, sans parcours à suivre.
-  if(!estDepot) h += depRenderEtapesTransportAdmin(d);
+  if(!estDepot) h += depRenderEtapesTransportResume(d, id);
 
   // Les clients rattachés : ceux venus d'une collecte + ceux inscrits
   // directement au dépôt (hors collecte)
@@ -4072,18 +4142,23 @@ function _depChargerHtml2canvasEtJsPDF(cb){
 // canvas obtenu (en px "physiques") vers des mm (96px CSS = 25.4mm).
 var DEP_PDF_SCALE_CAPTURE = 2;
 
-// Génère le PDF de la facture (A4, UNE SEULE page) — remplace l'ancien
-// _depExporterPDFDepuisElement pour ce cas précis. v1.19.32 découpait la
-// facture sur plusieurs pages A4 pleine largeur ; retour de Cobey du
-// 23/08/2026 ("la facture a4 est sur 2 page du coup, faut la mettre sur une
-// page !") : on capture le document une seule fois, puis on le recale
-// ("contain", même logique que pour l'étiquette) pour qu'il tienne
-// entièrement dans les limites d'UNE page A4, en choisissant l'axe le plus
-// contraignant (largeur ou hauteur). Sur une facture avec beaucoup de
-// lignes, le texte ressort un peu plus petit, mais rien n'est jamais coupé
-// et tout tient toujours sur une seule page. `ignoreElements` retire les
-// boutons ("no-print", qui sont bien à l'intérieur de .fac-doc).
-function _depExporterFacturePDFViaCanvas(el, nomFichier){
+// Génère le PDF de la facture (A4, une page — deux si le suivi transport
+// est présent, voir elPage2) — remplace l'ancien _depExporterPDFDepuisElement
+// pour ce cas précis. v1.19.32 découpait la facture sur plusieurs pages A4
+// pleine largeur ; retour de Cobey du 23/08/2026 ("la facture a4 est sur 2
+// page du coup, faut la mettre sur une page !") : chaque document est
+// capturé une seule fois puis recalé ("contain", même logique que pour
+// l'étiquette) pour qu'il tienne entièrement dans les limites d'UNE page
+// A4, en choisissant l'axe le plus contraignant (largeur ou hauteur). Sur
+// une facture avec beaucoup de lignes, le texte ressort un peu plus petit,
+// mais rien n'est jamais coupé et tout tient toujours sur une seule page.
+// `ignoreElements` retire les boutons ("no-print").
+// v1.19.73 : `elPage2` optionnel — le document "Suivi transport" (voir
+// depRenderFacturePublique), capturé séparément et ajouté comme 2e page du
+// même PDF (même principe que _depExporterEtiquettesPDFViaCanvas) — retour
+// de Cobey du 29/08/2026 : le suivi doit être sur une page à part, après
+// le détail des prix.
+function _depExporterFacturePDFViaCanvas(el, nomFichier, elPage2){
   if(!el){ toast('⚠️ Facture introuvable.'); return; }
   toast('⏳ Génération du PDF…');
   _depChargerHtml2canvasEtJsPDF(function(){
@@ -4108,15 +4183,15 @@ function _depExporterFacturePDFViaCanvas(el, nomFichier){
     if(appEl) appEl.style.maxWidth = '780px';
     var restaurerLargeur = function(){ if(appEl) appEl.style.maxWidth = appPrevMaxWidth; };
 
-    window.html2canvas(el, {
-      scale: DEP_PDF_SCALE_CAPTURE,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      windowWidth: 800, // cohérent avec .app élargi ci-dessus
-      ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
-    }).then(function(canvas){
-      restaurerLargeur();
-      try{
+    var pdf = null;
+    var capturerPage = function(elACapturer, cbSuite){
+      window.html2canvas(elACapturer, {
+        scale: DEP_PDF_SCALE_CAPTURE,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        windowWidth: 800, // cohérent avec .app élargi ci-dessus
+        ignoreElements: function(node){ return !!(node.classList && node.classList.contains('no-print')); }
+      }).then(function(canvas){
         var imgWmm = (canvas.width / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
         var imgHmm = (canvas.height / DEP_PDF_SCALE_CAPTURE) * 25.4 / 96;
         var ratio = Math.min(largeurUtile / imgWmm, hauteurUtile / imgHmm);
@@ -4124,17 +4199,32 @@ function _depExporterFacturePDFViaCanvas(el, nomFichier){
         var xMm = marge + (largeurUtile - wMm) / 2; // centré horizontalement
         var yMm = marge; // aligné en haut, comme un document imprimé
 
-        var pdf = new window.jspdf.jsPDF({ unit: 'mm', format: [pageW, pageH], orientation: 'portrait' });
+        if(!pdf){
+          pdf = new window.jspdf.jsPDF({ unit: 'mm', format: [pageW, pageH], orientation: 'portrait' });
+        } else {
+          pdf.addPage([pageW, pageH], 'portrait');
+        }
         pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', xMm, yMm, wMm, hMm);
-        pdf.save(nomFichier || 'Facture.pdf');
-      }catch(e){
-        console.error('departs: échec génération PDF facture', e);
+        cbSuite();
+      }).catch(function(e){
+        restaurerLargeur();
+        console.error('departs: échec capture facture', e);
         toast('❌ Échec de la génération du PDF, réessayez.');
+      });
+    };
+
+    capturerPage(el, function(){
+      if(elPage2){
+        capturerPage(elPage2, function(){
+          restaurerLargeur();
+          try{ pdf.save(nomFichier || 'Facture.pdf'); }
+          catch(e){ console.error('departs: échec génération PDF facture', e); toast('❌ Échec de la génération du PDF, réessayez.'); }
+        });
+      } else {
+        restaurerLargeur();
+        try{ pdf.save(nomFichier || 'Facture.pdf'); }
+        catch(e){ console.error('departs: échec génération PDF facture', e); toast('❌ Échec de la génération du PDF, réessayez.'); }
       }
-    }).catch(function(e){
-      restaurerLargeur();
-      console.error('departs: échec capture facture', e);
-      toast('❌ Échec de la génération du PDF, réessayez.');
     });
   });
 }
@@ -4382,16 +4472,20 @@ window.depRetourFacturePublique = function(){
 
 // Bouton "Imprimer / PDF" resté sur l'écran Facture publique lui-même
 // (arrivée directe via un lien WhatsApp, sans passer par depOuvrirFacturePDF
-// ci-dessus). Capture uniquement le document (.fac-doc), jamais le reste
-// de la page — voir _depExporterFacturePDFViaCanvas, c'est ce qui évite tout
-// mélange avec un autre écran resté en mémoire (bug étiquette+facture).
+// ci-dessus). Capture le document (.fac-doc), jamais le reste de la page —
+// voir _depExporterFacturePDFViaCanvas, c'est ce qui évite tout mélange
+// avec un autre écran resté en mémoire (bug étiquette+facture).
+// v1.19.73 : + le document "page 2" du suivi transport (.fac-doc-page2),
+// s'il existe, ajouté comme 2e page du même PDF (retour de Cobey du
+// 29/08/2026 : le suivi doit être sur une page à part, après les prix).
 window.depExporterFacturePDF = function(){
   var conteneur = $('pub-contenu');
   var doc = conteneur ? conteneur.querySelector('.fac-doc') : null;
   if(!doc){ toast('⚠️ Facture introuvable.'); return; }
+  var docSuivi = conteneur ? conteneur.querySelector('.fac-doc-page2') : null;
   var infos = _depPubFactureCtx || {};
   var nomFichier = 'Facture-' + (infos.c ? depNumeroFacture(infos.c, infos.ctx) : Date.now()) + '.pdf';
-  _depExporterFacturePDFViaCanvas(doc, nomFichier);
+  _depExporterFacturePDFViaCanvas(doc, nomFichier, docSuivi);
 };
 
 function depAfficherFacturePublique(ctx, cbApresQR){
@@ -4452,7 +4546,7 @@ function depRenderSuiviTransportPublic(c){
       +   infosDepot
       + '</div>';
   });
-  h += '</div>';
+  h += '</div>'; // .fac-suivi
   return h;
 }
 
@@ -4539,8 +4633,6 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     +       '</div>'
     +     '</div>'
 
-    +     depRenderSuiviTransportPublic(c)
-
     +     '<div class="fac-tbl-wrap"><table class="fac-table">'
     +       '<thead><tr><th>N&deg;</th><th>Description</th><th>Qt&eacute;</th><th>Unit&eacute;</th><th>Prix unitaire</th><th>Montant</th></tr></thead>'
     +       '<tbody>'
@@ -4575,7 +4667,27 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
                    + '</div>')
                 : '')
     +       '</div>'
-    +     '</div>';
+    +     '</div>'
+
+    +   '</div>' // fac-body
+    +   '<div class="fac-footer">DAKAR CITY TRANSPORT &middot; Paris &middot; T&eacute;l&nbsp;: +33 6 69 18 30 01 / +33 6 03 67 04 98<br>Email&nbsp;: contact@dakarcitytransport.com &middot; Site web&nbsp;: dakarcitytransport.com &middot; TikTok &amp; Instagram&nbsp;: @dakar_ct</div>'
+    + '</div>'; // fin .fac-doc (page 1 — prix), inchangé pour l'export PDF
+                // "une seule page" déjà validé par Cobey.
+
+  // v1.19.73 : le suivi passe en page 2 de la facture, après le détail des
+  // prix — un second document distinct (même habillage, propre en-tête et
+  // pied de page), capturé comme une page A4 séparée à l'export PDF (voir
+  // _depExporterFacturePDFViaCanvas) — retour de Cobey du 29/08/2026.
+  var suiviHtml = depRenderSuiviTransportPublic(c);
+  if(suiviHtml){
+    h += '<div class="fac-doc fac-doc-page2" style="margin-top:14px;">'
+      +   '<div class="fac-topbar"></div>'
+      +   '<div class="fac-body">'
+      +     suiviHtml
+      +   '</div>'
+      +   '<div class="fac-footer">DAKAR CITY TRANSPORT &middot; Paris &middot; T&eacute;l&nbsp;: +33 6 69 18 30 01 / +33 6 03 67 04 98<br>Email&nbsp;: contact@dakarcitytransport.com &middot; Site web&nbsp;: dakarcitytransport.com &middot; TikTok &amp; Instagram&nbsp;: @dakar_ct</div>'
+      + '</div>';
+  }
 
   // Lecture seule stricte pour un visiteur non connecté (lien WhatsApp) :
   // seul "Imprimer / PDF" reste — pas de retour vers l'appli, pas de
@@ -4588,11 +4700,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     // WhatsApp (retour de Cobey du 22/08/2026).
     +    (connecte ? '<button type="button" class="fac-btn fac-btn-copier" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>' : '')
     +    (connecte ? '<button type="button" class="fac-btn fac-btn-retour" onclick="depRetourFacturePublique()">&larr; Retour</button>' : '')
-    +  '</div>'
-
-    +  '</div>' // fac-body
-    +  '<div class="fac-footer">DAKAR CITY TRANSPORT &middot; Paris &middot; T&eacute;l&nbsp;: +33 6 69 18 30 01 / +33 6 03 67 04 98<br>Email&nbsp;: contact@dakarcitytransport.com &middot; Site web&nbsp;: dakarcitytransport.com &middot; TikTok &amp; Instagram&nbsp;: @dakar_ct</div>'
-    +  '</div>'; // fac-doc
+    +  '</div>';
 
   var box = $('pub-contenu');
   if(box) box.innerHTML = h;
@@ -4605,9 +4713,15 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
 // v1.19.27 : texte extrait dans une fonction à part, réutilisée par
 // depCopierMessageWhatsapp (bouton "Copier le message" — certains
 // clients n'ont pas WhatsApp, retour de Cobey du 22/08/2026).
+// v1.19.73 : mention du suivi transport quand le client est déjà rattaché
+// à un container (sinon rien à suivre pour l'instant, voir
+// depRenderSuiviTransportPublic) — retour de Cobey du 29/08/2026.
 function _depTexteMessageFacture(c, ctx){
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
-  return 'Salut ' + nom + ', accédez à votre facture sur ce lien : ' + depLienFacture(ctx);
+  var avecSuivi = !!(c.departId && c.departId !== DEP_ID_DEPOT);
+  return 'Salut ' + nom + ', accédez à votre facture'
+    + (avecSuivi ? ' et au suivi de votre colis' : '')
+    + ' sur ce lien : ' + depLienFacture(ctx);
 }
 
 function _depClientPourFacture(ctx){
