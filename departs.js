@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.92';
+var DEP_VERSION = 'v1.19.93';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -2090,18 +2090,41 @@ function injecterEcrans(){
   var m13 = document.createElement('div');
   m13.className = 'modal-overlay';
   m13.id = 'modal-devis-valider';
+  // v1.19.93 : "Collecte" n'inscrit plus directement — elle ouvre d'abord
+  // le choix de LA collecte (voir modal-devis-collecte), pour ne plus
+  // dépendre de currentCollecteId (qui peut pointer sur n'importe quelle
+  // collecte selon la navigation précédente du collaborateur) — retour de
+  // Cobey du 30/08/2026 : "le client s'est mis sur une collecte au hasard
+  // c'est pas bon".
   m13.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
     + '<div class="modal-emoji">&#128666;</div>'
     + '<div class="modal-confirm-title">Valider ce devis</div>'
     + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Dans quel parcours faut-il inscrire ce client ?</div>'
     + '<div style="display:flex;flex-direction:column;gap:10px;">'
-    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisValiderVers(\'collecte\')">&#128197; Collecte</button>'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisDemanderCollecte()">&#128197; Collecte</button>'
     +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisValiderVers(\'france\')">&#127467;&#127479;&#127466;&#127482; France &amp; Europe</button>'
     + '</div>'
     + '<div class="modal-confirm-btns" style="margin-top:14px;">'
     +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-devis-valider\')">Annuler</button>'
     + '</div></div></div>';
   document.body.appendChild(m13);
+
+  /* ---- Modale (v1.19.93) : choix DE LA collecte (parmi celles en cours ou
+     à venir) au moment de valider un devis vers la Collecte — évite qu'un
+     client parte "au hasard" sur la collecte actuellement ouverte dans
+     l'appli (retour de Cobey du 30/08/2026). ---- */
+  var m13b = document.createElement('div');
+  m13b.className = 'modal-overlay';
+  m13b.id = 'modal-devis-collecte';
+  m13b.innerHTML = '<div class="modal-sheet" style="max-height:70vh;overflow-y:auto;"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#128197;</div>'
+    + '<div class="modal-confirm-title">Choisir la collecte</div>'
+    + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Dans quelle collecte faut-il inscrire ce client ?</div>'
+    + '<div id="devis-collecte-liste" style="text-align:left;"></div>'
+    + '<div class="modal-confirm-btns" style="margin-top:14px;">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-devis-collecte\')">Annuler</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m13b);
 
   /* ---- Modale (v1.19.85) : refus d'un devis — suppression définitive. ---- */
   var m14 = document.createElement('div');
@@ -9908,6 +9931,48 @@ window.depDevisDemanderValider = function(id){
   openModal('modal-devis-valider');
 };
 
+// v1.19.93 : au clic sur "Collecte", on ne rejoint plus directement
+// currentCollecteId (potentiellement n'importe quelle collecte selon la
+// dernière navigation du collaborateur dans l'appli) — on demande D'ABORD
+// dans QUELLE collecte inscrire ce client — retour de Cobey du 30/08/2026 :
+// "le client s'est mis sur une collecte au hasard c'est pas bon".
+window.depDevisDemanderCollecte = function(){
+  closeModal('modal-devis-valider');
+  _depDevisRenderChoixCollecte();
+  openModal('modal-devis-collecte');
+};
+
+function _depDevisRenderChoixCollecte(){
+  var box = $('devis-collecte-liste');
+  if(!box) return;
+  var ordre = { en_cours: 0, a_venir: 1 };
+  // Une collecte terminée est verrouillée (lecture seule) — on ne propose
+  // ici que celles où l'on peut réellement inscrire un client.
+  var liste = (window.collectes || []).filter(function(c){ return c && c.statut !== 'terminee'; })
+    .sort(function(a,b){ return (ordre[a.statut]===undefined?9:ordre[a.statut]) - (ordre[b.statut]===undefined?9:ordre[b.statut]); });
+  if(!liste.length){
+    box.innerHTML = '<div style="text-align:center;color:#999;font-size:13px;padding:16px;line-height:1.6;">Aucune collecte disponible pour l\'instant.<br>Cr&eacute;ez ou ouvrez une collecte d\'abord.</div>';
+    return;
+  }
+  var h = '';
+  liste.forEach(function(c){
+    var tag = c.statut === 'en_cours'
+      ? { t:'En cours', b:'#d4f5e4', f:'#0a5c30' }
+      : { t:'&Agrave; venir', b:'#e8eeff', f:'#1a1a2e' };
+    h += '<div onclick="depDevisChoisirCollecteEtValider(\''+c.id+'\')" '
+      + 'style="display:flex;align-items:center;gap:10px;padding:11px 12px;border:1.5px solid #eee;border-radius:10px;margin-bottom:8px;cursor:pointer;">'
+      +   '<div style="flex:1;"><div style="font-size:13.5px;font-weight:800;color:#1a1a2e;">'+esc(c.date||'')+'</div></div>'
+      +   '<span style="font-size:10.5px;font-weight:800;padding:3px 9px;border-radius:999px;background:'+tag.b+';color:'+tag.f+';">'+tag.t+'</span>'
+      + '</div>';
+  });
+  box.innerHTML = h;
+}
+
+window.depDevisChoisirCollecteEtValider = function(collecteId){
+  closeModal('modal-devis-collecte');
+  depDevisValiderVers('collecte', collecteId);
+};
+
 // v1.19.85 : le parcours (Collecte / France & Europe) se choisit ici, au
 // moment de valider — voir modal-devis-valider.
 // v1.19.86 : le devis n'est PLUS supprimé ici — seulement une fois la
@@ -9919,7 +9984,10 @@ window.depDevisDemanderValider = function(id){
 // (window._depDevisEnCoursId), remis à zéro à chaque nouvelle ouverture
 // "normale" du formulaire (voir ouvrirAjoutClient/ouvrirAjoutFrance) pour
 // ne jamais en supprimer un par erreur.
-window.depDevisValiderVers = function(parcours){
+// v1.19.93 : "collecteId" (choisi via modal-devis-collecte) précise
+// EXPLICITEMENT quelle collecte ouvrir avant d'inscrire le client — on ne
+// dépend plus de currentCollecteId tel quel.
+window.depDevisValiderVers = function(parcours, collecteId){
   var id = window._depDevisAValider;
   var d = (window.devisData||{})[id];
   closeModal('modal-devis-valider');
@@ -9946,6 +10014,13 @@ window.depDevisValiderVers = function(parcours){
       var flp = $('fa-liv-prix'); if(flp) flp.value = snap.livraisonPrix || '';
     }
   } else {
+    // v1.19.93 : on rejoint explicitement la collecte choisie par le
+    // collaborateur (modal-devis-collecte) avant d'ouvrir le formulaire —
+    // sans ça, ouvrirAjoutClient() inscrivait le client dans
+    // currentCollecteId telle quelle, potentiellement une tout autre
+    // collecte que celle voulue.
+    if(!collecteId){ toast('⚠️ Choisissez d\'abord la collecte.'); return; }
+    try{ ouvrirCollecte(collecteId); }catch(eCol){}
     ouvrirAjoutClient();
     window._depDevisEnCoursId = id;
     try{ depChoisirPaysClient(snap.pays); }catch(e){}
