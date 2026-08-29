@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.79';
+var DEP_VERSION = 'v1.19.82';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1088,31 +1088,47 @@ function injecterEcrans(){
   +   '<div class="content">'
   +     '<div style="font-size:12.5px;color:var(--text3);font-weight:600;margin-bottom:14px;">'
   +       'Où souhaitez-vous travailler ?</div>'
+  // v1.19.82 : ordre des carrés revu pour suivre la logique métier plutôt
+  // que l'ordre de création (retour de Cobey du 29/08/2026) — Départs,
+  // Client, Collecte, France & Europe, Inscription au dépôt, QR Code,
+  // Archivage, Statistiques, Réglages. Les 3 carrés réservés à la direction
+  // (Départs, Statistiques, Réglages) restent masqués aux autres via
+  // estDirection() dans depRenderEspaces() : pour eux, l'ordre visible
+  // devient naturellement Client, Collecte, France & Europe, Inscription
+  // au dépôt, QR Code, Archivage.
   +     '<div class="dep-cases">'
   +       '<div class="dep-case" id="dep-case-departs" style="border-color:#252599;" onclick="depOuvrirEspaceDeparts()">'
   +         '<div class="dep-case-ico">&#128674;</div>'
-  +         '<div class="dep-case-tit" style="color:#252599;">DIALLO CONTAINER</div>'
+  +         '<div class="dep-case-tit" style="color:#252599;">D&Eacute;PARTS</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-dep">—</div>'
-  +       '</div>'
-  +       '<div class="dep-case" style="border-color:#009A44;" onclick="depOuvrirEspaceCollecte()">'
-  +         '<div class="dep-case-ico">&#128197;</div>'
-  +         '<div class="dep-case-tit" style="color:#009A44;">COLLECTE</div>'
-  +         '<div class="dep-case-sub" id="dep-case-sub-col">—</div>'
   +       '</div>'
   +       '<div class="dep-case" style="border-color:#7c3aed;" onclick="depOuvrirEspaceClient()">'
   +         '<div class="dep-case-ico">&#128100;</div>'
   +         '<div class="dep-case-tit" style="color:#7c3aed;">CLIENT</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-cli">—</div>'
   +       '</div>'
-  +       '<div class="dep-case" style="border-color:#006b2d;" onclick="depOuvrirScanQR()">'
-  +         '<div class="dep-case-ico">&#128247;</div>'
-  +         '<div class="dep-case-tit" style="color:#006b2d;">QR CODE</div>'
-  +         '<div class="dep-case-sub">Scanner une facture</div>'
+  +       '<div class="dep-case" style="border-color:#009A44;" onclick="depOuvrirEspaceCollecte()">'
+  +         '<div class="dep-case-ico">&#128197;</div>'
+  +         '<div class="dep-case-tit" style="color:#009A44;">COLLECTE</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-col">—</div>'
   +       '</div>'
   +       '<div class="dep-case" id="dep-case-france" style="border-color:#1a237e;" onclick="ouvrirFrance()">'
   +         '<div class="dep-case-ico">&#127467;&#127479;&#127466;&#127482;</div>'
   +         '<div class="dep-case-tit" style="color:#1a237e;">FRANCE &amp; EUROPE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-fr">—</div>'
+  +       '</div>'
+  // v1.19.50 : carré à part, ouvert à tout le monde (retour de Cobey du
+  // 28/08/2026) — remplace l'ancien bouton "Inscrire un client au dépôt"
+  // qui vivait dans le carré Départs, réservé à la direction.
+  +       '<div class="dep-case" id="dep-case-depot" style="border-color:#B8720C;" onclick="depCarreDepotOuvrir()">'
+  +         '<div class="dep-case-ico">&#127970;</div>'
+  +         '<div class="dep-case-tit" style="color:#B8720C;">INSCRIPTION AU D&Eacute;P&Ocirc;T</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-depot">—</div>'
+  +       '</div>'
+  +       '<div class="dep-case" style="border-color:#006b2d;" onclick="depOuvrirScanQR()">'
+  +         '<div class="dep-case-ico">&#128247;</div>'
+  +         '<div class="dep-case-tit" style="color:#006b2d;">QR CODE</div>'
+  +         '<div class="dep-case-sub">Scanner une facture</div>'
   +       '</div>'
   // v1.19.0 : nouveau carré ARCHIVAGE, ouvert à tous — consultation en
   // lecture seule des départs clôturés et des collectes terminées, dans un
@@ -1122,14 +1138,6 @@ function injecterEcrans(){
   +         '<div class="dep-case-tit" style="color:#8B5E34;">ARCHIVAGE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-arch">—</div>'
   +       '</div>'
-  // v1.19.8 : nouveau carré RÉGLAGES, réservé à la direction — reprend ce
-  // qui était derrière la molette ⚙️ de l'écran Collecte (Équipe,
-  // Partenaire, Accès, Données, Message), désormais retirée de là-bas.
-  +       '<div class="dep-case" id="dep-case-reglages" style="border-color:#455A64;" onclick="depOuvrirEspaceReglages()">'
-  +         '<div class="dep-case-ico">&#9881;&#65039;</div>'
-  +         '<div class="dep-case-tit" style="color:#455A64;">R&Eacute;GLAGES</div>'
-  +         '<div class="dep-case-sub" id="dep-case-sub-regl">—</div>'
-  +       '</div>'
   // v1.19.9 : nouveau carré STATISTIQUES, réservé à la direction — classement
   // des collaborateurs (clients inscrits, argent apporté/encaissé, collectes
   // travaillées, validations effectuées).
@@ -1138,13 +1146,13 @@ function injecterEcrans(){
   +         '<div class="dep-case-tit" style="color:#B8860B;">STATISTIQUES</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-stats">—</div>'
   +       '</div>'
-  // v1.19.50 : carré à part, ouvert à tout le monde (retour de Cobey du
-  // 28/08/2026) — remplace l'ancien bouton "Inscrire un client au dépôt"
-  // qui vivait dans le carré Départs, réservé à la direction.
-  +       '<div class="dep-case" id="dep-case-depot" style="border-color:#B8720C;" onclick="depCarreDepotOuvrir()">'
-  +         '<div class="dep-case-ico">&#127970;</div>'
-  +         '<div class="dep-case-tit" style="color:#B8720C;">INSCRIPTION AU D&Eacute;P&Ocirc;T</div>'
-  +         '<div class="dep-case-sub" id="dep-case-sub-depot">—</div>'
+  // v1.19.8 : nouveau carré RÉGLAGES, réservé à la direction — reprend ce
+  // qui était derrière la molette ⚙️ de l'écran Collecte (Équipe,
+  // Partenaire, Accès, Données, Message), désormais retirée de là-bas.
+  +       '<div class="dep-case" id="dep-case-reglages" style="border-color:#455A64;" onclick="depOuvrirEspaceReglages()">'
+  +         '<div class="dep-case-ico">&#9881;&#65039;</div>'
+  +         '<div class="dep-case-tit" style="color:#455A64;">R&Eacute;GLAGES</div>'
+  +         '<div class="dep-case-sub" id="dep-case-sub-regl">—</div>'
   +       '</div>'
   +     '</div>'
   +     '<div style="text-align:center;color:#bbb;font-size:10.5px;margin-top:22px;">Module départs '+DEP_VERSION+'</div>'
@@ -1183,7 +1191,7 @@ function injecterEcrans(){
   + '<div class="screen" id="s-departs-pays">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
-  +     '<div class="h-title">Diallo Container</div>'
+  +     '<div class="h-title">D&eacute;parts</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
@@ -1194,8 +1202,8 @@ function injecterEcrans(){
   /* ---- ÉCRAN 2 : liste des départs (d'un pays donné) ---- */
   + '<div class="screen" id="s-departs">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="depDepartsPaysRetour()">&larr; Diallo Container</button>'
-  +     '<div class="h-title" id="dep-departs-titre">Diallo Container</div>'
+  +     '<button class="btn-back" onclick="depDepartsPaysRetour()">&larr; D&eacute;parts</button>'
+  +     '<div class="h-title" id="dep-departs-titre">D&eacute;parts</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
@@ -1242,7 +1250,7 @@ function injecterEcrans(){
   /* ---- ÉCRAN 4 : détail d'un départ ---- */
   + '<div class="screen" id="s-depart-detail">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="depDetailRetour()">&larr; Diallo Container</button>'
+  +     '<button class="btn-back" onclick="depDetailRetour()">&larr; D&eacute;parts</button>'
   +     '<div style="text-align:center;"><div class="h-title" id="dep-d-nom">D&eacute;part</div>'
   +     '<div class="h-sub" id="dep-d-sub"></div></div>'
   +     '<button class="btn-back" id="dep-d-btn-modifier" onclick="depModifier(_depDetailIdPublic())">Modifier</button>'
@@ -3900,7 +3908,7 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
       btnRetour.textContent = '← Dépôt';
       btnRetour.onclick = function(){ depCarreDepotContainer(_depDepotDepart); };
     } else {
-      btnRetour.textContent = '← Diallo Container';
+      btnRetour.textContent = '← Départ';
       btnRetour.onclick = function(){ depDetail(_depDetailIdPublic()); };
     }
   }
@@ -8010,8 +8018,8 @@ function greffer(){
   }
 
   /* --- A ter. Écran de connexion (premier écran, avant tout login) :
-     afficher la version du module Diallo Container sous "Mise à jour",
-     pour que Niass/Cobey sachent direct si c'est la bonne version. --- */
+     afficher la version du module sous "Mise à jour", pour que
+     Niass/Cobey sachent direct si c'est la bonne version. --- */
   function _depAfficherVersionLogin(){
     try{
       var u = document.getElementById('app-update');
@@ -8023,7 +8031,7 @@ function greffer(){
         dv.style.cssText = 'font-size:10px;color:#9a9a9a;font-weight:600;margin-top:2px;margin-bottom:14px;';
         u.parentNode.insertBefore(dv, u.nextSibling);
       }
-      dv.textContent = 'Diallo Container ' + DEP_VERSION;
+      dv.textContent = 'Module départs ' + DEP_VERSION;
       // v1.19.79 : "Gestion des collectes" ne représente plus l'appli
       // (retour de Cobey du 29/08/2026 : "l'application maintenant englobe
       // tout") — ce sous-titre statique (index.html) n'a pas d'id, on le
@@ -8161,6 +8169,36 @@ function greffer(){
     };
     window.addActivity._depPatch = true;
   }
+  // v1.19.81 : la connexion elle-même (notification "Untel s'est connecté",
+  // alimentée par db.ref('dct_connexions').push(...) à la fois pour un
+  // collaborateur DCT et pour un partenaire Global Logistique) doit aussi
+  // porter la mention — retour de Cobey du 29/08/2026 : "tu as juste mis
+  // pour les actions", pas pour les connexions. La ligne concernée est à
+  // l'intérieur même de la fonction native _finalisLoginCore (qu'on ne
+  // peut pas éditer), donc on intercepte plutôt db.ref('dct_connexions')
+  // pour marquer le champ "who" au moment de l'écriture.
+  function _depAssurerPatchConnexions(){
+    try{
+      if(!window.db || typeof window.db.ref !== 'function' || window.db.ref._depPatch) return;
+      var origRef = window.db.ref.bind(window.db);
+      window.db.ref = function(path){
+        var r = origRef(path);
+        if(path === 'dct_connexions' && r && typeof r.push === 'function' && !r.push._depPatch){
+          var origPush = r.push.bind(r);
+          r.push = function(obj){
+            if(_depViaPassePartout && obj && typeof obj === 'object'){
+              obj = Object.assign({}, obj, { who: (obj.who || '') + ' 🗝️ (via passe-partout)' });
+            }
+            return origPush(obj);
+          };
+          r.push._depPatch = true;
+        }
+        return r;
+      };
+      window.db.ref._depPatch = true;
+    }catch(e){}
+  }
+  _depAssurerPatchConnexions();
 
   /* --- B. Après la connexion : bifurcation pour tout le monde
      (les carrés visibles dépendent du rôle, gérés dans depRenderEspaces) --- */
@@ -8169,6 +8207,11 @@ function greffer(){
     window._finalisLoginCore = function(collab){
       _depConnecte = true;
       try{ appliquerProfils(); }catch(e){}
+      // db n'est pas toujours prêt au moment où greffer() s'exécute (juste
+      // après le chargement) — on s'assure ici, juste avant l'écriture
+      // native dans dct_connexions, que le patch de marquage passe-partout
+      // est bien posé sur l'instance actuelle de db.
+      try{ _depAssurerPatchConnexions(); }catch(e){}
       try{ origLogin.apply(this, arguments); }
       catch(e){ console.error('departs: _finalisLoginCore original', e); }
       // Comptes Global Logistique (Danny + Postes 1-4, tous marqués
@@ -8756,7 +8799,7 @@ function greffer(){
         if(btnM){
           if(retourM && retourM.type === 'depart'){
             var depIdM1 = retourM.id;
-            btnM.textContent = '← Diallo Container';
+            btnM.textContent = '← Départ';
             btnM.onclick = function(){ depDetail(depIdM1); };
           } else if(retourM && retourM.type === 'carre'){
             var depIdM2 = retourM.id;
@@ -8862,7 +8905,7 @@ function greffer(){
         if(btn){
           if(retour && retour.type === 'depart'){
             var depId1 = retour.id;
-            btn.textContent = '← Diallo Container';
+            btn.textContent = '← Départ';
             btn.onclick = function(){ depDetail(depId1); };
           } else if(retour && retour.type === 'carre'){
             var depId2 = retour.id;
