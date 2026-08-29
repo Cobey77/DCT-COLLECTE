@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.91';
+var DEP_VERSION = 'v1.19.92';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1811,6 +1811,11 @@ function injecterEcrans(){
   +     '</div>'
   +     '<div class="fg"><label class="fl">T&eacute;l&eacute;phone</label>'
   +       '<input class="fi" id="devis-f-tel" type="tel" placeholder="77 000 00 00"></div>'
+  // v1.19.92 : adresse du client ajoutée, facultative à ce stade (le devis
+  // reste minimal) — retour de Cobey du 30/08/2026.
+  +     '<div class="fg"><label class="fl">Adresse '
+  +       '<span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+  +       '<input class="fi" id="devis-f-adresse" placeholder="12 rue Pasteur"></div>'
   +     '<div class="fg"><label class="fl">Type de colis '
   +       '<span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
   +       '<textarea class="fi" id="devis-f-colis" rows="2" placeholder="ex: 2 valises + 1 carton..." style="resize:none;"></textarea></div>'
@@ -9664,7 +9669,7 @@ window.depDevisNouveau = function(){
   window._depDevisEditId = null;
   window._depDevisPaysChoisi = null;
   window._depDevisCivilite = '';
-  ['devis-f-prenom','devis-f-nom','devis-f-tel','devis-f-colis','devis-f-liv-adresse','devis-f-liv-prix','devis-f-montant'].forEach(function(id){
+  ['devis-f-prenom','devis-f-nom','devis-f-tel','devis-f-adresse','devis-f-colis','devis-f-liv-adresse','devis-f-liv-prix','devis-f-montant'].forEach(function(id){
     var e = $(id); if(e) e.value = '';
   });
   depDevisSetLivraison(false);
@@ -9686,6 +9691,7 @@ window.depDevisModifier = function(id){
   var fp = $('devis-f-prenom'); if(fp) fp.value = d.prenom || '';
   var fn = $('devis-f-nom'); if(fn) fn.value = d.nom || '';
   var ft = $('devis-f-tel'); if(ft) ft.value = d.tel || '';
+  var fad = $('devis-f-adresse'); if(fad) fad.value = d.adresse || '';
   var fc = $('devis-f-colis'); if(fc) fc.value = d.colis || '';
   var fm = $('devis-f-montant'); if(fm) fm.value = (d.montant != null ? d.montant : '');
   depDevisSetLivraison(!!d.livraison);
@@ -9731,6 +9737,7 @@ window.depDevisEnregistrer = function(){
   var prenom = (($('devis-f-prenom')||{}).value || '').trim();
   var nom = (($('devis-f-nom')||{}).value || '').trim();
   var tel = (($('devis-f-tel')||{}).value || '').trim();
+  var adresse = (($('devis-f-adresse')||{}).value || '').trim();
   var colis = (($('devis-f-colis')||{}).value || '').trim();
   var montant = parseFloat(($('devis-f-montant')||{}).value) || 0;
   if(!prenom && !nom){ toast('⚠️ Indiquez le nom ou le prénom du client.'); return; }
@@ -9743,6 +9750,7 @@ window.depDevisEnregistrer = function(){
     prenom: civilite === 'Societe' ? '' : prenom,
     nom: nom,
     tel: tel,
+    adresse: adresse,
     colis: colis,
     pays: window._depDevisPaysChoisi,
     livraison: liv,
@@ -9820,12 +9828,16 @@ function depRenderDevisDoc(d){
 
     +     '<hr class="fac-sep">'
 
+    // v1.19.92 : la partie CLIENT est réservée aux coordonnées (téléphone,
+    // adresse) — la description du colis n'y figure plus, elle reste dans
+    // le tableau ci-dessous (colonne Description), où elle a déjà sa place
+    // (retour de Cobey du 30/08/2026).
     +     '<div class="fac-parties">'
     +       '<div>'
     +         '<div class="fac-partie-titre">CLIENT</div>'
     +         '<div class="fac-partie-nom">'+esc(nomAffiche)+'</div>'
     +         '<div class="fac-partie-detail">'+_depLienTel(d.tel, d.tel||'—')
-    +           (d.colis ? ('<br>'+esc(d.colis)) : '')
+    +           (d.adresse ? ('<br>'+esc(d.adresse)) : '')
     +         '</div>'
     +       '</div>'
     +     '</div>'
@@ -9925,6 +9937,7 @@ window.depDevisValiderVers = function(parcours){
     var fprenom = $('fa-prenom'); if(fprenom) fprenom.value = snap.prenom || '';
     var fnom = $('fa-nom'); if(fnom) fnom.value = snap.nom || '';
     var ftel = $('fa-tel'); if(ftel) ftel.value = snap.tel || '';
+    var fadr = $('fa-adresse'); if(fadr) fadr.value = snap.adresse || '';
     var fcolis = $('fa-colis'); if(fcolis) fcolis.value = snap.colis || '';
     var fprix = $('fa-prix'); if(fprix) fprix.value = snap.montant || '';
     if(snap.livraison){
@@ -9940,6 +9953,7 @@ window.depDevisValiderVers = function(parcours){
     var prenom = $('f-prenom'); if(prenom) prenom.value = snap.prenom || '';
     var nom = $('f-nom'); if(nom) nom.value = snap.nom || '';
     var tel = $('f-tel'); if(tel) tel.value = snap.tel || '';
+    var adr = $('f-adresse'); if(adr) adr.value = snap.adresse || '';
     var colis = $('f-colis'); if(colis) colis.value = snap.colis || '';
     var prix = $('f-prix'); if(prix) prix.value = snap.montant || '';
     if(snap.livraison){
