@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.71';
+var DEP_VERSION = 'v1.19.72';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -207,6 +207,39 @@ var STATUTS_DEPART = {
   cloture     : {label:'Clôturé',        bg:'#EDEDED', color:'#777777', dot:'#999999'}
 };
 var ORDRE_STATUTS = ['preparation','parti','arrive','cloture'];
+
+// v1.19.72 : SUIVI TRANSPORT — étapes précises du parcours d'un container,
+// affichées au client sur sa facture (demande de Cobey du 29/08/2026).
+// Distinct de STATUTS_DEPART ci-dessus : "Clôturé" reste la fermeture
+// administrative du container (usage interne), pendant que ces étapes-ci
+// sont le fil d'actualité montré au client. Une étape par pays différente
+// (le Mali a une étape de plus, "En route vers Bamako"). Chaque étape est
+// validée dans l'ordre par Issyaka depuis le détail du départ (voir
+// depEtapeSuivante), avec date + auteur, et se répercute automatiquement
+// sur tous les clients du container (le suivi est lu depuis le départ,
+// pas dupliqué sur chaque fiche client).
+var DEP_ETAPES_TRANSPORT = {
+  SN: [
+    { key:'depart_mitry',  label:'Départ de Mitry',           icon:'🚛' },
+    { key:'navigation',    label:'En cours de navigation',    icon:'🚢' },
+    { key:'arrivee_port',  label:'Arrivée au port de Dakar',  icon:'⚓' },
+    { key:'arrivee_depot', label:'Arrivée au dépôt',          icon:'📦' }
+  ],
+  ML: [
+    { key:'depart_mitry',  label:'Départ de Mitry',           icon:'🚛' },
+    { key:'navigation',    label:'En cours de navigation',    icon:'🚢' },
+    { key:'arrivee_port',  label:'Arrivée au port de Dakar',  icon:'⚓' },
+    { key:'route_bamako',  label:'En route vers Bamako',      icon:'🚚' },
+    { key:'arrivee_depot', label:'Arrivée au dépôt',          icon:'📦' }
+  ]
+};
+function depEtapesTransportPour(pays){ return DEP_ETAPES_TRANSPORT[pays] || DEP_ETAPES_TRANSPORT[DEP_PAYS_DEFAUT]; }
+
+// Affichés au client une fois l'étape "Arrivée au dépôt" (Sénégal) validée.
+// v1.19.72 : numéro de Mamadou Niass pas encore communiqué par Cobey — le
+// nom s'affiche déjà, le téléphone suit dès qu'on l'a (voir DEP_CONTACT_DEPOT.tel).
+var DEP_ADRESSE_DEPOT = 'Parcelle Assainie, Unité 8, Dakar';
+var DEP_CONTACT_DEPOT = { nom: 'Mamadou Niass', tel: '' };
 
 // Statut de paiement d'une facture — jamais choisi à la main, toujours
 // recalculé à partir des versements enregistrés (voir depCalculerPaiement).
@@ -914,6 +947,21 @@ function injecterStyles(){
     +   'border:1.5px solid var(--border);background:#fff;font-size:12px;font-weight:700;'
     +   'color:var(--text2);cursor:pointer;white-space:nowrap;}'
     + '.dep-chip.on{border-color:var(--green);background:var(--green-light);color:var(--green-dark);}'
+    // v1.19.72 : suivi transport (détail d'un départ, côté équipe) — rangée
+    // de puces numérotées, défile horizontalement si besoin (5 étapes pour
+    // le Mali sur petit écran).
+    + '.dep-etapes-box{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px;}'
+    + '.dep-etapes-titre{font-size:11px;font-weight:800;color:var(--text3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:12px;}'
+    + '.dep-etapes-liste{display:flex;gap:2px;overflow-x:auto;padding-bottom:2px;}'
+    + '.dep-etape{flex:1;min-width:70px;text-align:center;}'
+    + '.dep-etape-pt{width:26px;height:26px;border-radius:50%;background:#EDEDED;color:#999;font-size:11px;'
+    +   'font-weight:800;display:flex;align-items:center;justify-content:center;margin:0 auto 5px;border:2px solid #ddd;}'
+    + '.dep-etape-fait .dep-etape-pt{background:var(--green);color:#fff;border-color:var(--green);}'
+    + '.dep-etape-prochaine .dep-etape-pt{background:#fff;border-color:var(--green);color:var(--green-dark);}'
+    + '.dep-etape-lbl{font-size:9.5px;font-weight:700;color:var(--text2);line-height:1.3;}'
+    + '.dep-etape-fait .dep-etape-lbl{color:var(--green-dark);}'
+    + '.dep-etape-date{font-size:8.5px;color:var(--text3);margin-top:2px;}'
+    + '.dep-etapes-fait{font-size:12.5px;font-weight:700;color:var(--green-dark);text-align:center;flex:1;padding:9px;}'
     + '.dep-menu-item{display:flex;align-items:center;gap:12px;width:100%;background:#fff;'
     +   'border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px;'
     +   'margin-bottom:9px;font-family:var(--font);cursor:pointer;text-align:left;}'
@@ -1413,6 +1461,30 @@ function injecterEcrans(){
   +     '.fac-btn-whatsapp{background:#25D366;color:#fff;}'
   +     '.fac-btn-copier{background:#111;color:#fff;}'
   +     '.fac-btn-retour{background:none;color:#666;text-decoration:underline;}'
+  // v1.19.72 : SUIVI TRANSPORT — frise verticale illustrée, pensée pour le
+  // client (icônes, pastille "étape en cours", ligne colorée jusqu'à
+  // l'étape atteinte), distincte du Suivi interne (texte) utilisé par
+  // l'équipe — demande de Cobey du 29/08/2026 : "un petit visuel sympas".
+  +     '.fac-suivi{margin:20px 0;background:#F5FBF7;border:1.5px solid #D4EFDD;border-radius:12px;padding:18px 16px 6px;}'
+  +     '.fac-suivi-titre{font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#006b2d;margin-bottom:16px;}'
+  +     '.fac-suivi-etape{position:relative;padding:0 0 24px 42px;}'
+  +     '.fac-suivi-etape:last-child{padding-bottom:12px;}'
+  +     '.fac-suivi-ligne{position:absolute;left:16px;top:34px;bottom:-4px;width:3px;background:#ddd;}'
+  +     '.fac-suivi-etape.done .fac-suivi-ligne{background:#00b34e;}'
+  +     '.fac-suivi-etape:last-child .fac-suivi-ligne{display:none;}'
+  +     '.fac-suivi-pt{position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;'
+  +       'display:flex;align-items:center;justify-content:center;font-size:15px;background:#fff;border:2.5px solid #ddd;}'
+  +     '.fac-suivi-etape.done .fac-suivi-pt{background:#00b34e;border-color:#00b34e;color:#fff;}'
+  +     '.fac-suivi-etape.now .fac-suivi-pt{background:#fff;border-color:#00b34e;box-shadow:0 0 0 5px rgba(0,179,78,.15);}'
+  +     '.fac-suivi-lbl{font-size:13px;font-weight:700;color:#333;padding-top:6px;}'
+  +     '.fac-suivi-etape.done .fac-suivi-lbl{color:#006b2d;}'
+  +     '.fac-suivi-etape.futur .fac-suivi-lbl{color:#aaa;}'
+  +     '.fac-suivi-date{font-size:10.5px;color:#888;margin-top:2px;}'
+  +     '.fac-suivi-now-tag{display:inline-block;background:#FFF4E0;color:#a04800;font-size:9.5px;font-weight:800;'
+  +       'padding:2px 8px;border-radius:20px;margin-top:4px;letter-spacing:.03em;}'
+  +     '.fac-suivi-infos{margin-top:8px;background:#fff;border:1.5px dashed #C8E6D0;border-radius:9px;'
+  +       'padding:10px 12px;font-size:11.5px;color:#444;line-height:1.7;}'
+  +     '.fac-suivi-infos b{color:#006b2d;}'
   +     '@media (max-width:480px){'
   +       '.fac-parties{grid-template-columns:1fr;}'
   +     '}'
@@ -3204,6 +3276,81 @@ window.depSupprimer = function(){
 };
 
 /* ─────────────────────────────────────────────
+   9bis. SUIVI TRANSPORT (v1.19.72) — étapes validées une à une par Issyaka
+   depuis le détail du départ, stockées sur le container (departs/{id}/
+   etapesTransport), lues à la fois ici (pour le bouton "étape suivante")
+   et sur la facture publique (voir depRenderSuiviTransportPublic).
+   ───────────────────────────────────────────── */
+
+window.depEtapeSuivante = function(){
+  if(!estDirection()){ toast('⛔ Réservé à la direction.'); return; }
+  var id = _depDetailId;
+  var d = (window.departsData||{})[id];
+  if(!d){ toast('⚠️ Départ introuvable.'); return; }
+  var etapes = depEtapesTransportPour(depPaysDepart(d));
+  var fait = d.etapesTransport || {};
+  var prochaine = etapes.filter(function(e){ return !(fait[e.key] && fait[e.key].fait); })[0];
+  if(!prochaine){ toast('✅ Toutes les étapes sont déjà validées.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
+  var u = window.currentUser || {};
+  var maj = {};
+  maj[prochaine.key] = { fait: true, ts: Date.now(), par: u.name || u.id || '' };
+  db.ref('departs/'+id+'/etapesTransport').update(maj).then(function(){
+    toast('✅ ' + prochaine.label);
+    depActivite('🚚', 'a validé l\'étape « ' + esc(prochaine.label) + ' » pour <strong>' + esc(d.nom||'') + '</strong>');
+    depDetail(id, true);
+  }).catch(function(e){ toast('❌ Échec : ' + ((e && e.message) || 'enregistrement refusé')); });
+};
+
+window.depEtapeAnnuler = function(){
+  if(!estDirection()) return;
+  var id = _depDetailId;
+  var d = (window.departsData||{})[id];
+  if(!d) return;
+  var etapes = depEtapesTransportPour(depPaysDepart(d));
+  var fait = d.etapesTransport || {};
+  var faites = etapes.filter(function(e){ return fait[e.key] && fait[e.key].fait; });
+  if(!faites.length) return;
+  var derniere = faites[faites.length - 1];
+  if(!confirm('Annuler l\'étape « ' + derniere.label + ' » ?')) return;
+  db.ref('departs/'+id+'/etapesTransport/'+derniere.key).remove().then(function(){
+    toast('↩️ Étape annulée');
+    depDetail(id, true);
+  }).catch(function(e){ toast('❌ Échec : ' + ((e && e.message) || 'annulation refusée')); });
+};
+
+function depRenderEtapesTransportAdmin(d){
+  var etapes = depEtapesTransportPour(depPaysDepart(d));
+  var fait = d.etapesTransport || {};
+  var dernierIdx = -1;
+  etapes.forEach(function(e, i){ if(fait[e.key] && fait[e.key].fait) dernierIdx = i; });
+  var toutesFaites = (dernierIdx === etapes.length - 1);
+
+  var h = '<div class="dep-etapes-box">'
+    + '<div class="dep-etapes-titre">🚚 Suivi transport &middot; visible par le client</div>'
+    + '<div class="dep-etapes-liste">';
+  etapes.forEach(function(e, i){
+    var cls = i <= dernierIdx ? 'fait' : (i === dernierIdx + 1 ? 'prochaine' : 'attente');
+    h += '<div class="dep-etape dep-etape-' + cls + '">'
+      +   '<div class="dep-etape-pt">' + (cls === 'fait' ? '&#10003;' : (i + 1)) + '</div>'
+      +   '<div class="dep-etape-lbl">' + esc(e.label) + '</div>'
+      +   (cls === 'fait' && fait[e.key] ? '<div class="dep-etape-date">' + esc(dateHeureFr(fait[e.key].ts)) + '</div>' : '')
+      + '</div>';
+  });
+  h += '</div>';
+  if(estDirection()){
+    h += '<div style="display:flex;gap:8px;margin-top:12px;">'
+      + (!toutesFaites
+        ? '<button class="btn btn-green" style="flex:1;padding:11px;" onclick="depEtapeSuivante()">&#9989; Valider l\'&eacute;tape suivante</button>'
+        : '<div class="dep-etapes-fait">&#9989; Toutes les &eacute;tapes sont valid&eacute;es</div>')
+      + (dernierIdx >= 0 ? '<button class="btn btn-gray" style="width:auto;padding:11px 14px;" onclick="depEtapeAnnuler()">Annuler</button>' : '')
+      + '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+/* ─────────────────────────────────────────────
    10. DÉTAIL D'UN DÉPART
    ───────────────────────────────────────────── */
 
@@ -3280,6 +3427,11 @@ window.depDetail = function(id, gardeFiltres){
     +   '</div>'
     + '</div>';
   }
+
+  // v1.19.72 : suivi transport (étapes visibles par le client), affiché
+  // uniquement pour un vrai container — le Dépôt (DEP_ID_DEPOT) est un
+  // simple stockage en attente, sans parcours à suivre.
+  if(!estDepot) h += depRenderEtapesTransportAdmin(d);
 
   // Les clients rattachés : ceux venus d'une collecte + ceux inscrits
   // directement au dépôt (hors collecte)
@@ -4256,6 +4408,54 @@ function depAfficherFacturePublique(ctx, cbApresQR){
   depRenderFacturePublique(c, ctx, cbApresQR);
 }
 
+// v1.19.72 : frise "Suivi de votre colis" sur la facture publique — vide
+// (rien n'est rendu) tant que le client n'est pas rattaché à un vrai
+// container, faute de pays/étapes à afficher.
+function depRenderSuiviTransportPublic(c){
+  if(!c || !c.departId || c.departId === DEP_ID_DEPOT) return '';
+  var d = (window.departsData||{})[c.departId];
+  if(!d) return '';
+  var pays = depPaysDepart(d);
+  var etapes = depEtapesTransportPour(pays);
+  var fait = d.etapesTransport || {};
+  var dernierIdx = -1;
+  etapes.forEach(function(e, i){ if(fait[e.key] && fait[e.key].fait) dernierIdx = i; });
+
+  var h = '<div class="fac-suivi">'
+    + '<div class="fac-suivi-titre">&#128205; Suivi de votre colis</div>';
+  etapes.forEach(function(e, i){
+    var cls = i <= dernierIdx ? 'done' : (i === dernierIdx + 1 ? 'now' : 'futur');
+    var sousLigne = '';
+    if(cls === 'done' && fait[e.key] && fait[e.key].ts){
+      sousLigne = '<div class="fac-suivi-date">' + esc(dateHeureFr(fait[e.key].ts)) + '</div>';
+    } else if(cls === 'now'){
+      sousLigne = '<span class="fac-suivi-now-tag">&Eacute;tape en cours</span>';
+    }
+    // v1.19.72 : à "Arrivée au dépôt" (Sénégal uniquement — Cobey n'a pas
+    // encore précisé l'équivalent pour le Mali), on affiche l'adresse et le
+    // contact sur place dès que cette étape est atteinte ou en cours,
+    // demande de Cobey du 29/08/2026 ("comme ça les clients auront l'info
+    // directement").
+    var infosDepot = '';
+    if(e.key === 'arrivee_depot' && pays === 'SN' && cls !== 'futur'){
+      infosDepot = '<div class="fac-suivi-infos">'
+        + '&#128205; <b>Adresse du d&eacute;p&ocirc;t</b> : ' + esc(DEP_ADRESSE_DEPOT) + '<br>'
+        + '&#9742;&#65039; <b>Contact sur place</b> : ' + esc(DEP_CONTACT_DEPOT.nom)
+        + (DEP_CONTACT_DEPOT.tel ? ' &mdash; ' + _depLienTel(DEP_CONTACT_DEPOT.tel, DEP_CONTACT_DEPOT.tel) : ' (num&eacute;ro &agrave; venir)')
+        + '</div>';
+    }
+    h += '<div class="fac-suivi-etape ' + cls + '">'
+      +   '<div class="fac-suivi-ligne"></div>'
+      +   '<div class="fac-suivi-pt">' + (cls === 'done' ? '&#10003;' : e.icon) + '</div>'
+      +   '<div class="fac-suivi-lbl">' + esc(e.label) + '</div>'
+      +   sousLigne
+      +   infosDepot
+      + '</div>';
+  });
+  h += '</div>';
+  return h;
+}
+
 // v1.19.29 : `cbApresQR` optionnel, appelé une fois le rendu ET le QR
 // (agrandi, voir plus bas) vraiment prêts — utilisé par
 // depExporterFacturePDF pour ne capturer la page qu'une fois le QR
@@ -4338,6 +4538,8 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     +         destBlock
     +       '</div>'
     +     '</div>'
+
+    +     depRenderSuiviTransportPublic(c)
 
     +     '<div class="fac-tbl-wrap"><table class="fac-table">'
     +       '<thead><tr><th>N&deg;</th><th>Description</th><th>Qt&eacute;</th><th>Unit&eacute;</th><th>Prix unitaire</th><th>Montant</th></tr></thead>'
