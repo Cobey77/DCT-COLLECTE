@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.74';
+var DEP_VERSION = 'v1.19.76';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1049,7 +1049,7 @@ function injecterEcrans(){
   +     '<div class="dep-cases">'
   +       '<div class="dep-case" id="dep-case-departs" style="border-color:#252599;" onclick="depOuvrirEspaceDeparts()">'
   +         '<div class="dep-case-ico">&#128674;</div>'
-  +         '<div class="dep-case-tit" style="color:#252599;">D&Eacute;PARTS</div>'
+  +         '<div class="dep-case-tit" style="color:#252599;">DIALLO CONTAINER</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-dep">—</div>'
   +       '</div>'
   +       '<div class="dep-case" style="border-color:#009A44;" onclick="depOuvrirEspaceCollecte()">'
@@ -1141,7 +1141,7 @@ function injecterEcrans(){
   + '<div class="screen" id="s-departs-pays">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
-  +     '<div class="h-title">D&eacute;parts</div>'
+  +     '<div class="h-title">Diallo Container</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
@@ -1152,8 +1152,8 @@ function injecterEcrans(){
   /* ---- ÉCRAN 2 : liste des départs (d'un pays donné) ---- */
   + '<div class="screen" id="s-departs">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="depDepartsPaysRetour()">&larr; D&eacute;parts</button>'
-  +     '<div class="h-title" id="dep-departs-titre">D&eacute;parts</div>'
+  +     '<button class="btn-back" onclick="depDepartsPaysRetour()">&larr; Diallo Container</button>'
+  +     '<div class="h-title" id="dep-departs-titre">Diallo Container</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
@@ -1200,7 +1200,7 @@ function injecterEcrans(){
   /* ---- ÉCRAN 4 : détail d'un départ ---- */
   + '<div class="screen" id="s-depart-detail">'
   +   '<div class="header">'
-  +     '<button class="btn-back" onclick="depDetailRetour()">&larr; D&eacute;parts</button>'
+  +     '<button class="btn-back" onclick="depDetailRetour()">&larr; Diallo Container</button>'
   +     '<div style="text-align:center;"><div class="h-title" id="dep-d-nom">D&eacute;part</div>'
   +     '<div class="h-sub" id="dep-d-sub"></div></div>'
   +     '<button class="btn-back" id="dep-d-btn-modifier" onclick="depModifier(_depDetailIdPublic())">Modifier</button>'
@@ -3859,7 +3859,7 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
       btnRetour.textContent = '← Dépôt';
       btnRetour.onclick = function(){ depCarreDepotContainer(_depDepotDepart); };
     } else {
-      btnRetour.textContent = '← Départ';
+      btnRetour.textContent = '← Diallo Container';
       btnRetour.onclick = function(){ depDetail(_depDetailIdPublic()); };
     }
   }
@@ -4521,6 +4521,12 @@ function depRenderSuiviTransportPublic(c){
   var fait = d.etapesTransport || {};
   var dernierIdx = -1;
   etapes.forEach(function(e, i){ if(fait[e.key] && fait[e.key].fait) dernierIdx = i; });
+  // v1.19.76 : date de la dernière mise à jour connue (celle de la
+  // dernière étape validée) — affichée sur l'étape "en cours" elle-même,
+  // qui n'a pas encore sa propre date puisque justement pas encore
+  // validée (retour de Cobey du 29/08/2026 : "il faut une date également
+  // pour que le client sache à quelle date en est le statut").
+  var derniereMajTs = (dernierIdx >= 0 && fait[etapes[dernierIdx].key]) ? fait[etapes[dernierIdx].key].ts : null;
 
   var h = '<div class="fac-suivi">'
     + '<div class="fac-suivi-titre">&#128205; Suivi de votre colis</div>';
@@ -4530,7 +4536,8 @@ function depRenderSuiviTransportPublic(c){
     if(cls === 'done' && fait[e.key] && fait[e.key].ts){
       sousLigne = '<div class="fac-suivi-date">' + esc(dateHeureFr(fait[e.key].ts)) + '</div>';
     } else if(cls === 'now'){
-      sousLigne = '<span class="fac-suivi-now-tag">&Eacute;tape en cours</span>';
+      sousLigne = '<span class="fac-suivi-now-tag">&Eacute;tape en cours</span>'
+        + (derniereMajTs ? '<div class="fac-suivi-date">Depuis le ' + esc(dateHeureFr(derniereMajTs)) + '</div>' : '');
     }
     // v1.19.72 : à "Arrivée au dépôt" (Sénégal uniquement — Cobey n'a pas
     // encore précisé l'équivalent pour le Mali), on affiche l'adresse et le
@@ -8555,7 +8562,7 @@ function greffer(){
         if(btnM){
           if(retourM && retourM.type === 'depart'){
             var depIdM1 = retourM.id;
-            btnM.textContent = '← Départ';
+            btnM.textContent = '← Diallo Container';
             btnM.onclick = function(){ depDetail(depIdM1); };
           } else if(retourM && retourM.type === 'carre'){
             var depIdM2 = retourM.id;
@@ -8661,7 +8668,7 @@ function greffer(){
         if(btn){
           if(retour && retour.type === 'depart'){
             var depId1 = retour.id;
-            btn.textContent = '← Départ';
+            btn.textContent = '← Diallo Container';
             btn.onclick = function(){ depDetail(depId1); };
           } else if(retour && retour.type === 'carre'){
             var depId2 = retour.id;
