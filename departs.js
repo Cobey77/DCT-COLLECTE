@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.82';
+var DEP_VERSION = 'v1.19.83';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -507,6 +507,12 @@ var DEP_PAYS_DEST = {
 // telles quelles ("S&eacute;n&eacute;gal" au lieu de "Sénégal").
 var DEP_PAYS_NOM_PLAIN = { SN:'Sénégal', ML:'Mali' };
 var DEP_PAYS_DEFAUT = 'SN';
+// v1.19.83 : plus de nom libre à la création d'un container — il faisait
+// doublon avec la date de départ déjà affichée à côté partout (retour de
+// Cobey du 29/08/2026 : "je trouve ça trop lourd"). Nom par défaut selon
+// la destination : "Chargement DKR" (Sénégal) ou "Chargement BMK" (Mali).
+var DEP_NOM_CHARGEMENT = { SN:'Chargement DKR', ML:'Chargement BMK' };
+function depNomParDefaut(pays){ return DEP_NOM_CHARGEMENT[pays] || DEP_NOM_CHARGEMENT[DEP_PAYS_DEFAUT]; }
 // v1.19.44 : "Dépôt (en attente)" — un container virtuel, jamais stocké
 // côté Firebase (voir son injection dans window.departsData plus bas),
 // qui accueille les clients détachés d'un vrai départ tant qu'ils ne
@@ -1220,8 +1226,9 @@ function injecterEcrans(){
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
-  +     '<div class="fg"><label class="fl">Nom du d&eacute;part</label>'
-  +       '<input class="fi" id="dep-f-nom" placeholder="D&eacute;part du 13 septembre 2026"></div>'
+  +     '<div class="fg"><label class="fl">Nom</label>'
+  +       '<div class="fi" id="dep-f-nom-apercu" style="background:#f5f5f5;color:var(--text3);'
+  +         'display:flex;align-items:center;">—</div></div>'
   +     '<div class="fg"><label class="fl">Date de d&eacute;part</label>'
   +       '<input class="fi" id="dep-f-date" type="date"></div>'
   +     '<div class="fg"><label class="fl">Date d\'arriv&eacute;e pr&eacute;vue &agrave; Dakar '
@@ -3230,9 +3237,11 @@ window.depNouveau = function(){
   // v1.19.16 : le pays du nouveau container est celui du sous-carré dans
   // lequel on se trouve déjà (voir depOuvrirDepartsPays) — pas de choix
   // supplémentaire à ce niveau, juste un rappel visuel dans le titre.
-  var p = DEP_PAYS_DEST[_depDepartsPays || DEP_PAYS_DEFAUT] || {};
+  var paysNouveau = _depDepartsPays || DEP_PAYS_DEFAUT;
+  var p = DEP_PAYS_DEST[paysNouveau] || {};
   var t = $('dep-form-titre'); if(t) t.innerHTML = 'Nouveau d&eacute;part &middot; ' + p.drapeau + ' ' + p.nom;
-  ['dep-f-nom','dep-f-date','dep-f-arrivee'].forEach(function(id){ var e=$(id); if(e) e.value=''; });
+  var apercu = $('dep-f-nom-apercu'); if(apercu) apercu.textContent = depNomParDefaut(paysNouveau);
+  ['dep-f-date','dep-f-arrivee'].forEach(function(id){ var e=$(id); if(e) e.value=''; });
   var bs = $('dep-f-bloc-statut'); if(bs) bs.style.display = 'none';
   var sp = $('dep-f-suppr');       if(sp) sp.style.display = 'none';
   depMajToggle();
@@ -3247,8 +3256,8 @@ window.depModifier = function(id){
   _depFormCloture = (d.statut === 'cloture');
   var pM = DEP_PAYS_DEST[depPaysDepart(d)] || {};
   var t = $('dep-form-titre'); if(t) t.innerHTML = 'Modifier le d&eacute;part &middot; ' + pM.drapeau + ' ' + pM.nom;
+  var apercuM = $('dep-f-nom-apercu'); if(apercuM) apercuM.textContent = d.nom || depNomParDefaut(depPaysDepart(d));
   var e;
-  e = $('dep-f-nom');     if(e) e.value = d.nom || '';
   e = $('dep-f-date');    if(e) e.value = d.dateDepart || '';
   e = $('dep-f-arrivee'); if(e) e.value = d.dateArriveePrevue || '';
 
@@ -3288,18 +3297,14 @@ function depMajToggle(){
 }
 
 window.depEnregistrer = function(){
-  var nom     = ($('dep-f-nom')||{}).value || '';
   var date    = ($('dep-f-date')||{}).value || '';
   var arrivee = ($('dep-f-arrivee')||{}).value || '';
-  nom = nom.trim();
 
-  if(!nom){ toast('⚠️ Donnez un nom au départ.'); return; }
   if(!date){ toast('⚠️ La date de départ est obligatoire.'); return; }
   if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
 
   var u = window.currentUser || {};
   var obj = {
-    nom               : nom,
     dateDepart        : date,
     dateArriveePrevue : arrivee || '',
     ouvertInscription : !!_depFormOuvert,
@@ -3310,8 +3315,8 @@ window.depEnregistrer = function(){
   // aucun historique — juste la valeur courante. On trace chaque changement
   // (date + auteur), repris ensuite dans le Suivi de chaque client rattaché
   // (voir depRenderSuivi) pour reconstituer tout le parcours du colis.
+  var dActuel = (_depEditId ? (window.departsData||{})[_depEditId] : null) || {};
   if(_depEditId){
-    var dActuel = (window.departsData||{})[_depEditId] || {};
     if((dActuel.statut || 'preparation') !== obj.statut){
       var histStatut = Array.isArray(dActuel.histStatut) ? dActuel.histStatut.slice() : [];
       histStatut.push({ statut: obj.statut, ts: Date.now(), q: u.name || u.id || '' });
@@ -3320,9 +3325,12 @@ window.depEnregistrer = function(){
   }
 
   if(_depEditId){
+    // v1.19.83 : le nom n'est plus modifiable ici — il reste celui déjà
+    // attribué (auto ou historique), on ne le touche pas à l'édition.
+    var nomActuel = dActuel.nom || depNomParDefaut(depPaysDepart(dActuel));
     db.ref('departs/'+_depEditId).update(obj).then(function(){
       toast('✅ Départ mis à jour');
-      depActivite('&#128230;', 'a modifi&eacute; le d&eacute;part <strong>'+esc(nom)+'</strong>');
+      depActivite('&#128230;', 'a modifi&eacute; le d&eacute;part <strong>'+esc(nomActuel)+'</strong>');
       goTo('s-departs'); depRenderListe();
     }).catch(function(e){
       toast('❌ Échec : ' + ((e && e.message) || 'enregistrement refusé'));
@@ -3333,9 +3341,12 @@ window.depEnregistrer = function(){
     // v1.19.16 : le pays est celui du sous-carré Départs actif — jamais
     // redemandé à la création (voir depOuvrirDepartsPays/depNouveau).
     obj.pays    = _depDepartsPays || DEP_PAYS_DEFAUT;
+    // v1.19.83 : nom attribué automatiquement selon la destination, plus
+    // de saisie libre à la création (retour de Cobey du 29/08/2026).
+    obj.nom     = depNomParDefaut(obj.pays);
     db.ref('departs').push(obj).then(function(){
       toast('✅ Départ créé');
-      depActivite('&#128230;', 'a cr&eacute;&eacute; le d&eacute;part <strong>'+esc(nom)+'</strong>');
+      depActivite('&#128230;', 'a cr&eacute;&eacute; le d&eacute;part <strong>'+esc(obj.nom)+'</strong>');
       goTo('s-departs'); depRenderListe();
     }).catch(function(e){
       toast('❌ Échec : ' + ((e && e.message) || 'création refusée'));
