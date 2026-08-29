@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.68';
+var DEP_VERSION = 'v1.19.71';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -356,6 +356,15 @@ var _depFactureCtx = null;      // { collecteId, clientId, depot, france } — f
 // posé juste avant d'appeler la fiche, consommé une seule fois (voir
 // patch de window.ouvrirFicheFrance dans greffer()).
 var _depFicheFranceRetour = null;
+// v1.19.71 : notifications pour Danny Diop (partenaire ramassage) — badge
+// sur l'onglet "Disponibles" + bandeau + tag "🆕 Nouveau" sur chaque carte,
+// pour les clients ajoutés par DCT depuis sa dernière visite (retour de
+// Cobey du 29/08/2026 : "il faudra qu'il sache quand il y a un nouveau
+// client ajouté par DCT"). _depDannyDernierVu : timestamp chargé une fois
+// par connexion depuis france/partenairesVus/{id}, ou null tant que pas
+// encore chargé (aucun badge affiché en attendant, pour ne pas se tromper).
+var _depDannyDernierVu = null;
+var _depDannyNouveauxIds = [];
 
 // v1.19.63 : résolution du client au centre de l'écran facture, désormais
 // sur 3 sources possibles (collecte, dépôt direct, France & Europe) au
@@ -1874,11 +1883,16 @@ window.depCarreDepotOuvrir = function(){
   deps.forEach(function(d){
     var id = d._id;
     var pays = DEP_PAYS_DEST[depPaysDepart(d)] || DEP_PAYS_DEST[DEP_PAYS_DEFAUT];
-    var nbDp = Object.keys(window.depotClients||{}).filter(function(k){ return (window.depotClients[k]||{}).departId === id; }).length;
+    // v1.19.69 : comptait uniquement les clients inscrits directement au
+    // dépôt — ne correspondait pas au total affiché sur la carte
+    // équivalente du carré Départs (Collecte + Dépôt + France & Europe),
+    // donnant l'impression de clients "manquants" (retour de Cobey du
+    // 29/08/2026 : "le nombre" ne correspond pas entre les deux carrés).
+    var nbDp = compteursDepart(id).clients;
     h += '<div class="dep-card" style="cursor:pointer;" onclick="depCarreDepotContainer(\''+id+'\')">'
       +   '<div class="dep-card-top"><div class="dep-nom">'+pays.drapeau+' '+esc(d.nom||'D&eacute;part')+'</div>'
       +     '<div class="dep-badge" style="background:#EDEDED;color:#333;">'+pays.nom+'</div></div>'
-      +   '<div class="dep-meta"><span>Part le '+dateFr(d.dateDepart)+'</span><span>'+nbDp+' client'+(nbDp>1?'s':'')+' au d&eacute;p&ocirc;t</span></div>'
+      +   '<div class="dep-meta"><span>Part le '+dateFr(d.dateDepart)+'</span><span>'+nbDp+' client'+(nbDp>1?'s':'')+'</span></div>'
       + '</div>';
   });
   box.innerHTML = h;
@@ -8307,6 +8321,36 @@ function greffer(){
     };
     window._actionsClient._depPatch = true;
   }
+  /* --- N quinquies (v1.19.70). Suppression d'une fiche France & Europe :
+     bloquée en natif dès que le colis n'est plus "en attente" ("Impossible :
+     le colis est déjà engagé") — garde-fou volontaire pour ne pas perdre
+     une fiche avec paiements/historique en cours. Mais ça bloque aussi la
+     direction quand il faut nettoyer une fiche de test allée jusqu'au bout
+     du parcours (retour de Cobey du 29/08/2026 : "j'arrive pas à supprimer
+     les clients test"). La direction (estDirection) peut donc désormais
+     forcer la suppression, avec un avertissement renforcé — les
+     collaborateurs normaux restent bloqués comme avant. --- */
+  if(typeof window.supprimerClientFrance === 'function' && !window.supprimerClientFrance._depPatch){
+    var origSupprimerClientFrance = window.supprimerClientFrance;
+    window.supprimerClientFrance = function(){
+      try{
+        var c = (((window.franceData||{}).clients||{})[window.franceClientId]) || {};
+        if(c.statut !== 'attente' && typeof estDirection === 'function' && estDirection()){
+          if(!confirm('⚠️ Ce colis est déjà engagé (' + (c.statut||'') + ') — le supprimer effacera aussi son historique de paiement/suivi. Confirmer la suppression de la fiche de ' + (c.name || c.nom || 'ce client') + ' ?')) return;
+          try{ _versCarnet(c); }catch(e){}
+          try{ db.ref('france_photos/'+window.franceClientId).remove(); }catch(e){}
+          db.ref('france/clients/'+window.franceClientId).remove().then(function(){
+            toast('🗑️ Fiche supprimée');
+            depActivite('&#128465;&#65039;', 'a supprim&eacute; (forc&eacute;) la fiche de <strong>'+esc(c.name||c.nom||'')+'</strong>');
+            goTo('s-france');
+          });
+          return;
+        }
+      }catch(e){ console.error('departs: suppression forcée fiche france', e); }
+      origSupprimerClientFrance.apply(this, arguments);
+    };
+    window.supprimerClientFrance._depPatch = true;
+  }
   /* --- N bis. Enregistrement du formulaire France & Europe : mêmes champs
      que la Collecte, écrits juste après l'original (retour de Cobey du
      28/08/2026). Le pays de destination doit être choisi avant d'enregistrer
@@ -8427,6 +8471,146 @@ function greffer(){
       return origSelectionPossible.apply(this, arguments);
     };
     window._selectionPossible._depPatch = true;
+  }
+
+  /* --- R (v1.19.71). Notifications "nouveau client" pour Danny Diop (et
+     tout futur partenaire "responsable") — voir _depDannyDernierVu
+     ci-dessus. Trois patches liés : connexion (charge la date de dernière
+     visite puis la remet à jour), _htmlVivierDanny (bandeau + mémorise les
+     ids "nouveaux"), renderDanny (badge sur l'onglet + tag sur les
+     cartes). --- */
+  if(typeof window._finalisLoginPartenaire === 'function' && !window._finalisLoginPartenaire._depPatch){
+    var origFinalisLoginPartenaire = window._finalisLoginPartenaire;
+    window._finalisLoginPartenaire = function(p){
+      origFinalisLoginPartenaire.apply(this, arguments);
+      try{
+        _depDannyDernierVu = null;
+        _depDannyNouveauxIds = [];
+        if(p && p.role === 'responsable' && window.db && window.firebaseReady){
+          db.ref('france/partenairesVus/'+p.id).once('value').then(function(snap){
+            // v1.19.71 : toute première visite (rien encore enregistré) —
+            // pas de date de référence en base : on prend "maintenant" et
+            // non 0, sinon TOUT le stock déjà en attente s'afficherait
+            // d'un coup comme "nouveau" au premier lancement de la
+            // fonctionnalité.
+            _depDannyDernierVu = snap.exists() ? (snap.val() || 0) : Date.now();
+            // Marqué "vu" tout de suite : les nouveautés de cette visite
+            // restent affichées jusqu'à la prochaine connexion (pas
+            // jusqu'au premier coup d'œil), mais ne réapparaîtront pas
+            // ensuite tant qu'aucun nouveau client n'arrive après ça.
+            db.ref('france/partenairesVus/'+p.id).set(Date.now());
+            try{ renderDanny(); }catch(e){}
+          });
+        }
+      }catch(e){ console.error('departs: chargement dernière visite Danny', e); }
+    };
+    window._finalisLoginPartenaire._depPatch = true;
+  }
+  if(typeof window.deconnexionPartenaire === 'function' && !window.deconnexionPartenaire._depPatch){
+    var origDeconnexionPartenaire = window.deconnexionPartenaire;
+    window.deconnexionPartenaire = function(){
+      _depDannyDernierVu = null;
+      _depDannyNouveauxIds = [];
+      origDeconnexionPartenaire.apply(this, arguments);
+    };
+    window.deconnexionPartenaire._depPatch = true;
+  }
+  if(typeof window._htmlVivierDanny === 'function' && !window._htmlVivierDanny._depPatch){
+    var origHtmlVivierDanny = window._htmlVivierDanny;
+    window._htmlVivierDanny = function(){
+      var html = origHtmlVivierDanny.apply(this, arguments);
+      try{
+        _depDannyNouveauxIds = [];
+        if(_depDannyDernierVu !== null && typeof _clientsDispo === 'function'){
+          var nouveaux = _clientsDispo().filter(function(c){ return (c.creeTs||0) > _depDannyDernierVu; });
+          if(nouveaux.length){
+            _depDannyNouveauxIds = nouveaux.map(function(c){ return c._id; });
+            var bandeau = '<div style="background:#e8eaf6;border:1.5px solid #1a237e;border-radius:var(--radius);'
+              + 'padding:10px 12px;margin-bottom:11px;font-size:12.5px;color:#1a237e;line-height:1.5;">'
+              + '&#127881; <b>'+nouveaux.length+' nouveau'+(nouveaux.length>1?'x clients':' client')+'</b> depuis ta derni&egrave;re visite'
+              + '</div>';
+            var re = /<div class="slabel">\d+ clients? &agrave; ramasser<\/div>/;
+            if(re.test(html)) html = html.replace(re, function(m){ return bandeau + m; });
+            else html = bandeau + html;
+          }
+        }
+      }catch(e){ console.error('departs: bandeau nouveaux clients Danny', e); }
+      return html;
+    };
+    window._htmlVivierDanny._depPatch = true;
+  }
+  if(typeof window.renderDanny === 'function' && !window.renderDanny._depPatch){
+    var origRenderDanny = window.renderDanny;
+    window.renderDanny = function(){
+      origRenderDanny.apply(this, arguments);
+      try{
+        var onglet = $('dtab-vivier');
+        if(onglet && typeof _estDanny === 'function' && _estDanny()){
+          var n = 0;
+          if(_depDannyDernierVu !== null && typeof _clientsDispo === 'function'){
+            n = _clientsDispo().filter(function(c){ return (c.creeTs||0) > _depDannyDernierVu; }).length;
+          }
+          onglet.innerHTML = '&#128203; Disponibles' + (n
+            ? (' <span style="background:#c0392b;color:#fff;font-size:10.5px;font-weight:800;padding:1px 6px;border-radius:10px;margin-left:2px;vertical-align:2px;">'+n+'</span>')
+            : '');
+        }
+        // Tag "🆕 Nouveau" sur chaque carte concernée — voir _depDannyNouveauxIds,
+        // posé juste avant par _htmlVivierDanny.
+        _depDannyNouveauxIds.forEach(function(id){
+          var carte = document.querySelector('[onclick="toggleSelDanny(\''+id+'\')"]');
+          if(!carte || carte.querySelector('.dep-tag-nouveau')) return;
+          carte.style.position = 'relative';
+          var tag = document.createElement('div');
+          tag.className = 'dep-tag-nouveau';
+          tag.style.cssText = 'position:absolute;top:-7px;right:8px;background:#1a237e;color:#fff;'
+            + 'font-size:10px;font-weight:800;padding:2px 8px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.25);';
+          tag.textContent = '🆕 Nouveau';
+          carte.insertBefore(tag, carte.firstChild);
+        });
+      }catch(e){ console.error('departs: badge/tag nouveaux clients Danny', e); }
+    };
+    window.renderDanny._depPatch = true;
+  }
+
+  /* --- S (v1.19.71). Écran Suivi France & Europe (DCT) : le total de
+     clients ("EN ATTENTE · 13 CLIENTS · 2870 €") est un simple ".slabel"
+     — texte gris minuscule, perdu au milieu de l'écran (constaté par
+     Cobey le 29/08/2026 : "Issyaka ne l'a même pas vu [...] il est pas
+     assez voyant"). Transformé en carte chiffrée bien visible, même
+     principe que les compteurs du carré Départs (depDetail). Ciblé par
+     contenu (seul ".slabel" du carré Suivi contenant un nombre de
+     clients — "Région"/"Département" n'en ont pas) plutôt que par un id,
+     absent du natif. --- */
+  if(typeof window.renderFrance === 'function' && !window.renderFrance._depPatch){
+    var origRenderFrance = window.renderFrance;
+    window.renderFrance = function(){
+      origRenderFrance.apply(this, arguments);
+      try{
+        var box = $('france-content');
+        if(!box) return;
+        var slabels = box.querySelectorAll('.slabel');
+        for(var i = 0; i < slabels.length; i++){
+          var el = slabels[i];
+          var m = /(\d+)\s*clients?/i.exec(el.textContent || '');
+          if(!m) continue;
+          var spans = el.querySelectorAll('span');
+          var libTxt = spans[0] ? spans[0].textContent.split('·')[0].trim() : '';
+          var montantTxt = (spans[1] && /\d/.test(spans[1].textContent)) ? spans[1].textContent.trim() : '';
+          var carte = document.createElement('div');
+          carte.style.cssText = 'background:#fff;border:1.5px solid var(--border);border-radius:var(--radius);'
+            + 'padding:14px;margin-bottom:12px;display:grid;grid-template-columns:'+(montantTxt?'1fr 1fr':'1fr')+';gap:8px;text-align:center;box-shadow:var(--shadow);';
+          carte.innerHTML = '<div><div style="font-size:24px;font-weight:800;color:#1a237e;">'+esc(m[1])+'</div>'
+            + '<div style="font-size:10.5px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:.03em;">'+esc(libTxt || 'Clients')+'</div></div>'
+            + (montantTxt
+              ? ('<div><div style="font-size:24px;font-weight:800;color:#006b2d;">'+esc(montantTxt)+'</div>'
+                 + '<div style="font-size:10.5px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:.03em;">Montant</div></div>')
+              : '');
+          el.parentNode.replaceChild(carte, el);
+          break;
+        }
+      }catch(e){ console.error('departs: mise en avant du total France & Europe', e); }
+    };
+    window.renderFrance._depPatch = true;
   }
 }
 
