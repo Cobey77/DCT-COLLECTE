@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.83';
+var DEP_VERSION = 'v1.19.84';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -9390,8 +9390,36 @@ function depActivite(emoji, texte){
    14. DÉMARRAGE
    ───────────────────────────────────────────── */
 
+// v1.19.84 : "Ajouter à l'écran d'accueil" (iOS) affichait juste un "D" sur
+// fond noir (retour de Cobey du 29/08/2026 : "je trouve ça pas esthétique")
+// — index.html n'a jamais eu de balise apple-touch-icon, donc Safari
+// générait une icône par défaut à partir de la 1ère lettre du titre. On
+// réutilise l'image déjà présente dans la page (#dct-logo, chargée par
+// index.html) plutôt que de dupliquer son contenu ici.
+function injecterIconeAccueil(){
+  try{
+    var logo = document.getElementById('dct-logo');
+    var src = logo ? logo.getAttribute('src') : '';
+    if(!src) return;
+    [
+      { rel:'apple-touch-icon', id:'dep-icone-apple' },
+      { rel:'icon',             id:'dep-icone-favicon' }
+    ].forEach(function(cfg){
+      var link = document.getElementById(cfg.id);
+      if(!link){
+        link = document.createElement('link');
+        link.id = cfg.id;
+        link.rel = cfg.rel;
+        document.head.appendChild(link);
+      }
+      link.href = src;
+    });
+  }catch(e){}
+}
+
 function demarrer(){
   try{ injecterStyles(); }catch(e){ console.error('departs: styles', e); }
+  try{ injecterIconeAccueil(); }catch(e){ console.error('departs: icône accueil', e); }
   try{ injecterEcrans(); }catch(e){ console.error('departs: écrans', e); }
   try{ injecterChampsClient(); }catch(e){ console.error('departs: champs', e); }
   try{ injecterChampsClientFrance(); }catch(e){ console.error('departs: champs france', e); }
