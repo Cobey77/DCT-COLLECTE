@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.64';
+var DEP_VERSION = 'v1.19.65';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1312,7 +1312,7 @@ function injecterEcrans(){
   // v1.19.27 : retour direct vers la tourn&eacute;e pour encha&icirc;ner sur
   // le client suivant, sans repasser par la facture (retour de Cobey :
   // "aucun moyen de revenir directement sur la dispatch").
-  +     '<button class="btn btn-gray" style="margin-top:18px;" onclick="goTo(\'s-camion\')">&#128666; Retour &agrave; la tourn&eacute;e</button>'
+  +     '<button class="btn btn-gray" style="margin-top:18px;" onclick="depRetourDocumentsListe()">&#128666; Retour &agrave; la tourn&eacute;e</button>'
   +   '</div>'
   + '</div>'
 
@@ -3634,6 +3634,19 @@ window.depRetourDocuments = function(){
   goTo('s-camion');
 };
 
+// v1.19.65 : le bouton "Retour à la tournée" fixe de l'écran Documents
+// n'avait de sens que côté Collecte (goTo('s-camion')) — pour un client
+// France & Europe (pas de "tournée" au sens Collecte), on revient plutôt
+// à l'écran France & Europe.
+window.depRetourDocumentsListe = function(){
+  var ctx = _depFactureCtx;
+  if(ctx && ctx.france){
+    if(_peutGererFrance()){ goTo('s-france'); renderFrance(); }
+    return;
+  }
+  goTo('s-camion');
+};
+
 window.depValiderFactureFinale = function(){
   var ctx = _depFactureCtx;
   if(!ctx || ctx.depot){ toast('⚠️ Rien à valider ici.'); return; }
@@ -3716,9 +3729,7 @@ window.depValiderFactureFinaleExecuter = function(){
 window.depRetourFactureDepuisImpression = function(){
   var ctx = _depFactureCtx;
   if(ctx){
-    var c = ctx.depot
-      ? (window.depotClients || {})[ctx.clientId]
-      : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+    var c = _depClientFacture(ctx);
     if(c) depRenderFacture(c);
   }
   goTo('s-facture');
@@ -5130,12 +5141,16 @@ function depRenderFacture(c){
   // Cobey : "si on revient sur cette page, c'est pour modifier un
   // paiement [...] pas logique de mélanger paiement et impression".
   // v1.19.64 : côté France & Europe, pas de camion à valider (gatePrint ne
-  // s'applique pas) — mais les documents ne doivent pas non plus être
-  // imprimables avant que le départ pour Dakar soit déclaré ci-dessus,
-  // même logique que la Collecte (retour de Cobey du 29/08/2026 : "les
-  // boutons d'impression ne doivent apparaître qu'après la validation de
-  // la facture").
-  var franceNonValide = !!(ctxFact.france && c.statut !== 'parti');
+  // s'applique pas) — mais tant que le départ pour Dakar n'est pas déclaré
+  // ci-dessus, rien à valider non plus.
+  var franceSansDepart = !!(ctxFact.france && c.statut !== 'parti');
+  // v1.19.65 : une fois le départ déclaré, même principe que la Collecte —
+  // un bouton "✅ Valider la facture" débloque les documents, plutôt que de
+  // les rendre disponibles automatiquement (retour de Cobey du 29/08/2026 :
+  // "il faut un bouton de validation en bas [...] le même principe que
+  // pour la collecte").
+  var franceAValider = !!(ctxFact.france && c.statut === 'parti' && !c.factureValidee);
+  var franceValidee = !!(ctxFact.france && c.statut === 'parti' && c.factureValidee);
 
   if(gatePrint){
     h += '<div style="margin-top:18px;">'
@@ -5147,11 +5162,21 @@ function depRenderFacture(c){
       + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Facture d&eacute;j&agrave; valid&eacute;e. Modifiez un paiement si besoin, puis retrouvez les documents &agrave; imprimer.</div>'
       + '<button class="btn btn-green" onclick="depValiderFactureFinale()">&#128196; Voir les documents</button>'
       + '</div>';
-  } else if(franceNonValide){
+  } else if(franceSansDepart){
     h += '<div style="margin-top:18px;font-size:12px;color:var(--text3);text-align:center;">Les documents (facture imprimable, &eacute;tiquette, QR) seront disponibles une fois le d&eacute;part pour Dakar d&eacute;clar&eacute; ci-dessus.</div>';
+  } else if(franceAValider){
+    h += '<div style="margin-top:18px;">'
+      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">La facture peut encore &ecirc;tre modifi&eacute;e (prix, versements). Une fois pr&ecirc;te, validez-la pour d&eacute;bloquer les documents &agrave; imprimer.</div>'
+      + '<button class="btn btn-green" onclick="depValiderFactureFinaleFrance()">&#9989; Valider la facture</button>'
+      + '</div>';
+  } else if(franceValidee){
+    h += '<div style="margin-top:18px;">'
+      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Facture d&eacute;j&agrave; valid&eacute;e. Modifiez un paiement si besoin, puis retrouvez les documents &agrave; imprimer.</div>'
+      + '<button class="btn btn-green" onclick="depValiderFactureFinaleFrance()">&#128196; Voir les documents</button>'
+      + '</div>';
   } else {
-    // Dépôt direct (pas de notion de validation camion) et France & Europe
-    // une fois le départ déclaré : impression accessible directement.
+    // Dépôt direct : pas de notion de validation, impression accessible
+    // directement.
     h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
       +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
       // v1.19.21 : étiquette(s) colis — voir depOuvrirEtiquette.
@@ -5175,7 +5200,7 @@ function depRenderFacture(c){
   // désormais sur la facture imprimable (voir depRenderFacturePublique),
   // pas ici (même logique que ci-dessus : plus de doublon paiement/
   // impression sur cette page-là).
-  if(!gatePrint && !estCollecteValidee && !franceNonValide){
+  if(!gatePrint && !estCollecteValidee && !ctxFact.france){
     h += '<div class="dep-sec">QR code (r&eacute;serv&eacute; aux employ&eacute;s DCT)</div>'
       + '<div style="text-align:center;padding:6px 0 10px;">'
       +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
@@ -5246,6 +5271,37 @@ window.depFranceFixerPrix = function(){
 
   toast('✅ Prix fixé : ' + v + ' €');
   depRenderFacture(c);
+};
+
+// v1.19.65 : validation finale de la facture France & Europe — même
+// principe que la Collecte (depValiderFactureFinale) : tant que non
+// validée, les documents (impression/étiquette/WhatsApp) restent cachés ;
+// un bouton "✅ Valider la facture" en bas déclenche la validation puis
+// bascule sur l'écran "Documents" (retour de Cobey du 29/08/2026 : "il
+// faut un bouton de validation en bas, qui valide la facture et qui fait
+// apparaître les documents à imprimer, le même principe que la collecte").
+// Ré-appel de sécurité (déjà validée) : on ravance juste vers les
+// documents, rien à revalider.
+window.depValiderFactureFinaleFrance = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx || !ctx.france) return;
+  var c = ((window.franceData||{}).clients||{})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  if(c.factureValidee){ depRenderFacture(c); _depAfficherEcranDocuments(); return; }
+
+  var u = window.currentUser || {};
+  var hist = (c.hist||[]).slice();
+  hist.push({ q: u.name||'', a: 'a valid&eacute; la facture', ts: Date.now(), type:'validation' });
+
+  c.factureValidee = true;
+  c.hist = hist;
+
+  _depEcrireFacture(ctx, { factureValidee: true, hist: hist });
+
+  toast('✅ Facture validée');
+  depRenderFacture(c);
+  _depAfficherEcranDocuments();
 };
 
 /* ─────────────────────────────────────────────
