@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.66';
+var DEP_VERSION = 'v1.19.67';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1457,6 +1457,9 @@ function injecterEcrans(){
   +     '.etq-header{display:flex;align-items:center;gap:8px;margin-bottom:10px;}'
   +     '.etq-logo{width:36px;height:36px;border-radius:50%;flex-shrink:0;}'
   +     '.etq-marque{font-size:12px;font-weight:800;color:#006b2d;flex:1;}'
+  // v1.19.67 : préfixe du parcours d'origine (C/D/FR/BE...) — voir
+  // depRenderEtiquettes.
+  +     '.etq-parcours{font-size:13px;font-weight:800;color:#fff;padding:3px 10px;border-radius:20px;flex-shrink:0;letter-spacing:.02em;}'
   +     '.etq-compte{font-size:13px;font-weight:800;background:#006b2d;color:#fff;padding:3px 9px;border-radius:20px;flex-shrink:0;}'
   +     '.etq-numero{font-size:19px;font-weight:800;letter-spacing:.02em;color:#111;text-align:center;background:#f7f7f7;border-radius:6px;padding:10px;margin-bottom:6px;}'
   +     '.etq-dest{text-align:center;font-size:13px;font-weight:700;color:#333;margin-bottom:10px;}'
@@ -1888,11 +1891,16 @@ window.depCarreDepotContainer = function(departId){
   var clientsDepot = Object.keys(window.depotClients||{})
     .filter(function(k){ return (window.depotClients[k]||{}).departId === departId; })
     .map(function(k){ return { depot:true, clientId:k, c: window.depotClients[k] }; });
+  // v1.19.67 : idem depDetail — les clients France & Europe rattachés à ce
+  // départ manquaient ici aussi.
+  var clientsFranceCarre = Object.keys((window.franceData||{}).clients||{})
+    .filter(function(k){ return (window.franceData.clients[k]||{}).departId === departId; })
+    .map(function(k){ return { france:true, clientId:k, c: window.franceData.clients[k] }; });
   // v1.19.56 : mémorisés pour la barre de recherche (voir
   // depCarreDepotFiltrer) — retour de Cobey du 28/08/2026.
   _depDepotCarreDepartId = departId;
   _depDepotCarrePeutInscrire = peutInscrire;
-  _depDepotCarreListe = clientsCollecte.concat(clientsDepot)
+  _depDepotCarreListe = clientsCollecte.concat(clientsDepot).concat(clientsFranceCarre)
     .sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
 
   var rech = $('depot-carre-recherche'); if(rech) rech.value = '';
@@ -1935,11 +1943,14 @@ function _depDepotCarreRenderListe(filtre){
       var c = x.c;
       var clic = x.depot
         ? "depOuvrirDepotForm('"+departId+"','"+x.clientId+"',true)"
-        : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"',true)";
+        : (x.france
+          ? "ouvrirFicheFrance('"+x.clientId+"')"
+          : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"',true)");
       h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
         +   '<div style="flex:1;min-width:0;">'
         +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
-        +       (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
+        +       (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')
+        +       (x.france ? ' <span style="font-size:10.5px;font-weight:700;color:#1a237e;">&#9992;&#65039; France &amp; Europe</span>' : '')+'</div>'
         +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
         +       (c.destinataireNom ? ' &middot; &#127968; '+esc(c.destinataireNom) : '')
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
@@ -3253,6 +3264,14 @@ window.depDetail = function(id, gardeFiltres){
   var clientsDepot = Object.keys(window.depotClients||{})
     .filter(function(k){ return window.depotClients[k] && window.depotClients[k].departId === id; })
     .map(function(k){ return { depot:true, clientId:k, c: window.depotClients[k] }; });
+  // v1.19.67 : les clients France & Europe affectés à ce container en
+  // manquaient complètement ici — comptés dans le total en haut (voir
+  // compteursDepart) mais absents de la liste, comme s'ils avaient
+  // disparu une fois la facture validée (constaté par Cobey le
+  // 29/08/2026 : "il disparaît complètement").
+  var clientsFrance = Object.keys((window.franceData||{}).clients||{})
+    .filter(function(k){ return window.franceData.clients[k] && window.franceData.clients[k].departId === id; })
+    .map(function(k){ return { france:true, clientId:k, c: window.franceData.clients[k] }; });
 
   // v1.19.44 : "Inscrire un client au dépôt direct" (feature existante,
   // sans rapport avec le Dépôt d'attente) n'a pas de sens ici — ça
@@ -3264,7 +3283,7 @@ window.depDetail = function(id, gardeFiltres){
   // départ restent visibles et modifiables ci-dessous.
   h += '<div class="dep-sec" style="border-top:none;padding-top:0;margin-top:4px;">'+(estDepot ? 'Clients en attente' : 'Clients de ce d&eacute;part')+'</div>';
 
-  var tousAffiches = clients.concat(clientsDepot);
+  var tousAffiches = clients.concat(clientsDepot).concat(clientsFrance);
 
   // v1.19.41 : filtres cumulables — retour de Cobey du 24/08/2026. Payé =
   // colis ET livraison intégralement réglés (depCalculerPaiementCombine) ;
@@ -3315,14 +3334,19 @@ window.depDetail = function(id, gardeFiltres){
     affiches.sort(function(a,b){ return String(a.c.name||'').localeCompare(String(b.c.name||'')); });
     affiches.forEach(function(x){
       var c = x.c;
-      var peutBouger = (d.statut === 'preparation') && !x.depot;
+      // v1.19.67 : Déplacer/Détacher s'appuient sur des fonctions propres à
+      // la Collecte (collecteId) — pas encore adaptées à France & Europe,
+      // on les masque simplement pour ces clients-là pour l'instant.
+      var peutBouger = (d.statut === 'preparation') && !x.depot && !x.france;
       // v1.19.44 : "Détacher" n'a pas de sens depuis le Dépôt lui-même —
       // le client y est déjà "détaché", seul "Déplacer" (vers un vrai
       // container) reste utile ici.
       var peutDetacher = peutBouger && !estDepot;
       var clic = x.depot
         ? "depOuvrirDepotForm('"+id+"','"+x.clientId+"')"
-        : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"')";
+        : (x.france
+          ? "ouvrirFicheFrance('"+x.clientId+"')"
+          : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"')");
       // v1.19.43 : le numéro n'est plus dans le texte de la ligne (trop
       // près des boutons juste en dessous, risque de mauvaise
       // manipulation — retour de Cobey du 24/08/2026) mais en pastille
@@ -3334,7 +3358,8 @@ window.depDetail = function(id, gardeFiltres){
       var drapeauCli = (DEP_PAYS_DEST[depPaysFiche(c)] || {}).drapeau || '';
       h += '<div class="dep-cli" style="cursor:pointer;" onclick="'+clic+'">'
         +   '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))+' '+drapeauCli
-        +     (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')+'</div>'
+        +     (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')
+        +     (x.france ? ' <span style="font-size:10.5px;font-weight:700;color:#1a237e;">&#9992;&#65039; France &amp; Europe</span>' : '')+'</div>'
         +   '<div class="dep-cli-s" style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:2px;">'
         +     '<span>'+(c.prixADefinir ? '&agrave; d&eacute;finir' : ((parseFloat(c.prix)||0)+' &euro;'))
         +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</span>'
@@ -3342,12 +3367,15 @@ window.depDetail = function(id, gardeFiltres){
         +   '</div>'
         +   '<div class="dep-cli-btns" style="margin-top:12px;">'
               + '<button class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
-                + 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#129534; Facture</button>'
+                + (x.france
+                  ? 'onclick="event.stopPropagation();depOuvrirFactureFrance(\''+x.clientId+'\')"'
+                  : 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')"')
+                + '>&#129534; Facture</button>'
               // v1.19.41 : le bouton "Suivi" ne servait à rien à cet endroit
               // (retour de Cobey du 24/08/2026) — remplacé par un accès
               // rapide aux photos du colis (voir depOuvrirPhotosRapide).
               + '<button class="dep-cli-btn" style="background:#F3EFFF;border-color:#D9C8F5;color:#6d28d9;" '
-                + 'onclick="event.stopPropagation();depOuvrirPhotosRapide(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">&#128247; Photos</button>'
+                + 'onclick="event.stopPropagation();depOuvrirPhotosRapide(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+','+(x.france?'true':'false')+')">&#128247; Photos</button>'
               + (peutBouger
                 ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
                 : '')
@@ -4492,6 +4520,15 @@ function depRenderEtiquettes(c, ctx, n){
   var refClient = depRefClientPour(_depCleContact(c));
   var nom = c.name || ((c.prenom||'') + ' ' + (c.nom||'')).trim() || 'Client';
 
+  // v1.19.67 : préfixe du parcours d'origine (C = Collecte, D = Dépôt
+  // direct, FR/BE/... = France & Europe, selon le pays du client — même
+  // logique que le numéro de facture, voir depNumeroFacture) affiché en
+  // évidence sur l'étiquette, pour reconnaître d'un coup d'œil d'où vient
+  // chaque colis (retour de Cobey du 29/08/2026 : "pour qu'on puisse
+  // reconnaître à vue d'œil d'où il provient").
+  var prefixeParcours = String(depNumeroFacture(c, ctx) || '').split('-')[0] || '';
+  var couleurParcours = { C:'#006b2d', D:'#B8860B' }[prefixeParcours] || '#1a237e';
+
   // Adresse expéditeur : reprend ce qui est déjà affiché sur la facture
   // (voir depRenderFacturePublique), en une seule ligne, avant masquage.
   var adresseExp = [c.adresse||'', ((c.cp||'')+' '+(c.ville||'')).trim()].filter(Boolean).join(', ');
@@ -4515,6 +4552,7 @@ function depRenderEtiquettes(c, ctx, n){
       +       '<div class="etq-header">'
       +         '<img class="etq-logo" src="'+DEP_LOGO_B64+'" alt="Dakar City Transport">'
       +         '<div class="etq-marque">DAKAR CITY TRANSPORT</div>'
+      +         '<div class="etq-parcours" style="background:'+couleurParcours+';">'+esc(prefixeParcours)+'</div>'
       +         '<div class="etq-compte">'+i+'/'+n+'</div>'
       +       '</div>'
       +       '<div class="etq-numero">'+esc(numEtq)+'</div>'
@@ -5696,10 +5734,8 @@ window.depFicheLPhotoChoisie = function(input){
    modale plutôt que vers #e-photos-box.
    ───────────────────────────────────────────── */
 
-window.depOuvrirPhotosRapide = function(collecteId, clientId, depot){
-  var c = depot
-    ? (window.depotClients || {})[clientId]
-    : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
+window.depOuvrirPhotosRapide = function(collecteId, clientId, depot, france){
+  var c = _depClientFacture({ collecteId: collecteId, clientId: clientId, depot: !!depot, france: !!france });
   if(!c){ toast('⚠️ Client introuvable.'); return; }
   var titre = $('dep-photos-rapide-nom');
   if(titre) titre.textContent = '📷 Photos — ' + (c.name || 'Client');
