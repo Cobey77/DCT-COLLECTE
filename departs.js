@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.76';
+var DEP_VERSION = 'v1.19.77';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -7966,6 +7966,37 @@ function greffer(){
       return origRafraichir.apply(this, arguments);
     };
     window._rafraichirLogin._depPatch = true;
+  }
+
+  /* --- A ter. Écran de connexion (premier écran, avant tout login) :
+     afficher la version du module Diallo Container sous "Mise à jour",
+     pour que Niass/Cobey sachent direct si c'est la bonne version. --- */
+  function _depAfficherVersionLogin(){
+    try{
+      var u = document.getElementById('app-update');
+      if(!u) return;
+      var dv = document.getElementById('dep-login-version');
+      if(!dv){
+        dv = document.createElement('div');
+        dv.id = 'dep-login-version';
+        dv.style.cssText = 'font-size:10px;color:#9a9a9a;font-weight:600;margin-top:2px;margin-bottom:14px;';
+        u.parentNode.insertBefore(dv, u.nextSibling);
+      }
+      dv.textContent = 'Diallo Container ' + DEP_VERSION;
+    }catch(e){}
+  }
+  // L'appel natif buildLogin() du tout premier chargement (avant que ce
+  // patch n'existe) est déjà passé — on affiche donc la version tout de
+  // suite, puis on se greffe pour les appels suivants (retour/déconnexion).
+  _depAfficherVersionLogin();
+  if(typeof window.buildLogin === 'function' && !window.buildLogin._depPatch){
+    var origBuildLogin = window.buildLogin;
+    window.buildLogin = function(){
+      var r = origBuildLogin.apply(this, arguments);
+      _depAfficherVersionLogin();
+      return r;
+    };
+    window.buildLogin._depPatch = true;
   }
 
   /* --- B. Après la connexion : bifurcation pour tout le monde
