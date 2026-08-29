@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.86';
+var DEP_VERSION = 'v1.19.89';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1792,16 +1792,28 @@ function injecterEcrans(){
   + '<div class="screen" id="s-devis-form">'
   +   '<div class="header">'
   +     '<button class="btn-back" onclick="goTo(\'s-devis\');depRenderListeDevis();">&larr; Devis</button>'
-  +     '<div class="h-title">Nouveau devis</div>'
+  +     '<div class="h-title" id="devis-form-titre">Nouveau devis</div>'
   +     '<div style="width:60px;"></div>'
   +   '</div>'
   +   '<div class="content">'
   +     '<div id="devis-pays-badge" style="font-size:12.5px;font-weight:600;color:#00695C;'
   +       'background:#E0F2F1;border:1.5px solid #B2DFDB;border-radius:10px;padding:9px 12px;margin-bottom:14px;"></div>'
-  +     '<div class="fg"><label class="fl">Pr&eacute;nom ou nom du client</label>'
-  +       '<input class="fi" id="devis-f-nom" placeholder="Awa Ndiaye"></div>'
+  // v1.19.88 : civilité + prénom/nom séparés, comme sur les fiches Collecte
+  // et France & Europe (retour de Cobey du 29/08/2026 : "il faut reprendre
+  // le choix de m/mme ou société [...] du coup quand c'est redirigé vers
+  // un parcours ça reprend mais pas dans les bonnes cases").
+  +     '<div class="fg"><label class="fl">Civilit&eacute;</label><div id="devis-civ" style="display:flex;gap:6px;"></div></div>'
+  +     '<div class="form-row">'
+  +       '<div class="fg" id="devis-bloc-prenom"><label class="fl">Pr&eacute;nom</label>'
+  +         '<input class="fi" id="devis-f-prenom" placeholder="Fatou"></div>'
+  +       '<div class="fg"><label class="fl" id="devis-lab-nom">Nom</label>'
+  +         '<input class="fi" id="devis-f-nom" placeholder="Diallo"></div>'
+  +     '</div>'
   +     '<div class="fg"><label class="fl">T&eacute;l&eacute;phone</label>'
   +       '<input class="fi" id="devis-f-tel" type="tel" placeholder="77 000 00 00"></div>'
+  +     '<div class="fg"><label class="fl">Type de colis '
+  +       '<span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+  +       '<textarea class="fi" id="devis-f-colis" rows="2" placeholder="ex: 2 valises + 1 carton..." style="resize:none;"></textarea></div>'
 
   +     '<div class="dep-sec">Livraison &agrave; Dakar</div>'
   +     '<div class="fg"><label class="fl">Le colis doit-il &ecirc;tre livr&eacute; ?</label>'
@@ -9584,14 +9596,20 @@ window.depRenderListeDevis = function(){
   var h = '';
   items.forEach(function(d){
     var pays = DEP_PAYS_DEST[d.pays] || DEP_PAYS_DEST[DEP_PAYS_DEFAUT];
+    var nomAffiche = _composeNom(d.civilite, d.prenom, d.nom) || 'Client';
     h += '<div class="dep-card">'
-      +   '<div class="dep-card-top"><div class="dep-nom">'+pays.drapeau+' '+esc(d.nom||'Client')+'</div>'
+      +   '<div class="dep-card-top"><div class="dep-nom">'+pays.drapeau+' '+esc(nomAffiche)+'</div>'
       +     '<div class="dep-badge" style="background:#E0F2F1;color:#00695C;">'+(parseFloat(d.montant)||0)+' &euro;</div></div>'
       +   '<div class="dep-meta"><span>'+_depLienTel(d.tel, d.tel||'—')+'</span><span>'+pays.nom+'</span></div>'
       +   '<div class="dep-meta" style="margin-top:4px;color:#999;"><span>Par '+esc(d.creeParNom||'—')+'</span><span>Le '+dateHeureFr(d.creeLe)+'</span></div>'
-      +   (d.livraison ? ('<div class="dep-meta" style="margin-top:4px;"><span>&#128666; Livraison'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+(d.livraisonPrix ? (' &middot; '+d.livraisonPrix+' &euro;') : '')+'</span></div>') : '')
+      +   (d.colis ? ('<div class="dep-meta" style="margin-top:4px;"><span>&#128230; '+esc(d.colis)+'</span></div>') : '')
+      // v1.19.88 : livraison affichée à part, jamais additionnée au montant
+      // du devis (retour de Cobey du 29/08/2026 : "ça tout additionner
+      // c'est pas bon") — même logique que sur la facture définitive.
+      +   (d.livraison ? ('<div class="dep-meta" style="margin-top:4px;"><span>&#128666; Livraison (hors montant)'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+(d.livraisonPrix ? (' &middot; '+d.livraisonPrix+' &euro;') : '')+'</span></div>') : '')
       +   '<div class="dep-cli-btns">'
       +     '<button class="dep-cli-btn" onclick="depOuvrirDevisDoc(\''+d._id+'\')">&#128196; PDF</button>'
+      +     '<button class="dep-cli-btn" onclick="depDevisModifier(\''+d._id+'\')">&#9999;&#65039; Modifier</button>'
       +     '<button class="dep-cli-btn" style="background:var(--green-light);border-color:#C8E6D0;color:var(--green-dark);" onclick="depDevisDemanderValider(\''+d._id+'\')">&#10003; Valider</button>'
       +     '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" onclick="depDevisDemanderRefuser(\''+d._id+'\')">&#10005; Refuser</button>'
       +   '</div>'
@@ -9600,18 +9618,81 @@ window.depRenderListeDevis = function(){
   box.innerHTML = h;
 };
 
+// v1.19.88 : civilité + prénom/nom séparés, sur le même principe que
+// _renderCivDct('f')/_renderCivilite() natifs (Collecte/France) — état
+// propre au devis (window._depDevisCivilite), pour ne rien mélanger avec
+// ces écrans-là.
+function _depDevisRenderCiv(){
+  var box = $('devis-civ');
+  if(box){
+    box.innerHTML = CIVILITES.map(function(x){
+      var on = (window._depDevisCivilite === x.v);
+      return '<div onclick="depDevisSetCivilite(\''+x.v+'\')" style="flex:1;text-align:center;padding:9px 4px;'
+        + 'border-radius:9px;font-size:12.5px;font-weight:700;cursor:pointer;'
+        + (on ? 'background:#009A44;color:#fff;border:1.5px solid #009A44;'
+              : 'background:#fff;color:#555;border:1.5px solid var(--border);')
+        + '">'+x.lib+'</div>';
+    }).join('');
+  }
+  var soc = (window._depDevisCivilite === 'Societe');
+  var bp = $('devis-bloc-prenom'); if(bp) bp.style.display = soc ? 'none' : 'block';
+  var ln = $('devis-lab-nom'); if(ln) ln.textContent = soc ? 'Nom de la société' : 'Nom';
+  if(soc){ var pi = $('devis-f-prenom'); if(pi) pi.value = ''; }
+}
+
+window.depDevisSetCivilite = function(v){
+  window._depDevisCivilite = (window._depDevisCivilite === v) ? '' : v;
+  _depDevisRenderCiv();
+};
+
+// v1.19.88 : réinitialisation complète, UNIQUEMENT pour un devis tout
+// neuf — "changer" le pays en cours de saisie (depDevisChoisirPays) ne
+// doit plus effacer ce qui est déjà rempli, et depDevisModifier() a besoin
+// de pré-remplir sans que ce nettoyage l'efface juste après.
 window.depDevisNouveau = function(){
+  window._depDevisEditId = null;
   window._depDevisPaysChoisi = null;
+  window._depDevisCivilite = '';
+  ['devis-f-prenom','devis-f-nom','devis-f-tel','devis-f-colis','devis-f-liv-adresse','devis-f-liv-prix','devis-f-montant'].forEach(function(id){
+    var e = $(id); if(e) e.value = '';
+  });
+  depDevisSetLivraison(false);
+  _depDevisRenderCiv();
+  var titre = $('devis-form-titre'); if(titre) titre.textContent = 'Nouveau devis';
   openModal('modal-devis-pays');
+};
+
+// v1.19.88 : reprendre un devis existant pour le modifier (retour de
+// Cobey du 29/08/2026) — pré-remplit tout, y compris la civilité et le
+// pays, sans passer par la remise à zéro de depDevisNouveau().
+window.depDevisModifier = function(id){
+  var d = (window.devisData||{})[id];
+  if(!d){ toast('⚠️ Devis introuvable.'); return; }
+  window._depDevisEditId = id;
+  window._depDevisPaysChoisi = d.pays;
+  window._depDevisCivilite = d.civilite || '';
+  var titre = $('devis-form-titre'); if(titre) titre.textContent = 'Modifier le devis';
+  var fp = $('devis-f-prenom'); if(fp) fp.value = d.prenom || '';
+  var fn = $('devis-f-nom'); if(fn) fn.value = d.nom || '';
+  var ft = $('devis-f-tel'); if(ft) ft.value = d.tel || '';
+  var fc = $('devis-f-colis'); if(fc) fc.value = d.colis || '';
+  var fm = $('devis-f-montant'); if(fm) fm.value = (d.montant != null ? d.montant : '');
+  depDevisSetLivraison(!!d.livraison);
+  var fla = $('devis-f-liv-adresse'); if(fla) fla.value = d.livraisonAdresse || '';
+  var flp = $('devis-f-liv-prix'); if(flp) flp.value = (d.livraisonPrix ? d.livraisonPrix : '');
+  _depDevisRenderCiv();
+  var badge = $('devis-pays-badge');
+  if(badge){
+    var p = DEP_PAYS_DEST[d.pays] || {};
+    badge.innerHTML = 'Destination : <b>'+(p.drapeau||'')+' '+(p.nom||'')+'</b> &middot; '
+      + '<a href="#" onclick="event.preventDefault();openModal(\'modal-devis-pays\');">changer</a>';
+  }
+  goTo('s-devis-form');
 };
 
 window.depDevisChoisirPays = function(pays){
   window._depDevisPaysChoisi = pays;
   closeModal('modal-devis-pays');
-  ['devis-f-nom','devis-f-tel','devis-f-liv-adresse','devis-f-liv-prix','devis-f-montant'].forEach(function(id){
-    var e = $(id); if(e) e.value = '';
-  });
-  depDevisSetLivraison(false);
   var badge = $('devis-pays-badge');
   if(badge){
     var p = DEP_PAYS_DEST[pays] || {};
@@ -9635,26 +9716,51 @@ window.depDevisEnregistrer = function(){
     openModal('modal-devis-pays');
     return;
   }
+  var civilite = window._depDevisCivilite || '';
+  var prenom = (($('devis-f-prenom')||{}).value || '').trim();
   var nom = (($('devis-f-nom')||{}).value || '').trim();
   var tel = (($('devis-f-tel')||{}).value || '').trim();
+  var colis = (($('devis-f-colis')||{}).value || '').trim();
   var montant = parseFloat(($('devis-f-montant')||{}).value) || 0;
-  if(!nom){ toast('⚠️ Indiquez le nom ou le prénom du client.'); return; }
+  if(!prenom && !nom){ toast('⚠️ Indiquez le nom ou le prénom du client.'); return; }
   if(!tel){ toast('⚠️ Le téléphone est obligatoire.'); return; }
   if(!montant){ toast('⚠️ Indiquez le montant du devis.'); return; }
   if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
   var liv = !!window._depDevisLivraison;
   var obj = {
+    civilite: civilite,
+    prenom: civilite === 'Societe' ? '' : prenom,
     nom: nom,
     tel: tel,
+    colis: colis,
     pays: window._depDevisPaysChoisi,
     livraison: liv,
     livraisonAdresse: liv ? (($('devis-f-liv-adresse')||{}).value || '').trim() : '',
     livraisonPrix: liv ? (parseFloat(($('devis-f-liv-prix')||{}).value) || 0) : 0,
-    montant: montant,
-    creeLe: Date.now(),
-    creePar: (window.currentUser||{}).id || '',
-    creeParNom: (window.currentUser||{}).name || ''
+    montant: montant
   };
+
+  var editId = window._depDevisEditId;
+  if(editId){
+    var existant = (window.devisData||{})[editId] || {};
+    obj.creeLe = existant.creeLe || Date.now();
+    obj.creePar = existant.creePar || ((window.currentUser||{}).id || '');
+    obj.creeParNom = existant.creeParNom || ((window.currentUser||{}).name || '');
+    obj.modifieLe = Date.now();
+    db.ref('devis/'+editId).set(obj).then(function(){
+      window._depDevisEditId = null;
+      toast('✅ Devis mis à jour.');
+      try{ depOuvrirDevisDoc(editId); }catch(e){ goTo('s-devis'); depRenderListeDevis(); }
+    }).catch(function(e){
+      console.error('departs: mise à jour devis', e);
+      toast('❌ Échec de la mise à jour, réessayez.');
+    });
+    return;
+  }
+
+  obj.creeLe = Date.now();
+  obj.creePar = (window.currentUser||{}).id || '';
+  obj.creeParNom = (window.currentUser||{}).name || '';
   db.ref('devis').push(obj).then(function(ref){
     toast('✅ Devis enregistré.');
     try{ depOuvrirDevisDoc(ref.key); }catch(e){ goTo('s-devis'); depRenderListeDevis(); }
@@ -9677,7 +9783,8 @@ function depRenderDevisDoc(d){
   if(!box) return;
   var pays = DEP_PAYS_DEST[d.pays] || DEP_PAYS_DEST[DEP_PAYS_DEFAUT];
   var totalLivraison = d.livraison ? (parseFloat(d.livraisonPrix) || 0) : 0;
-  var totalGeneral = (parseFloat(d.montant) || 0) + totalLivraison;
+  var montantTransport = parseFloat(d.montant) || 0;
+  var nomAffiche = _composeNom(d.civilite, d.prenom, d.nom) || '—';
   var h = '<div class="fac-doc">'
     +   '<div class="fac-topbar"></div>'
     +   '<div class="fac-body">'
@@ -9705,23 +9812,40 @@ function depRenderDevisDoc(d){
     +     '<div class="fac-parties">'
     +       '<div>'
     +         '<div class="fac-partie-titre">CLIENT</div>'
-    +         '<div class="fac-partie-nom">'+esc(d.nom||'—')+'</div>'
-    +         '<div class="fac-partie-detail">'+_depLienTel(d.tel, d.tel||'—')+'</div>'
+    +         '<div class="fac-partie-nom">'+esc(nomAffiche)+'</div>'
+    +         '<div class="fac-partie-detail">'+_depLienTel(d.tel, d.tel||'—')
+    +           (d.colis ? ('<br>'+esc(d.colis)) : '')
+    +         '</div>'
     +       '</div>'
     +     '</div>'
 
     +     '<div class="fac-tbl-wrap"><table class="fac-table">'
     +       '<thead><tr><th>N&deg;</th><th>Description</th><th>Montant</th></tr></thead>'
     +       '<tbody>'
-    +         '<tr><td>1</td><td>Transport '+pays.drapeau+' '+pays.nom+'</td><td>'+(parseFloat(d.montant)||0)+' &euro;</td></tr>'
-    +         (d.livraison ? ('<tr><td>2</td><td>Livraison &agrave; Dakar'+(d.livraisonAdresse ? (' &mdash; '+esc(d.livraisonAdresse)) : '')+'</td><td>'+totalLivraison+' &euro;</td></tr>') : '')
+    +         '<tr><td>1</td><td>Transport '+pays.drapeau+' '+pays.nom+(d.colis ? (' &mdash; '+esc(d.colis)) : '')+'</td><td>'+montantTransport+' &euro;</td></tr>'
     +       '</tbody>'
     +     '</table></div>'
 
+    // v1.19.88 : la livraison ne s'additionne plus au MONTANT principal du
+    // devis (celui-ci reste le montant transport/colis, comme le TOTAL de
+    // la facture définitive reste colis-only) — retour de Cobey du
+    // 29/08/2026 : "ça tout additionner c'est pas bon".
+    // v1.19.89 : mais le client a besoin de voir le total qu'il va payer,
+    // donc on réaffiche une ligne informative "Total avec livraison" (même
+    // principe que depRenderFacturePublique) — retour de Cobey du
+    // 29/08/2026 : "le client a besoin de savoir le total de ce qu'il va
+    // payer". Ceci ne change QUE l'affichage du devis : depDevisValiderVers
+    // continue de préremplir montant et livraison dans des champs séparés
+    // (caisse à part DCT pour les livraisons) — inchangé.
     +     '<div class="fac-bas">'
     +       '<div class="fac-lettres">Devis &agrave; titre indicatif, sans engagement &mdash; valable 15 jours.</div>'
     +       '<div class="fac-totaux">'
-    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL ESTIM&Eacute;</span><span>'+totalGeneral+' &euro;</span></div>'
+    +         '<div class="fac-totaux-ligne fac-totaux-total"><span>MONTANT</span><span>'+montantTransport+' &euro;</span></div>'
+    +         (d.livraison ? ('<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
+                + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+'</span><span>'+totalLivraison+' &euro;</span></div>'
+                + '<div style="font-size:10px;color:#aaa;padding:1.5px 4px;">Livraison hors comptabilit&eacute; DCT, r&eacute;gl&eacute;e &agrave; part</div>'
+                + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;margin-top:4px;"><span>Total avec livraison</span><span>'+(montantTransport+totalLivraison)+' &euro;</span></div>'
+                + '</div>') : '')
     +       '</div>'
     +     '</div>'
 
@@ -9731,6 +9855,7 @@ function depRenderDevisDoc(d){
 
     + '<div class="fac-actions">'
     +   '<button type="button" class="fac-btn fac-btn-print" onclick="depExporterDevisPDF()">&#128196; Exporter en PDF</button>'
+    +   '<button type="button" class="fac-btn" style="background:#EEF0FA;color:#252599;" onclick="depDevisModifier(window._depDevisDocId)">&#9999;&#65039; Modifier ce devis</button>'
     +   '<button type="button" class="fac-btn fac-btn-retour" onclick="goTo(\'s-devis\');depRenderListeDevis();">&larr; Retour aux devis</button>'
     + '</div>';
   box.innerHTML = h;
@@ -9772,8 +9897,14 @@ window.depDevisValiderVers = function(parcours){
     ouvrirAjoutFrance();
     window._depDevisEnCoursId = id;
     try{ depFrChoisirPaysClient(snap.pays); }catch(e){}
+    // v1.19.88 : civilité + prénom/nom repris dans les bonnes cases (le
+    // devis ne stocke plus un seul champ texte libre) — retour de Cobey
+    // du 29/08/2026.
+    try{ _faCivilite = snap.civilite || ''; _renderCivilite(); }catch(eCiv){}
+    var fprenom = $('fa-prenom'); if(fprenom) fprenom.value = snap.prenom || '';
     var fnom = $('fa-nom'); if(fnom) fnom.value = snap.nom || '';
     var ftel = $('fa-tel'); if(ftel) ftel.value = snap.tel || '';
+    var fcolis = $('fa-colis'); if(fcolis) fcolis.value = snap.colis || '';
     var fprix = $('fa-prix'); if(fprix) fprix.value = snap.montant || '';
     if(snap.livraison){
       depSetLivraisonFrance(true);
@@ -9784,8 +9915,11 @@ window.depDevisValiderVers = function(parcours){
     ouvrirAjoutClient();
     window._depDevisEnCoursId = id;
     try{ depChoisirPaysClient(snap.pays); }catch(e){}
+    try{ _civDct.f = snap.civilite || ''; _renderCivDct('f'); }catch(eCiv2){}
+    var prenom = $('f-prenom'); if(prenom) prenom.value = snap.prenom || '';
     var nom = $('f-nom'); if(nom) nom.value = snap.nom || '';
     var tel = $('f-tel'); if(tel) tel.value = snap.tel || '';
+    var colis = $('f-colis'); if(colis) colis.value = snap.colis || '';
     var prix = $('f-prix'); if(prix) prix.value = snap.montant || '';
     if(snap.livraison){
       depSetLivraison(true);
