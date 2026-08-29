@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.62';
+var DEP_VERSION = 'v1.19.63';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -346,7 +346,42 @@ var _depDetailRecherche = '';      // v1.19.57 : recherche expéditeur/destinata
 var _depMoveClient = null;      // { collecteId, clientId, nom, departId }
 var _depPret = false;
 var _depDetachClient = null;    // { collecteId, clientId, nom, departId } — détachement d'UN client
-var _depFactureCtx = null;      // { collecteId, clientId, depot } — facture actuellement affichée
+var _depFactureCtx = null;      // { collecteId, clientId, depot, france } — facture actuellement affichée
+
+// v1.19.63 : résolution du client au centre de l'écran facture, désormais
+// sur 3 sources possibles (collecte, dépôt direct, France & Europe) au
+// lieu de 2 — centralisé ici pour ne pas répéter le même ternaire partout
+// (retour de Cobey du 29/08/2026 : facture France & Europe "similaire à
+// la collecte", avec un container adapté).
+function _depClientFacture(ctx){
+  if(!ctx) return null;
+  if(ctx.france) return ((window.franceData||{}).clients||{})[ctx.clientId];
+  return ctx.depot
+    ? (window.depotClients || {})[ctx.clientId]
+    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+}
+// Écrit des champs sur la fiche du client au centre de l'écran facture,
+// quelle que soit sa source — même centralisation que ci-dessus.
+function _depEcrireFacture(ctx, champs){
+  if(!ctx) return;
+  if(ctx.france){
+    if(window.db && window.firebaseReady){
+      var majF = {};
+      Object.keys(champs).forEach(function(k){ majF['clients/'+ctx.clientId+'/'+k] = champs[k]; });
+      db.ref('france').update(majF);
+    }
+    return;
+  }
+  if(ctx.depot){
+    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update(champs);
+    return;
+  }
+  if(window.db && window.firebaseReady){
+    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update(champs)
+      .catch(function(e){ console.error('departs: échec écriture facture', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
+  }
+  try{ sauvegarder(); }catch(e){}
+}
 // v1.19.29 : ctx+client de la facture PUBLIQUE actuellement affichée
 // (#s-facture-publique) — distinct de _depFactureCtx, qui n'est jamais
 // posé pour un visiteur non connecté arrivé par lien WhatsApp (voir
@@ -547,6 +582,7 @@ try{
     if(_partsFactureLien.length === 3 && _partsFactureLien[2]){
       _depFactureDeepLink = {
         depot: _partsFactureLien[0] === 'D',
+        france: _partsFactureLien[0] === 'F',
         collecteId: _partsFactureLien[1] || '',
         clientId: _partsFactureLien[2]
       };
@@ -578,9 +614,7 @@ if(_depFactureDeepLink){
   (function _depAttendreLienFacture(tentative){
     var dl = _depFactureDeepLink;
     var ecranPret = document.getElementById('s-facture-publique');
-    var cible = dl.depot
-      ? (window.depotClients || {})[dl.clientId]
-      : (((window.clientsParCollecte || {})[dl.collecteId]) || {})[dl.clientId];
+    var cible = _depClientFacture(dl);
     if(ecranPret && (cible || tentative >= 20)){
       var ov = document.getElementById('dep-facture-overlay');
       if(ov && ov.parentNode) ov.parentNode.removeChild(ov);
@@ -718,6 +752,15 @@ function compteursDepart(departId){
   });
   Object.keys(window.depotClients||{}).forEach(function(id){
     var c = window.depotClients[id];
+    if(c && c.departId === departId){
+      n++;
+      euros += (parseFloat(c.prix) || 0);
+    }
+  });
+  // v1.19.63 : les clients France & Europe partagent désormais les mêmes
+  // containers que Collecte/Dépôt (voir depFranceValiderDepart).
+  Object.keys((window.franceData||{}).clients || {}).forEach(function(id){
+    var c = window.franceData.clients[id];
     if(c && c.departId === departId){
       n++;
       euros += (parseFloat(c.prix) || 0);
@@ -3409,11 +3452,17 @@ function depNumeroFacture(c, ctx){
 
   var d = (window.departsData || {})[c.departId];
   var num;
+  // v1.19.63 : côté France & Europe, le préfixe n'est plus C/D mais la
+  // lettre du pays d'origine du client (FR/BE/LU/DE/NL/CH/IT/ES) — retour
+  // de Cobey du 22/08/2026 : "les factures de France Europe doivent
+  // commencer par FR [...] et pour les autres pays par les lettres
+  // correspondant à leur pays".
+  var prefixe = ctx.france ? (c.pays || 'FR') : (ctx.depot ? 'D' : 'C');
   if(!d){
     // Pas (encore) de départ rattaché : on retombe sur un schéma réduit
     // (pays déjà connu dès l'inscription, même sans container), en
     // attendant qu'un départ soit choisi pour ce client.
-    num = (ctx.depot ? 'D' : 'C') + '-' + depPaysClient(c) + '-' + ctx.clientId;
+    num = prefixe + '-' + depPaysClient(c) + '-' + ctx.clientId;
   } else {
     var ddmmyy = '';
     if(d.dateDepart){
@@ -3426,15 +3475,24 @@ function depNumeroFacture(c, ctx){
           var dc = window.depotClients[k];
           return dc && dc.departId === c.departId && dc.numeroFacture;
         }).length
+      + Object.keys((window.franceData||{}).clients || {}).filter(function(k){
+          var fc = window.franceData.clients[k];
+          return fc && fc.departId === c.departId && fc.numeroFacture;
+        }).length
       + 1;
     // v1.19.21 : pays du départ inséré dans le numéro (ex: C-SN-130926-01)
     // pour distinguer Sénégal/Mali d'un coup d'œil.
-    num = (ctx.depot ? 'D' : 'C') + '-' + depPaysDepart(d) + '-' + (ddmmyy || 'XXXXXX') + '-' + (rang < 10 ? '0' + rang : rang);
+    num = prefixe + '-' + depPaysDepart(d) + '-' + (ddmmyy || 'XXXXXX') + '-' + (rang < 10 ? '0' + rang : rang);
   }
 
   c.numeroFacture = num;
   if(window.db && window.firebaseReady){
-    if(ctx.depot) db.ref('dct_depot/'+ctx.clientId).update({ numeroFacture: num });
+    if(ctx.france){
+      var majNum = {};
+      majNum['clients/'+ctx.clientId+'/numeroFacture'] = num;
+      db.ref('france').update(majNum);
+    }
+    else if(ctx.depot) db.ref('dct_depot/'+ctx.clientId).update({ numeroFacture: num });
     else db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ numeroFacture: num });
   }
   return num;
@@ -3516,6 +3574,28 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
       btnRetour.textContent = '← Départ';
       btnRetour.onclick = function(){ depDetail(_depDetailIdPublic()); };
     }
+  }
+  depRenderFacture(c);
+  goTo('s-facture');
+};
+
+// v1.19.63 : entrée facture pour France & Europe — depuis la fiche client
+// (voir greffe sur _renderFicheFrance), une fois le colis arrivé à
+// Mitry-Mory. Pas de collecteId/dépôt ici : source distincte, voir
+// _depClientFacture (retour de Cobey du 29/08/2026 : "une édition de
+// facture similaire à la collecte").
+window.depOuvrirFactureFrance = function(clientId){
+  var c = ((window.franceData||{}).clients||{})[clientId];
+  if(!c){ toast('⚠️ Facture introuvable.'); return; }
+  _depFactureCtx = { collecteId: '', clientId: clientId, depot: false, france: true };
+  window._depDocVientDepart = false;
+  var btnRetour = $('dep-fact-retour');
+  if(btnRetour){
+    btnRetour.textContent = '← Fiche';
+    btnRetour.onclick = function(){
+      goTo('s-france-client');
+      try{ window.franceClientId = clientId; _renderFicheFrance(); }catch(e){}
+    };
   }
   depRenderFacture(c);
   goTo('s-facture');
@@ -3640,7 +3720,7 @@ window.depRetourFactureDepuisImpression = function(){
 // pour le texte envoyé par WhatsApp (voir depPartagerWhatsapp). Le QR
 // code, lui, n'utilise plus ce lien depuis la v1.16.2 (voir _depTokenQR).
 function depLienFacture(ctx){
-  var code = (ctx.depot ? 'D' : 'C') + '|' + (ctx.collecteId || '') + '|' + ctx.clientId;
+  var code = (ctx.france ? 'F' : (ctx.depot ? 'D' : 'C')) + '|' + (ctx.collecteId || '') + '|' + ctx.clientId;
   return location.origin + location.pathname + '?facture=' + encodeURIComponent(code);
 }
 
@@ -3652,7 +3732,7 @@ function depLienFacture(ctx){
 // de serveur pour émettre des jetons secrets à usage unique.
 function _depTokenQR(ctx){
   try{
-    var payload = JSON.stringify({ d: !!ctx.depot, c: ctx.collecteId || '', i: ctx.clientId });
+    var payload = JSON.stringify({ d: !!ctx.depot, f: !!ctx.france, c: ctx.collecteId || '', i: ctx.clientId });
     return 'DCTQR1:' + btoa(unescape(encodeURIComponent(payload)));
   }catch(e){ return ''; }
 }
@@ -3661,7 +3741,7 @@ function _depDecoderTokenQR(txt){
     if(typeof txt !== 'string' || txt.indexOf('DCTQR1:') !== 0) return null;
     var payload = JSON.parse(decodeURIComponent(escape(atob(txt.slice(7)))));
     if(!payload || !payload.i) return null;
-    return { depot: !!payload.d, collecteId: payload.c || '', clientId: payload.i };
+    return { depot: !!payload.d, france: !!payload.f, collecteId: payload.c || '', clientId: payload.i };
   }catch(e){ return null; }
 }
 
@@ -3945,11 +4025,10 @@ function _depScanBoucle(){
         if(dl){
           _depArreterCamera();
           _depScanEnCours = false;
-          var cible = dl.depot
-            ? (window.depotClients || {})[dl.clientId]
-            : (((window.clientsParCollecte || {})[dl.collecteId]) || {})[dl.clientId];
+          var cible = _depClientFacture(dl);
           if(!cible){ toast('⚠️ Facture introuvable pour ce QR.'); goTo('s-espaces'); return; }
-          depOuvrirFacture(dl.collecteId, dl.clientId, dl.depot, false, true);
+          if(dl.france) depOuvrirFactureFrance(dl.clientId);
+          else depOuvrirFacture(dl.collecteId, dl.clientId, dl.depot, false, true);
           return;
         }
       }
@@ -4083,9 +4162,7 @@ window.depExporterFacturePDF = function(){
 function depAfficherFacturePublique(ctx, cbApresQR){
   goTo('s-facture-publique');
   var chargement = $('pub-chargement'), erreur = $('pub-erreur'), contenu = $('pub-contenu');
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(chargement) chargement.style.display = 'none';
   if(!c){
     if(erreur) erreur.style.display = 'block';
@@ -4249,9 +4326,7 @@ function _depTexteMessageFacture(c, ctx){
 }
 
 function _depClientPourFacture(ctx){
-  return ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  return _depClientFacture(ctx);
 }
 
 window.depPartagerWhatsapp = function(){
@@ -4586,9 +4661,7 @@ window.depAjouterVersement = function(){
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
   if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
 
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
   var input = $('dep-fact-vers-montant');
@@ -4620,15 +4693,7 @@ function _depAjouterVersementExecuter(p){
   // sauvegarder(), qui regroupe tout et n'écrit que 800ms plus tard ; entre
   // les deux, la resynchronisation permanente avec Firebase pouvait
   // réécraser ce versement avant même qu'il soit vraiment enregistré.
-  if(ctx.depot){
-    db.ref('dct_depot/'+ctx.clientId).update({ versements: versements });
-  } else {
-    if(window.db && window.firebaseReady){
-      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versements: versements })
-        .catch(function(e){ console.error('departs: échec écriture versement', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
-    }
-    try{ sauvegarder(); }catch(e){}
-  }
+  _depEcrireFacture(ctx, { versements: versements });
 
   depActivite('&#128176;', 'a enregistr&eacute; un versement de <strong>'+montant+' &euro;</strong>'
     + (devise === 'fcfa' ? ' (' + saisie + ' FCFA)' : '') + ' pour <strong>'+esc(c.name||'')+'</strong>');
@@ -4643,9 +4708,7 @@ function _depAjouterVersementExecuter(p){
 window.depSupprimerVersement = function(idx){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(!c || !Array.isArray(c.versements) || !c.versements[idx]) return;
 
   var v = c.versements[idx];
@@ -4664,15 +4727,7 @@ window.depSupprimerVersement = function(idx){
   hist.push({ q: u.name || u.id || '', a: 'a supprim&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong>', ts: Date.now(), type: 'versement' });
   c.hist = hist;
 
-  if(ctx.depot){
-    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update({ versements: c.versements, hist: hist });
-  } else {
-    if(window.db && window.firebaseReady){
-      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versements: c.versements, hist: hist })
-        .catch(function(e){ console.error('departs: échec suppression versement', e); toast('❌ Échec de la suppression, réessayez.'); });
-    }
-    try{ sauvegarder(); }catch(e){}
-  }
+  _depEcrireFacture(ctx, { versements: c.versements, hist: hist });
 
   depActivite('&#128465;', 'a supprim&eacute; un versement de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong> pour <strong>'+esc(c.name||'')+'</strong>');
 
@@ -4735,9 +4790,7 @@ window.depAjouterVersementLivraison = function(){
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
   if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
 
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(!c){ toast('⚠️ Client introuvable.'); return; }
   if(!c.livraisonDakar){ toast('⚠️ Aucune livraison active pour ce client.'); return; }
 
@@ -4762,13 +4815,7 @@ function _depAjouterVersementLivraisonExecuter(p){
   versementsLiv.push(v);
   c.versementsLivraison = versementsLiv;
 
-  if(ctx.depot){
-    db.ref('dct_depot/'+ctx.clientId).update({ versementsLivraison: versementsLiv });
-  } else {
-    db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versementsLivraison: versementsLiv })
-      .catch(function(e){ console.error('departs: échec écriture versement livraison', e); toast('❌ Échec de l\'enregistrement, réessayez.'); });
-    try{ sauvegarder(); }catch(e){}
-  }
+  _depEcrireFacture(ctx, { versementsLivraison: versementsLiv });
 
   depActivite('&#128666;', 'a enregistr&eacute; un versement livraison de <strong>'+montant+' &euro;</strong>'
     + (devise === 'fcfa' ? ' (' + saisie + ' FCFA)' : '') + ' pour <strong>'+esc(c.name||'')+'</strong>');
@@ -4780,9 +4827,7 @@ function _depAjouterVersementLivraisonExecuter(p){
 window.depSupprimerVersementLivraison = function(idx){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(!c || !Array.isArray(c.versementsLivraison) || !c.versementsLivraison[idx]) return;
 
   var v = c.versementsLivraison[idx];
@@ -4799,15 +4844,7 @@ window.depSupprimerVersementLivraison = function(idx){
   hist.push({ q: u.name || u.id || '', a: 'a supprim&eacute; un versement livraison de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong>', ts: Date.now(), type: 'versement' });
   c.hist = hist;
 
-  if(ctx.depot){
-    if(window.db && window.firebaseReady) db.ref('dct_depot/'+ctx.clientId).update({ versementsLivraison: c.versementsLivraison, hist: hist });
-  } else {
-    if(window.db && window.firebaseReady){
-      db.ref('dct/clients/'+ctx.collecteId+'/'+ctx.clientId).update({ versementsLivraison: c.versementsLivraison, hist: hist })
-        .catch(function(e){ console.error('departs: échec suppression versement livraison', e); toast('❌ Échec de la suppression, réessayez.'); });
-    }
-    try{ sauvegarder(); }catch(e){}
-  }
+  _depEcrireFacture(ctx, { versementsLivraison: c.versementsLivraison, hist: hist });
 
   depActivite('&#128465;', 'a supprim&eacute; un versement livraison de <strong>'+(parseFloat(v.montant)||0)+' &euro;</strong> pour <strong>'+esc(c.name||'')+'</strong>');
 
@@ -4849,6 +4886,34 @@ function depRenderFacture(c){
   // v1.18.1 : remonté en haut de la facture (juste sous le statut) — trop
   // long à atteindre tout en bas, retour de Cobey du 21/08/2026.
   h += '<button type="button" class="btn btn-gray" style="margin:0 0 16px;" onclick="depOuvrirSuivi()">&#128203; Voir le suivi</button>';
+
+  // v1.19.63 : France & Europe — le container (départ) se choisit ici, à
+  // la facture, une fois le colis arrivé à Mitry-Mory (retour de Cobey du
+  // 29/08/2026 : "le colis partira dans le container adapté comme la
+  // collecte"). Un par un, jamais en lot (retour du même jour : "un par
+  // un pour être sûr de bien faire les choses").
+  if(ctxFact.france){
+    if(c.statut !== 'parti'){
+      var optsFr = (typeof departsDisponibles === 'function') ? departsDisponibles(depPaysClient(c)) : [];
+      h += '<div style="border:2px solid #1a237e;background:#eef0fa;border-radius:var(--radius);padding:14px;margin-bottom:16px;">'
+        + '<div style="font-size:11px;color:#1a237e;font-weight:800;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">&#9992;&#65039; D&eacute;part pour Dakar</div>';
+      if(!optsFr.length){
+        h += '<div style="font-size:12.5px;color:#992020;">Aucun d&eacute;part ouvert pour cette destination. Contactez Issyaka.</div>';
+      } else {
+        h += '<select class="fi" id="dep-fr-depart" style="margin-bottom:10px;">'
+          + '<option value="">— Choisir le d&eacute;part —</option>'
+          + optsFr.map(function(d){ return '<option value="'+d._id+'"'+(c.departId===d._id?' selected':'')+'>'+esc(d.nom)+' — part le '+dateFr(d.dateDepart)+'</option>'; }).join('')
+          + '</select>'
+          + '<button class="btn" style="background:#1a237e;color:#fff;" onclick="depFranceValiderDepart()">&#9989; D&eacute;clarer le d&eacute;part pour Dakar</button>';
+      }
+      h += '</div>';
+    } else {
+      h += '<div style="background:#eef0fa;border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12.5px;color:#1a237e;">'
+        + '&#9992;&#65039; Parti pour Dakar dans <b>'+esc(nomDepart(c.departId)||'—')+'</b>'
+        + (c.partiPar ? (' &middot; '+esc(c.partiPar)+' &middot; '+esc(dateHeureFr(c.partiTs))) : '')
+        + '</div>';
+    }
+  }
 
   // v1.19.43 : la case "Note" a disparu de la facture (retour de Cobey du
   // 24/08/2026) — les notes s'ajoutent désormais depuis l'écran de lecture
@@ -5096,6 +5161,38 @@ function depRenderFacture(c){
   try{ depGenererQR(_depFactureCtx); }catch(e){ console.error('departs: QR', e); }
 }
 
+// v1.19.63 : valide le départ pour Dakar d'un client France & Europe —
+// remplace l'ancien geste en lot "✈️ Déclarer partis pour Dakar"
+// (marquerPartis, natif), désormais un par un, avec choix du container
+// (retour de Cobey du 29/08/2026 : "un par un pour être sûr de bien faire
+// les choses").
+window.depFranceValiderDepart = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx || !ctx.france) return;
+  var c = ((window.franceData||{}).clients||{})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  var sel = $('dep-fr-depart');
+  var departId = sel ? sel.value : '';
+  if(!departId){ toast('⚠️ Choisissez un départ.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
+
+  var u = window.currentUser || {}, now = Date.now();
+  var hist = (c.hist||[]).slice();
+  hist.push({ q: u.name||'', a: 'a d&eacute;clar&eacute; le d&eacute;part pour Dakar &mdash; '+esc(nomDepart(departId)), ts: now });
+
+  c.departId = departId;
+  c.statut = 'parti';
+  c.partiTs = now;
+  c.partiPar = u.name || '';
+  c.hist = hist;
+
+  _depEcrireFacture(ctx, { departId: departId, statut: 'parti', partiTs: now, partiPar: u.name || '', hist: hist });
+
+  toast('✈️ Client déclaré parti pour Dakar');
+  depActivite('&#9992;&#65039;', 'a d&eacute;clar&eacute; <strong>'+esc(c.name||((c.prenom||'')+' '+(c.nom||'')))+'</strong> parti pour Dakar &mdash; <strong>'+esc(nomDepart(departId))+'</strong>');
+  depRenderFacture(c);
+};
+
 /* ─────────────────────────────────────────────
    10bis-suivi (v1.17.0). L'ÉCRAN SUIVI — regroupe création, changements
    de fiche (c.hist) et versements ajoutés/supprimés, triés du plus récent
@@ -5105,15 +5202,13 @@ function depRenderFacture(c){
 window.depOuvrirSuivi = function(){
   var ctx = _depFactureCtx;
   if(!ctx){ toast('⚠️ Facture introuvable.'); return; }
-  var c = ctx.depot
-    ? (window.depotClients || {})[ctx.clientId]
-    : (((window.clientsParCollecte || {})[ctx.collecteId]) || {})[ctx.clientId];
+  var c = _depClientFacture(ctx);
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
   var bk = $('dep-suivi-back');
   if(bk){ bk.innerHTML = '&larr; Facture'; bk.onclick = function(){ goTo('s-facture'); }; }
 
-  depRenderSuivi(c, ctx.depot ? '' : ctx.collecteId);
+  depRenderSuivi(c, (ctx.depot || ctx.france) ? '' : ctx.collecteId);
   goTo('s-dep-suivi');
 };
 
@@ -7975,6 +8070,21 @@ function greffer(){
           for(var i=0; i<btns.length; i++){
             if(/ouvrirPhotos\(/.test(btns[i].getAttribute('onclick')||'')) btns[i].remove();
           }
+          // v1.19.63 : bouton "🧾 Facture" une fois le colis arrivé à
+          // Mitry-Mory — c'est là (et seulement là) que DCT choisit le
+          // départ/container et déclare le départ pour Dakar (retour de
+          // Cobey du 29/08/2026).
+          var cFiche = ((window.franceData||{}).clients||{})[window.franceClientId];
+          if(cFiche && typeof _peutGererFrance === 'function' && _peutGererFrance()
+             && (cFiche.lieu === 'mitry' || cFiche.statut === 'parti')){
+            var bFact = document.createElement('button');
+            bFact.className = 'btn';
+            bFact.style.cssText = 'background:#1a237e;color:#fff;';
+            bFact.innerHTML = cFiche.statut === 'parti' ? '🧾 Facture' : '🧾 Facture — Départ pour Dakar';
+            var idFiche = window.franceClientId;
+            bFact.onclick = function(){ depOuvrirFactureFrance(idFiche); };
+            box.insertBefore(bFact, box.firstChild);
+          }
         }
       }catch(e){ console.error('departs: retrait photos fiche france', e); }
     };
@@ -8060,6 +8170,60 @@ function greffer(){
       try{ _depAjouterDrapeauxCollecte(); }catch(e){ console.error('departs: drapeaux clients collecte', e); }
     };
     window.renderClientsTab._depPatch = true;
+  }
+
+  /* --- P (v1.19.63). Prise de photo obligatoire au ramassage à Chartres :
+     un colis ne peut monter dans le camion (chargerUnClient, per-client, ou
+     validerLotChartres, en lot) sans qu'au moins une photo ait été prise —
+     preuve de ce qui a été récupéré chez le partenaire, avant la facture
+     qui se fera plus tard à Mitry-Mory (retour de Cobey du 29/08/2026:
+     "il faudra ajouter la prise de photo des colis obligatoire à la
+     collecte à Chartres"). --- */
+  if(typeof window.chargerUnClient === 'function' && !window.chargerUnClient._depPatch){
+    var origChargerUnClient = window.chargerUnClient;
+    window.chargerUnClient = function(id){
+      try{
+        var c = ((window.franceData||{}).clients||{})[id];
+        if(c && !(c.nbPhotos > 0)){
+          toast('📷 Prenez au moins une photo du colis avant de le charger.');
+          if(typeof ouvrirPhotos === 'function') ouvrirPhotos(id);
+          return;
+        }
+      }catch(e){ console.error('departs: contrôle photo Chartres (unitaire)', e); }
+      origChargerUnClient.apply(this, arguments);
+    };
+    window.chargerUnClient._depPatch = true;
+  }
+  if(typeof window.validerLotChartres === 'function' && !window.validerLotChartres._depPatch){
+    var origValiderLotChartres = window.validerLotChartres;
+    window.validerLotChartres = function(){
+      try{
+        var manquants = (typeof _refsChartres === 'function' ? _refsChartres() : [])
+          .filter(function(c){ return !c.nonCharge && !(c.nbPhotos > 0); });
+        if(manquants.length){
+          var noms = manquants.map(function(c){ return (typeof _nomAffiche === 'function') ? _nomAffiche(c) : (c.name||''); }).join(', ');
+          toast('📷 Photo manquante pour : ' + noms + '. Prenez une photo avant de valider le lot.');
+          return;
+        }
+      }catch(e){ console.error('departs: contrôle photo Chartres (lot)', e); }
+      origValiderLotChartres.apply(this, arguments);
+    };
+    window.validerLotChartres._depPatch = true;
+  }
+
+  /* --- Q (v1.19.63). Onglet Mitry-Mory du carré France & Europe : retrait
+     de la sélection en lot "✈️ Déclarer partis pour Dakar" (marquerPartis)
+     — remplacée par la facture, un par un (voir _renderFicheFrance
+     ci-dessus et depFranceValiderDepart), pour choisir le container à
+     chaque fois (retour de Cobey du 29/08/2026 : "un par un pour être sûr
+     de bien faire les choses"). --- */
+  if(typeof window._selectionPossible === 'function' && !window._selectionPossible._depPatch){
+    var origSelectionPossible = window._selectionPossible;
+    window._selectionPossible = function(){
+      if(typeof franceFiltre !== 'undefined' && franceFiltre === 'mitry') return false;
+      return origSelectionPossible.apply(this, arguments);
+    };
+    window._selectionPossible._depPatch = true;
   }
 }
 
