@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.65';
+var DEP_VERSION = 'v1.19.66';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -766,7 +766,7 @@ function compteursDepart(departId){
     }
   });
   // v1.19.63 : les clients France & Europe partagent désormais les mêmes
-  // containers que Collecte/Dépôt (voir depFranceValiderDepart).
+  // containers que Collecte/Dépôt (voir depValiderFactureFinaleFrance).
   Object.keys((window.franceData||{}).clients || {}).forEach(function(id){
     var c = window.franceData.clients[id];
     if(c && c.departId === departId){
@@ -4910,8 +4910,12 @@ function depRenderFacture(c){
   // v1.19.63 : France & Europe — le container (départ) se choisit ici, à
   // la facture, une fois le colis arrivé à Mitry-Mory (retour de Cobey du
   // 29/08/2026 : "le colis partira dans le container adapté comme la
-  // collecte"). Un par un, jamais en lot (retour du même jour : "un par
-  // un pour être sûr de bien faire les choses").
+  // collecte").
+  // v1.19.66 : plus de bouton "Déclarer le départ" séparé ici — un seul
+  // "✅ Valider la facture" en bas (voir plus bas) choisit le départ ET
+  // valide la facture en une seule action (retour de Cobey du 29/08/2026 :
+  // "ça sert plus à rien le bouton valider pour Dakar, car le colis, une
+  // fois la facture validée, partira dans le container correspondant").
   if(ctxFact.france){
     if(c.statut !== 'parti'){
       var optsFr = (typeof departsDisponibles === 'function') ? departsDisponibles(depPaysClient(c)) : [];
@@ -4920,11 +4924,10 @@ function depRenderFacture(c){
       if(!optsFr.length){
         h += '<div style="font-size:12.5px;color:#992020;">Aucun d&eacute;part ouvert pour cette destination. Contactez Issyaka.</div>';
       } else {
-        h += '<select class="fi" id="dep-fr-depart" style="margin-bottom:10px;">'
+        h += '<select class="fi" id="dep-fr-depart" style="margin-bottom:0;">'
           + '<option value="">— Choisir le d&eacute;part —</option>'
           + optsFr.map(function(d){ return '<option value="'+d._id+'"'+(c.departId===d._id?' selected':'')+'>'+esc(d.nom)+' — part le '+dateFr(d.dateDepart)+'</option>'; }).join('')
-          + '</select>'
-          + '<button class="btn" style="background:#1a237e;color:#fff;" onclick="depFranceValiderDepart()">&#9989; D&eacute;clarer le d&eacute;part pour Dakar</button>';
+          + '</select>';
       }
       h += '</div>';
     } else {
@@ -5141,16 +5144,15 @@ function depRenderFacture(c){
   // Cobey : "si on revient sur cette page, c'est pour modifier un
   // paiement [...] pas logique de mélanger paiement et impression".
   // v1.19.64 : côté France & Europe, pas de camion à valider (gatePrint ne
-  // s'applique pas) — mais tant que le départ pour Dakar n'est pas déclaré
-  // ci-dessus, rien à valider non plus.
-  var franceSansDepart = !!(ctxFact.france && c.statut !== 'parti');
-  // v1.19.65 : une fois le départ déclaré, même principe que la Collecte —
-  // un bouton "✅ Valider la facture" débloque les documents, plutôt que de
-  // les rendre disponibles automatiquement (retour de Cobey du 29/08/2026 :
-  // "il faut un bouton de validation en bas [...] le même principe que
-  // pour la collecte").
-  var franceAValider = !!(ctxFact.france && c.statut === 'parti' && !c.factureValidee);
-  var franceValidee = !!(ctxFact.france && c.statut === 'parti' && c.factureValidee);
+  // s'applique pas).
+  // v1.19.66 : un seul bouton "✅ Valider la facture" en bas fait tout —
+  // il prend le départ choisi ci-dessus (container) ET valide la facture
+  // en une seule action, qui débloque aussitôt les documents (retour de
+  // Cobey du 29/08/2026 : plus besoin d'un bouton "déclarer le départ"
+  // séparé, "le colis, une fois la facture validée, partira dans le
+  // container correspondant").
+  var franceAValider = !!(ctxFact.france && c.statut !== 'parti');
+  var franceValidee = !!(ctxFact.france && c.statut === 'parti');
 
   if(gatePrint){
     h += '<div style="margin-top:18px;">'
@@ -5162,11 +5164,9 @@ function depRenderFacture(c){
       + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Facture d&eacute;j&agrave; valid&eacute;e. Modifiez un paiement si besoin, puis retrouvez les documents &agrave; imprimer.</div>'
       + '<button class="btn btn-green" onclick="depValiderFactureFinale()">&#128196; Voir les documents</button>'
       + '</div>';
-  } else if(franceSansDepart){
-    h += '<div style="margin-top:18px;font-size:12px;color:var(--text3);text-align:center;">Les documents (facture imprimable, &eacute;tiquette, QR) seront disponibles une fois le d&eacute;part pour Dakar d&eacute;clar&eacute; ci-dessus.</div>';
   } else if(franceAValider){
     h += '<div style="margin-top:18px;">'
-      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">La facture peut encore &ecirc;tre modifi&eacute;e (prix, versements). Une fois pr&ecirc;te, validez-la pour d&eacute;bloquer les documents &agrave; imprimer.</div>'
+      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Choisissez le d&eacute;part ci-dessus, puis validez la facture &mdash; le colis rejoindra directement ce container.</div>'
       + '<button class="btn btn-green" onclick="depValiderFactureFinaleFrance()">&#9989; Valider la facture</button>'
       + '</div>';
   } else if(franceValidee){
@@ -5214,38 +5214,6 @@ function depRenderFacture(c){
   try{ depGenererQR(_depFactureCtx); }catch(e){ console.error('departs: QR', e); }
 }
 
-// v1.19.63 : valide le départ pour Dakar d'un client France & Europe —
-// remplace l'ancien geste en lot "✈️ Déclarer partis pour Dakar"
-// (marquerPartis, natif), désormais un par un, avec choix du container
-// (retour de Cobey du 29/08/2026 : "un par un pour être sûr de bien faire
-// les choses").
-window.depFranceValiderDepart = function(){
-  var ctx = _depFactureCtx;
-  if(!ctx || !ctx.france) return;
-  var c = ((window.franceData||{}).clients||{})[ctx.clientId];
-  if(!c){ toast('⚠️ Client introuvable.'); return; }
-  var sel = $('dep-fr-depart');
-  var departId = sel ? sel.value : '';
-  if(!departId){ toast('⚠️ Choisissez un départ.'); return; }
-  if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
-
-  var u = window.currentUser || {}, now = Date.now();
-  var hist = (c.hist||[]).slice();
-  hist.push({ q: u.name||'', a: 'a d&eacute;clar&eacute; le d&eacute;part pour Dakar &mdash; '+esc(nomDepart(departId)), ts: now });
-
-  c.departId = departId;
-  c.statut = 'parti';
-  c.partiTs = now;
-  c.partiPar = u.name || '';
-  c.hist = hist;
-
-  _depEcrireFacture(ctx, { departId: departId, statut: 'parti', partiTs: now, partiPar: u.name || '', hist: hist });
-
-  toast('✈️ Client déclaré parti pour Dakar');
-  depActivite('&#9992;&#65039;', 'a d&eacute;clar&eacute; <strong>'+esc(c.name||((c.prenom||'')+' '+(c.nom||'')))+'</strong> parti pour Dakar &mdash; <strong>'+esc(nomDepart(departId))+'</strong>');
-  depRenderFacture(c);
-};
-
 // v1.19.64 : fixe le prix d'un client France & Europe inscrit avec "Prix à
 // définir à la collecte" — contrairement à la Collecte, il n'y a pas
 // d'écran "Valider" en amont pour le faire, donc c'est ici, à la facture
@@ -5273,15 +5241,20 @@ window.depFranceFixerPrix = function(){
   depRenderFacture(c);
 };
 
-// v1.19.65 : validation finale de la facture France & Europe — même
-// principe que la Collecte (depValiderFactureFinale) : tant que non
-// validée, les documents (impression/étiquette/WhatsApp) restent cachés ;
-// un bouton "✅ Valider la facture" en bas déclenche la validation puis
-// bascule sur l'écran "Documents" (retour de Cobey du 29/08/2026 : "il
-// faut un bouton de validation en bas, qui valide la facture et qui fait
-// apparaître les documents à imprimer, le même principe que la collecte").
-// Ré-appel de sécurité (déjà validée) : on ravance juste vers les
-// documents, rien à revalider.
+// v1.19.63 : choix du container (départ) pour Dakar, à la facture, une
+// fois le colis arrivé à Mitry-Mory (retour de Cobey du 29/08/2026 : "le
+// colis partira dans le container adapté comme la collecte").
+// v1.19.65 : même principe que la Collecte (depValiderFactureFinale) — tant
+// que non validée, les documents (impression/étiquette/WhatsApp) restent
+// cachés ; un bouton "✅ Valider la facture" en bas déclenche la validation
+// puis bascule sur l'écran "Documents".
+// v1.19.66 : plus de geste "déclarer le départ" séparé — cette fonction,
+// appelée par l'unique bouton "✅ Valider la facture", prend directement le
+// départ choisi dans le sélecteur ET valide la facture en une fois (retour
+// de Cobey du 29/08/2026 : "ça sert plus à rien le bouton valider pour
+// Dakar, car le colis, une fois la facture validée, partira dans le
+// container correspondant"). Ré-appel de sécurité (déjà validée) : on
+// ravance juste vers les documents, rien à refaire.
 window.depValiderFactureFinaleFrance = function(){
   var ctx = _depFactureCtx;
   if(!ctx || !ctx.france) return;
@@ -5290,14 +5263,34 @@ window.depValiderFactureFinaleFrance = function(){
 
   if(c.factureValidee){ depRenderFacture(c); _depAfficherEcranDocuments(); return; }
 
-  var u = window.currentUser || {};
+  var u = window.currentUser || {}, now = Date.now();
   var hist = (c.hist||[]).slice();
-  hist.push({ q: u.name||'', a: 'a valid&eacute; la facture', ts: Date.now(), type:'validation' });
+  var maj = { factureValidee: true, hist: hist };
 
+  if(c.statut !== 'parti'){
+    var sel = $('dep-fr-depart');
+    var departId = sel ? sel.value : '';
+    if(!departId){ toast('⚠️ Choisissez un départ.'); return; }
+    if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
+
+    hist.push({ q: u.name||'', a: 'a d&eacute;clar&eacute; le d&eacute;part pour Dakar &mdash; '+esc(nomDepart(departId)), ts: now });
+    c.departId = departId;
+    c.statut = 'parti';
+    c.partiTs = now;
+    c.partiPar = u.name || '';
+    maj.departId = departId;
+    maj.statut = 'parti';
+    maj.partiTs = now;
+    maj.partiPar = u.name || '';
+
+    depActivite('&#9992;&#65039;', 'a d&eacute;clar&eacute; <strong>'+esc(c.name||((c.prenom||'')+' '+(c.nom||'')))+'</strong> parti pour Dakar &mdash; <strong>'+esc(nomDepart(departId))+'</strong>');
+  }
+
+  hist.push({ q: u.name||'', a: 'a valid&eacute; la facture', ts: now });
   c.factureValidee = true;
   c.hist = hist;
 
-  _depEcrireFacture(ctx, { factureValidee: true, hist: hist });
+  _depEcrireFacture(ctx, maj);
 
   toast('✅ Facture validée');
   depRenderFacture(c);
@@ -8332,7 +8325,7 @@ function greffer(){
   /* --- Q (v1.19.63). Onglet Mitry-Mory du carré France & Europe : retrait
      de la sélection en lot "✈️ Déclarer partis pour Dakar" (marquerPartis)
      — remplacée par la facture, un par un (voir _renderFicheFrance
-     ci-dessus et depFranceValiderDepart), pour choisir le container à
+     ci-dessus et depValiderFactureFinaleFrance), pour choisir le container à
      chaque fois (retour de Cobey du 29/08/2026 : "un par un pour être sûr
      de bien faire les choses"). --- */
   if(typeof window._selectionPossible === 'function' && !window._selectionPossible._depPatch){
