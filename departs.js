@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.90';
+var DEP_VERSION = 'v1.19.91';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -9853,6 +9853,9 @@ function depRenderDevisDoc(d){
     // ⚠️ Ceci ne change QUE l'affichage du devis : depDevisValiderVers
     // continue de préremplir montant et livraison dans des champs séparés
     // (caisse à part DCT pour les livraisons) — inchangé.
+    // v1.19.91 : mention "Livraison hors comptabilité DCT, réglée à part"
+    // retirée — détail interne à DCT, inutile sur un document destiné au
+    // client (retour de Cobey du 30/08/2026).
     +     '<div class="fac-bas">'
     +       '<div class="fac-lettres">Devis &agrave; titre indicatif, sans engagement &mdash; valable 15 jours.</div>'
     +       '<div class="fac-totaux">'
@@ -9861,7 +9864,6 @@ function depRenderDevisDoc(d){
                    + '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
                    + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Montant colis / transport</span><span>'+montantTransport+' &euro;</span></div>'
                    + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+'</span><span>'+totalLivraison+' &euro;</span></div>'
-                   + '<div style="font-size:10px;color:#aaa;padding:1.5px 4px;">Livraison hors comptabilit&eacute; DCT, r&eacute;gl&eacute;e &agrave; part</div>'
                    + '</div>')
                 : ('<div class="fac-totaux-ligne fac-totaux-total"><span>MONTANT</span><span>'+montantTransport+' &euro;</span></div>')
               )
