@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.78';
+var DEP_VERSION = 'v1.19.79';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -389,6 +389,15 @@ var _depFactureCtx = null;      // { collecteId, clientId, depot, france } — f
 // posé juste avant d'appeler la fiche, consommé une seule fois (voir
 // patch de window.ouvrirFicheFrance dans greffer()).
 var _depFicheFranceRetour = null;
+// v1.19.79 : passe-partout (code de maintenance) utilisé pour se connecter
+// sur un compte collaborateur — le journal d'activité doit préciser que
+// c'est l'admin qui agit "sous" ce compte, pas le collaborateur lui-même
+// (retour de Cobey du 29/08/2026 : "comme ça je sais directement si c'est
+// moi qui me suis connecté [...] ou si c'est vraiment le collaborateur").
+// Posé au moment du login (patch de window._journalPassePartout), remis à
+// zéro dès qu'on revient à l'écran de choix d'espace (patch de
+// window.retourEspaces).
+var _depViaPassePartout = false;
 // v1.19.71 : notifications pour Danny Diop (partenaire ramassage) — badge
 // sur l'onglet "Disponibles" + bandeau + tag "🆕 Nouveau" sur chaque carte,
 // pour les clients ajoutés par DCT depuis sa dernière visite (retour de
@@ -1008,8 +1017,6 @@ function injecterStyles(){
     +   'position:relative;cursor:pointer;}'
     + '.dep-esp-hero:active{transform:scale(.98);}'
     + '.dep-esp-hero.suspendu{background:linear-gradient(135deg,#c0392b,#8e2a1e);}'
-    + '.dep-esp-hero-tag{position:absolute;top:10px;right:12px;font-size:9.5px;font-weight:800;'
-    +   'letter-spacing:.4px;background:rgba(255,255,255,.22);padding:3px 9px;border-radius:20px;}'
     + '.dep-esp-hero-top{display:flex;align-items:center;gap:12px;}'
     + '.dep-esp-hero-ic{width:52px;height:52px;border-radius:50%;background:#fff;flex:none;'
     +   'overflow:hidden;display:flex;align-items:center;justify-content:center;}'
@@ -1032,7 +1039,12 @@ function injecterStyles(){
     + '.dep-esp-admin-discret{text-align:center;margin-top:6px;padding:10px 0;font-size:12px;'
     +   'color:#aaa;font-weight:600;display:flex;align-items:center;justify-content:center;gap:5px;'
     +   'cursor:pointer;}'
-    + '.dep-esp-admin-discret:active{opacity:.6;}';
+    + '.dep-esp-admin-discret:active{opacity:.6;}'
+    // v1.19.79 : "Mise à jour : ..." (index.html) est une date écrite en dur
+    // dans le code, jamais tenue à jour — retour de Cobey du 29/08/2026
+    // ("la date et l'heure de mise à jour n'est jamais la bonne"). On la
+    // masque, le numéro de version du module juste en dessous suffit.
+    + '#app-update{display:none !important;}';
   document.head.appendChild(s);
 }
 
@@ -1053,11 +1065,7 @@ function injecterEcrans(){
   + '<div class="screen" id="s-espaces">'
   +   '<div class="header">'
   +     '<div><div class="h-title">Dakar City Transport</div>'
-  +     '<div class="h-sub" id="dep-esp-greet">Bonjour !</div>'
-  // v1.19.74 : numéro de version affiché ici (retour de Cobey du
-  // 29/08/2026 : "comme ça je sais direct si c'est le bon ou pas") — rempli
-  // par depRenderEspaces, seul endroit visible dès l'ouverture de l'appli.
-  +     '<div id="dep-esp-version" style="font-size:9.5px;color:#c2c2c2;font-weight:600;margin-top:1px;"></div></div>'
+  +     '<div class="h-sub" id="dep-esp-greet">Bonjour !</div></div>'
   +     '<div style="display:flex;align-items:center;gap:8px;">'
   // v1.19.58 : pastille de notification manquante sur ce bouton depuis
   // que les carrés ont remplacé la barre de navigation native comme
@@ -2381,7 +2389,6 @@ function ecouterDeparts(){
 window.depRenderEspaces = function(){
   var u = window.currentUser || {};
   var g = $('dep-esp-greet');   if(g) g.textContent = 'Bonjour ' + (u.name||'') + ' !';
-  var vv = $('dep-esp-version'); if(vv) vv.textContent = 'Module départs ' + DEP_VERSION;
   var a = $('dep-esp-av');
   if(a){
     a.textContent = u.id || '';
@@ -8017,6 +8024,13 @@ function greffer(){
         u.parentNode.insertBefore(dv, u.nextSibling);
       }
       dv.textContent = 'Diallo Container ' + DEP_VERSION;
+      // v1.19.79 : "Gestion des collectes" ne représente plus l'appli
+      // (retour de Cobey du 29/08/2026 : "l'application maintenant englobe
+      // tout") — ce sous-titre statique (index.html) n'a pas d'id, on le
+      // récupère via sa position (juste avant #app-version).
+      var av = document.getElementById('app-version');
+      var sousTitre = av ? av.previousElementSibling : null;
+      if(sousTitre) sousTitre.textContent = 'Sénégal';
     }catch(e){}
   }
   // L'appel natif buildLogin() du tout premier chargement (avant que ce
@@ -8051,6 +8065,7 @@ function greffer(){
   if(typeof window.retourEspaces === 'function' && !window.retourEspaces._depPatch){
     window.retourEspaces = function(){
       _espaceOuvertUI = '';
+      _depViaPassePartout = false;
       var esp = document.getElementById('login-espaces');
       var cards = document.getElementById('login-cards');
       var ret = document.getElementById('login-retour');
@@ -8072,7 +8087,6 @@ function greffer(){
         var detailDct = _detailSociete(dct.id);
         html += '<div class="dep-esp-hero' + (suspDct ? ' suspendu' : '') + '" onclick="'
           + (suspDct ? 'showToastNew(\'🔒 Accès suspendu.\')' : 'ouvrirEspaceProtege(\'' + dct.id + '\')') + '">'
-          + '<div class="dep-esp-hero-tag">ESPACE PRINCIPAL</div>'
           + '<div class="dep-esp-hero-top">'
           +   '<div class="dep-esp-hero-ic">' + _depVisuelSocieteIcone(dct) + '</div>'
           +   '<div style="flex:1;">'
@@ -8122,6 +8136,30 @@ function greffer(){
     // donc tout de suite, sauf si l'utilisateur a déjà ouvert un espace
     // dans ce court intervalle.
     if(!_espaceOuvertUI){ try{ window.retourEspaces(); }catch(e){} }
+  }
+
+  /* --- A sexies. Connexion via le passe-partout (code de maintenance) :
+     on le repère au moment du login, puis chaque entrée du journal
+     d'activité générée pendant cette session est marquée "via
+     passe-partout", pour distinguer l'admin agissant sous un compte
+     collaborateur de ce même collaborateur agissant lui-même. --- */
+  if(typeof window._journalPassePartout === 'function' && !window._journalPassePartout._depPatch){
+    var origJournalPP = window._journalPassePartout;
+    window._journalPassePartout = function(){
+      _depViaPassePartout = true;
+      return origJournalPP.apply(this, arguments);
+    };
+    window._journalPassePartout._depPatch = true;
+  }
+  if(typeof window.addActivity === 'function' && !window.addActivity._depPatch){
+    var origAddActivity = window.addActivity;
+    window.addActivity = function(emoji, bg, text, time){
+      if(_depViaPassePartout && text){
+        text = text + ' <span style="color:#c0392b;font-weight:700;">🗝️ via passe-partout</span>';
+      }
+      return origAddActivity.call(this, emoji, bg, text, time);
+    };
+    window.addActivity._depPatch = true;
   }
 
   /* --- B. Après la connexion : bifurcation pour tout le monde
