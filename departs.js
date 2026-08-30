@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.95';
+var DEP_VERSION = 'v1.19.97';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -1175,6 +1175,15 @@ function injecterEcrans(){
   +         '<div class="dep-case-tit" style="color:#8B5E34;">ARCHIVAGE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-arch">—</div>'
   +       '</div>'
+  // v1.19.96 : nouveau carré RAPPORT FINANCIER, réservé à la direction —
+  // simple emplacement en attendant (retour de Cobey du 30/08/2026 : "je
+  // le ferai avec Issyaka car il y a beaucoup de choses dedans"), le
+  // contenu réel viendra dans un chantier séparé.
+  +       '<div class="dep-case" id="dep-case-rapfin" style="border-color:#1565C0;" onclick="depOuvrirEspaceRapportFinancier()">'
+  +         '<div class="dep-case-ico">&#128176;</div>'
+  +         '<div class="dep-case-tit" style="color:#1565C0;">RAPPORT FINANCIER</div>'
+  +         '<div class="dep-case-sub">&Agrave; venir</div>'
+  +       '</div>'
   // v1.19.9 : nouveau carré STATISTIQUES, réservé à la direction — classement
   // des collaborateurs (clients inscrits, argent apporté/encaissé, collectes
   // travaillées, validations effectuées).
@@ -1900,6 +1909,21 @@ function injecterEcrans(){
   +     '<div id="pa-chips" class="pa-chips"></div>'
   +     '<div id="pa-liste"></div>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN (v1.19.96) : RAPPORT FINANCIER — simple emplacement en
+     attendant, réservé à la direction. Le contenu réel est un chantier à
+     part, prévu avec Issyaka (retour de Cobey du 30/08/2026). ---- */
+  + '<div class="screen" id="s-rapport-financier">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
+  +     '<div class="h-title">Rapport Financier</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<div class="dep-vide" style="padding:44px 20px;">&#128176;<br><br>Cet espace est en construction.<br>'
+  +       'Il sera d&eacute;velopp&eacute; prochainement.</div>'
+  +   '</div>'
   + '</div>';
 
   while(w.firstChild) parent.appendChild(w.firstChild);
@@ -2192,8 +2216,8 @@ function injecterEcrans(){
     + '<div class="fg" style="margin-top:14px;"><label class="fl">Nom de l\'article</label>'
     +   '<input class="fi" id="pa-f-nom" placeholder="ex : F&ucirc;t 200L"></div>'
     + '<div class="fg"><label class="fl">Th&egrave;me <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
-    +   '<input class="fi" id="pa-f-theme" list="pa-themes-datalist" placeholder="ex : F&ucirc;ts / Bidons">'
-    +   '<datalist id="pa-themes-datalist"></datalist></div>'
+    +   '<input class="fi" id="pa-f-theme" placeholder="ex : F&ucirc;ts / Bidons">'
+    +   '<div id="pa-form-theme-sugg" class="pa-chips" style="margin-top:7px;"></div></div>'
     + '<div class="fg"><label class="fl">Prix (&euro;)</label>'
     +   '<input class="fi" id="pa-f-prix" type="number" min="0" placeholder="70" '
     +     'style="font-size:18px;font-weight:700;text-align:center;"></div>'
@@ -2804,6 +2828,11 @@ window.depRenderEspaces = function(){
     scarch.innerHTML = '<b style="color:#8B5E34;">'+nbDepC+'</b> d&eacute;part'+(nbDepC>1?'s':'')+' clôtur&eacute;'+(nbDepC>1?'s':'')
       + '<br>'+nbColT+' collecte'+(nbColT>1?'s':'')+' archiv&eacute;e'+(nbColT>1?'s':'');
   }
+
+  // Case RAPPORT FINANCIER (v1.19.96) — réservée à la direction, simple
+  // emplacement en attendant le vrai contenu (chantier à part avec Issyaka).
+  var crf = $('dep-case-rapfin');
+  if(crf) crf.style.display = estDirection() ? '' : 'none';
 
   // Case RÉGLAGES (v1.19.8) — réservée à la direction, remplace la molette
   // de l'écran Collecte. Reprend le badge d'alertes non lues qui vivait
@@ -10220,6 +10249,16 @@ window.depDevisConfirmerRefuser = function(){
 };
 
 /* ─────────────────────────────────────────────
+   13ter (v1.19.96). RAPPORT FINANCIER — simple emplacement en attendant,
+   réservé à la direction. Contenu réel prévu dans un chantier séparé
+   avec Issyaka (retour de Cobey du 30/08/2026).
+   ───────────────────────────────────────────── */
+window.depOuvrirEspaceRapportFinancier = function(){
+  if(!estDirection()){ toast('⛔ Réservé à la direction.'); return; }
+  goTo('s-rapport-financier');
+};
+
+/* ─────────────────────────────────────────────
    13bis. PRIX ARTICLES — grille tarifaire de référence, carré ouvert à
    tout le monde comme Devis (retour de Cobey du 30/08/2026). Un article
    = { nom, theme, prix }. Le thème n'est PAS un objet séparé : c'est un
@@ -10336,17 +10375,29 @@ window.depRenderListePrixArticles = function(){
   liste.innerHTML = h;
 };
 
+// v1.19.97 : le <datalist> HTML natif ne s'affiche quasiment jamais sur
+// mobile (retour de Cobey du 30/08/2026 : "il ne m'a pas proposé les
+// thèmes déjà existants") — remplacé par des pastilles cliquables,
+// toujours visibles, comme validé sur l'aperçu.
 function _paRemplirSuggestionsThemes(){
-  var dl = $('pa-themes-datalist');
-  if(!dl) return;
-  var data = window.prixArticlesData || {};
+  var box = $('pa-form-theme-sugg');
+  if(!box) return;
   var set = {};
-  Object.keys(data).forEach(function(k){
-    var t = (data[k].theme||'').trim();
+  Object.keys(window.prixArticlesData || {}).forEach(function(k){
+    var t = (window.prixArticlesData[k].theme||'').trim();
     if(t) set[t] = true;
   });
-  dl.innerHTML = Object.keys(set).sort().map(function(t){ return '<option value="'+esc(t)+'"></option>'; }).join('');
+  window._paSuggestionsThemes = Object.keys(set).sort();
+  box.innerHTML = window._paSuggestionsThemes.map(function(t, i){
+    return '<div class="pa-chip" onclick="depPrixArticleChoisirThemeSuggestion('+i+')">'+esc(t)+'</div>';
+  }).join('');
 }
+
+window.depPrixArticleChoisirThemeSuggestion = function(i){
+  var t = (window._paSuggestionsThemes || [])[i];
+  var input = $('pa-f-theme');
+  if(t && input) input.value = t;
+};
 
 window.depPrixArticleOuvrirNouveau = function(){
   window._paArticleEditId = null;
