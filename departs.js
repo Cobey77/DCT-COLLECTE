@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.93';
+var DEP_VERSION = 'v1.19.94';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -6021,7 +6021,14 @@ var DEP_SUIVI_THEMES = {
   destinataire: { icon:'&#128100;', color:'#1F7A63', bg:'#E1F3ED' },
   livraison:    { icon:'&#128205;', color:'#9A4B0C', bg:'#FBE8D6' },
   note:         { icon:'&#128221;', color:'#8A7300', bg:'#FFF9DB' },
-  modif:        { icon:'&#9999;&#65039;', color:'#555555', bg:'#F0F0F0' }
+  modif:        { icon:'&#9999;&#65039;', color:'#555555', bg:'#F0F0F0' },
+  // v1.19.94 : nom/téléphone/adresse du client — jusque-là non tracés par
+  // _depDiffFacturePourHist (retour de Cobey du 30/08/2026 : le fil
+  // d'Activité annonçait "a modifié X" sans jamais dire quoi, contrairement
+  // à la fiche France & Europe qui trace déjà tout).
+  nom:          { icon:'&#128100;', color:'#1F6FA6', bg:'#DCEEFA' },
+  tel:          { icon:'&#128222;', color:'#0F766E', bg:'#D9F2EE' },
+  adresse:      { icon:'&#127968;', color:'#7A5C2E', bg:'#F5EEDD' }
 };
 
 // v1.19.36 : `collecteId` (optionnel — absent pour un client dépôt direct)
@@ -7573,6 +7580,26 @@ function depAppliquerPrixIndefiniCollecte(){
 // adresse, prix de la livraison), chacune avec ses propres valeurs.
 function _depDiffFacturePourHist(fiche, avant){
   var out = [];
+  // v1.19.94 : nom (civilité + prénom + nom composés dans "name"),
+  // téléphone(s) et adresse du client lui-même — jusque-là non comparés
+  // ici, alors que ce sont les champs les plus souvent modifiés sur la
+  // fiche Collecte (retour de Cobey du 30/08/2026, en comparant avec la
+  // fiche France & Europe qui trace déjà tout via
+  // _enregistrerModifFrance). Même style d'écriture (avant &rarr; après)
+  // que les autres champs ci-dessous.
+  if((fiche.name||'') !== (avant.name||'')){
+    out.push({ type:'nom', label:'nom', texte:'a modifi&eacute; le nom : ' + esc(avant.name||'—') + ' &rarr; ' + esc(fiche.name||'—') });
+  }
+  if((fiche.tel||'') !== (avant.tel||'') || (fiche.tel2||'') !== (avant.tel2||'')){
+    var avantTelC = [esc(avant.tel||''), esc(avant.tel2||'')].filter(Boolean).join(' &middot; ') || '—';
+    var apresTelC = [esc(fiche.tel||''), esc(fiche.tel2||'')].filter(Boolean).join(' &middot; ') || '—';
+    out.push({ type:'tel', label:'t&eacute;l&eacute;phone', texte:'a modifi&eacute; le t&eacute;l&eacute;phone : ' + avantTelC + ' &rarr; ' + apresTelC });
+  }
+  if((fiche.adresse||'') !== (avant.adresse||'') || (fiche.infos||'') !== (avant.infos||'') || (fiche.cp||'') !== (avant.cp||'') || (fiche.ville||'') !== (avant.ville||'')){
+    var avantAdrC = [avant.adresse, avant.infos, avant.cp, avant.ville].filter(Boolean).map(function(s){ return esc(s); }).join(', ') || '—';
+    var apresAdrC = [fiche.adresse, fiche.infos, fiche.cp, fiche.ville].filter(Boolean).map(function(s){ return esc(s); }).join(', ') || '—';
+    out.push({ type:'adresse', label:'adresse', texte:'a modifi&eacute; l&rsquo;adresse : ' + avantAdrC + ' &rarr; ' + apresAdrC });
+  }
   if(!!fiche.prixADefinir !== !!avant.prixADefinir || (parseFloat(fiche.prix)||0) !== (parseFloat(avant.prix)||0)){
     var avantPrixC = avant.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(avant.prix)||0) + ' €');
     var apresPrixC = fiche.prixADefinir ? 'à définir sur place' : (depArrondi2(parseFloat(fiche.prix)||0) + ' €');
