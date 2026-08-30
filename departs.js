@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.94';
+var DEP_VERSION = 'v1.19.95';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -940,6 +940,21 @@ function injecterStyles(){
     + '.dep-photo-box img{max-width:100%;max-height:180px;border-radius:8px;display:block;margin:0 auto;}'
     + '.dep-sec{font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.06em;'
     +   'text-transform:uppercase;margin:18px 0 9px;padding-top:14px;border-top:1.5px solid var(--border);}'
+    // v1.19.95 : carré PRIX ARTICLES — grille tarifaire de référence (retour
+    // de Cobey du 30/08/2026). Pastilles de thème pour filtrer sans avoir à
+    // tout défiler dès que la liste grossit ; les "..." ouvrent le menu
+    // renommer/supprimer LE THÈME (pas les articles — voir
+    // depPrixArticleThemeMenu).
+    + '.pa-chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px;margin-bottom:10px;}'
+    + '.pa-chip{flex-shrink:0;padding:7px 12px;border-radius:20px;border:2px solid var(--border);'
+    +   'background:#fff;font-size:11px;font-weight:700;color:var(--text3);white-space:nowrap;cursor:pointer;}'
+    + '.pa-chip.on{border-color:var(--green);background:var(--green-light);color:var(--green-dark);}'
+    + '.pa-chip-dots{margin-left:4px;font-weight:900;padding:2px 4px;}'
+    + '.pa-row{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);'
+    +   'padding:11px 13px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;'
+    +   'gap:10px;cursor:pointer;}'
+    + '.pa-nom{font-size:13.5px;font-weight:700;color:var(--text);}'
+    + '.pa-prix{font-size:14.5px;font-weight:800;color:var(--green-dark);white-space:nowrap;}'
     + '.dep-fc-champ{background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);'
     +   'padding:11px 13px;margin-bottom:9px;}'
     + '.dep-fc-lab{font-size:10.5px;font-weight:800;color:var(--text3);letter-spacing:0.04em;'
@@ -1138,6 +1153,14 @@ function injecterEcrans(){
   +         '<div class="dep-case-ico">&#128203;</div>'
   +         '<div class="dep-case-tit" style="color:#00838F;">DEVIS</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-devis">—</div>'
+  +       '</div>'
+  // v1.19.95 : nouveau carré PRIX ARTICLES, ouvert à tout le monde comme le
+  // carré Devis (retour de Cobey du 30/08/2026) — grille tarifaire de
+  // référence, placée juste après Devis.
+  +       '<div class="dep-case" id="dep-case-pa" style="border-color:#C2185B;" onclick="depOuvrirEspacePrixArticles()">'
+  +         '<div class="dep-case-ico">&#127991;&#65039;</div>'
+  +         '<div class="dep-case-tit" style="color:#C2185B;">PRIX ARTICLES</div>'
+  +         '<div class="dep-case-sub">Grille tarifaire de r&eacute;f&eacute;rence</div>'
   +       '</div>'
   +       '<div class="dep-case" style="border-color:#006b2d;" onclick="depOuvrirScanQR()">'
   +         '<div class="dep-case-ico">&#128247;</div>'
@@ -1858,6 +1881,25 @@ function injecterEcrans(){
   +   '<div class="content">'
   +     '<div class="pub-wrap" style="padding:0 0 24px;" id="devis-doc-contenu"></div>'
   +   '</div>'
+  + '</div>'
+
+  /* ---- ÉCRAN (v1.19.95) : PRIX ARTICLES — grille tarifaire de référence,
+     carré ouvert à tout le monde, placé après Devis. Recherche + pastilles
+     de thème (texte libre, pas une liste fermée) pour filtrer sans tout
+     défiler quand ça grossit. ---- */
+  + '<div class="screen" id="s-prix-articles">'
+  +   '<div class="header">'
+  +     '<button class="btn-back" onclick="goTo(\'s-espaces\');depRenderEspaces();">&larr; Espaces</button>'
+  +     '<div class="h-title">Prix Articles</div>'
+  +     '<div style="width:60px;"></div>'
+  +   '</div>'
+  +   '<div class="content">'
+  +     '<button class="btn btn-green" style="margin-bottom:14px;" onclick="depPrixArticleOuvrirNouveau()">+ Nouvel article</button>'
+  +     '<input class="fi" id="pa-recherche" placeholder="&#128269; Rechercher un article..." '
+  +       'style="margin-bottom:10px;" oninput="depPrixArticleRecherche(this.value)">'
+  +     '<div id="pa-chips" class="pa-chips"></div>'
+  +     '<div id="pa-liste"></div>'
+  +   '</div>'
   + '</div>';
 
   while(w.firstChild) parent.appendChild(w.firstChild);
@@ -2139,6 +2181,97 @@ function injecterEcrans(){
     +   '<button class="btn-sm" style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;" onclick="depDevisConfirmerRefuser()">Refuser</button>'
     + '</div></div></div>';
   document.body.appendChild(m14);
+
+  /* ---- Modale (v1.19.95) : créer/modifier un article de la grille
+     tarifaire — voir carré PRIX ARTICLES. ---- */
+  var m15 = document.createElement('div');
+  m15.className = 'modal-overlay';
+  m15.id = 'modal-prix-article-form';
+  m15.innerHTML = '<div class="modal-sheet"><div class="modal-confirm" style="text-align:left;">'
+    + '<div class="modal-confirm-title" id="pa-form-titre">Nouvel article</div>'
+    + '<div class="fg" style="margin-top:14px;"><label class="fl">Nom de l\'article</label>'
+    +   '<input class="fi" id="pa-f-nom" placeholder="ex : F&ucirc;t 200L"></div>'
+    + '<div class="fg"><label class="fl">Th&egrave;me <span style="color:#aaa;font-weight:500;">&middot; facultatif</span></label>'
+    +   '<input class="fi" id="pa-f-theme" list="pa-themes-datalist" placeholder="ex : F&ucirc;ts / Bidons">'
+    +   '<datalist id="pa-themes-datalist"></datalist></div>'
+    + '<div class="fg"><label class="fl">Prix (&euro;)</label>'
+    +   '<input class="fi" id="pa-f-prix" type="number" min="0" placeholder="70" '
+    +     'style="font-size:18px;font-weight:700;text-align:center;"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-prix-article-form\')">Annuler</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depPrixArticleEnregistrer()">Enregistrer</button>'
+    + '</div>'
+    + '<div id="pa-form-suppr-zone" style="display:none;margin-top:12px;text-align:center;">'
+    +   '<a href="#" style="font-size:12px;color:#c0392b;font-weight:700;" '
+    +     'onclick="event.preventDefault();depPrixArticleSupprimerArticleDemander()">&#128465;&#65039; Supprimer cet article</a>'
+    + '</div>'
+    + '</div></div>';
+  document.body.appendChild(m15);
+
+  /* ---- Modale (v1.19.95) : confirmation suppression d'UN article. ---- */
+  var m16 = document.createElement('div');
+  m16.className = 'modal-overlay';
+  m16.id = 'modal-prix-article-suppr';
+  m16.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#128465;&#65039;</div>'
+    + '<div class="modal-confirm-title">Supprimer cet article ?</div>'
+    + '<div style="font-size:13px;color:#555;margin:8px 0 12px;" id="pa-suppr-texte"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-prix-article-suppr\')">Annuler</button>'
+    +   '<button class="btn-sm" style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;" onclick="depPrixArticleSupprimerArticleConfirmer()">Supprimer</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m16);
+
+  /* ---- Modale (v1.19.95) : menu d'un THÈME (appui sur les "..." d'une
+     pastille) — renommer ou supprimer le thème, jamais les articles
+     directement (retour de Cobey du 30/08/2026 : "ya un endroit pour
+     modifier les thèmes ou les supprimer ?"). ---- */
+  var m17 = document.createElement('div');
+  m17.className = 'modal-overlay';
+  m17.id = 'modal-prix-article-theme-menu';
+  m17.innerHTML = '<div class="modal-sheet"><div class="modal-confirm" style="text-align:left;padding:4px 0;">'
+    + '<div style="font-size:11px;font-weight:800;color:var(--text3);letter-spacing:0.04em;'
+    +   'text-transform:uppercase;margin-bottom:10px;" id="pa-theme-menu-titre"></div>'
+    + '<div style="padding:14px 2px;border-bottom:1px solid var(--border);font-weight:700;font-size:13.5px;cursor:pointer;" '
+    +   'onclick="depPrixArticleThemeRenommerDemander()">&#9999;&#65039; Renommer ce th&egrave;me'
+    +   '<div style="font-size:11px;font-weight:500;color:var(--text3);margin-top:3px;" id="pa-theme-menu-sub-renommer"></div></div>'
+    + '<div style="padding:14px 2px;font-weight:700;font-size:13.5px;color:#c0392b;cursor:pointer;" '
+    +   'onclick="depPrixArticleThemeSupprimerDemander()">&#128465;&#65039; Supprimer ce th&egrave;me'
+    +   '<div style="font-size:11px;font-weight:500;color:#c0392b;opacity:.75;margin-top:3px;" id="pa-theme-menu-sub-suppr"></div></div>'
+    + '<div style="text-align:center;padding-top:14px;font-weight:700;font-size:13.5px;color:var(--text3);cursor:pointer;" '
+    +   'onclick="closeModal(\'modal-prix-article-theme-menu\')">Annuler</div>'
+    + '</div></div>';
+  document.body.appendChild(m17);
+
+  /* ---- Modale (v1.19.95) : renommer un thème — s'applique en une fois à
+     tous les articles qui le portent. ---- */
+  var m18 = document.createElement('div');
+  m18.className = 'modal-overlay';
+  m18.id = 'modal-prix-article-theme-renommer';
+  m18.innerHTML = '<div class="modal-sheet"><div class="modal-confirm" style="text-align:left;">'
+    + '<div class="modal-confirm-title">Renommer ce th&egrave;me</div>'
+    + '<div class="fg" style="margin-top:14px;"><label class="fl">Nouveau nom</label>'
+    +   '<input class="fi" id="pa-theme-renommer-input"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-prix-article-theme-renommer\')">Annuler</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depPrixArticleThemeRenommerConfirmer()">Renommer</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m18);
+
+  /* ---- Modale (v1.19.95) : supprimer un thème — les articles ne sont
+     jamais effacés, ils repassent juste "Sans th&egrave;me". ---- */
+  var m19 = document.createElement('div');
+  m19.className = 'modal-overlay';
+  m19.id = 'modal-prix-article-theme-suppr';
+  m19.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#128465;&#65039;</div>'
+    + '<div class="modal-confirm-title">Supprimer ce th&egrave;me ?</div>'
+    + '<div style="font-size:13px;color:#555;margin:8px 0 12px;" id="pa-theme-suppr-texte"></div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-prix-article-theme-suppr\')">Annuler</button>'
+    +   '<button class="btn-sm" style="background:#FDEDED;color:#992020;border:1.5px solid #F5C6C6;" onclick="depPrixArticleThemeSupprimerConfirmer()">Supprimer</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m19);
 }
 
 // v1.19.16 : choix du pays de destination à l'inscription collecte —
@@ -2549,6 +2682,12 @@ function ecouterDeparts(){
     window.devisData = snap.val() || {};
     try{ if($('s-devis') && $('s-devis').classList.contains('active')) depRenderListeDevis(); }catch(e){}
     try{ if($('s-espaces') && $('s-espaces').classList.contains('active')) depRenderEspaces(); }catch(e){}
+  });
+
+  // v1.19.95 : grille tarifaire de référence — voir carré PRIX ARTICLES.
+  db.ref('prixArticles').on('value', function(snap){
+    window.prixArticlesData = snap.val() || {};
+    try{ if($('s-prix-articles') && $('s-prix-articles').classList.contains('active')) depRenderListePrixArticles(); }catch(e){}
   });
 
   // Clients inscrits directement au dépôt, hors collecte
@@ -10078,6 +10217,285 @@ window.depDevisConfirmerRefuser = function(){
   if(!id) return;
   try{ db.ref('devis/'+id).remove(); }catch(e){}
   toast('🗑️ Devis refusé et supprimé.');
+};
+
+/* ─────────────────────────────────────────────
+   13bis. PRIX ARTICLES — grille tarifaire de référence, carré ouvert à
+   tout le monde comme Devis (retour de Cobey du 30/08/2026). Un article
+   = { nom, theme, prix }. Le thème n'est PAS un objet séparé : c'est un
+   texte libre porté par chaque article, regroupé/filtré à l'affichage.
+   Renommer/supprimer "un thème" (voir la modale des "..." sur une
+   pastille) agit donc en masse sur tous les articles qui le portent —
+   supprimer un thème ne supprime jamais les articles, ils repassent
+   dans "Sans thème" (retour de Cobey : "ya un endroit pour modifier les
+   thèmes ou les supprimer ?").
+   ───────────────────────────────────────────── */
+
+window.depOuvrirEspacePrixArticles = function(){
+  goTo('s-prix-articles');
+  window._paFiltreTheme = '';
+  window._paRecherche = '';
+  var r = $('pa-recherche'); if(r) r.value = '';
+  depRenderListePrixArticles();
+};
+
+// Regroupe une liste d'articles (déjà filtrée par la recherche) par
+// thème, avec comptage — "Sans thème" toujours affiché en dernier.
+function _paListeThemes(items){
+  var map = {};
+  items.forEach(function(a){
+    var t = (a.theme || '').trim() || 'Sans thème';
+    map[t] = (map[t] || 0) + 1;
+  });
+  return Object.keys(map).sort(function(a, b){
+    if(a === 'Sans thème') return 1;
+    if(b === 'Sans thème') return -1;
+    return a.localeCompare(b);
+  }).map(function(t){ return { theme: t, count: map[t] }; });
+}
+
+window.depPrixArticleRecherche = function(v){
+  window._paRecherche = (v || '').trim();
+  depRenderListePrixArticles();
+};
+
+// idx === -1 → pastille "Tous". Retaper la pastille déjà active désactive
+// le filtre (retour à "Tous"), comme les autres filtres à pastilles de
+// l'appli.
+window.depPrixArticleFiltrerThemeIdx = function(idx){
+  if(idx < 0){
+    window._paFiltreTheme = '';
+  } else {
+    var t = (window._paThemesRender || [])[idx];
+    if(!t) return;
+    window._paFiltreTheme = (window._paFiltreTheme === t.theme) ? '' : t.theme;
+  }
+  depRenderListePrixArticles();
+};
+
+window.depRenderListePrixArticles = function(){
+  var chipsBox = $('pa-chips');
+  var liste = $('pa-liste');
+  if(!chipsBox || !liste) return;
+  var data = window.prixArticlesData || {};
+  var tousItems = Object.keys(data).map(function(k){ return Object.assign({_id:k}, data[k]); });
+
+  var q = (window._paRecherche || '').toLowerCase();
+  var itemsRecherche = q
+    ? tousItems.filter(function(a){ return (a.nom||'').toLowerCase().indexOf(q) >= 0; })
+    : tousItems;
+
+  // v1.19.95 : pastilles de thème avec compteur — évite de tout défiler
+  // dès que la grille grossit (retour de Cobey du 30/08/2026 : "si ya
+  // plus de 200 articles, on va devoir tout défiler ?").
+  window._paThemesRender = _paListeThemes(itemsRecherche);
+
+  var hChips = '<div class="pa-chip'+(window._paFiltreTheme===''?' on':'')+'" onclick="depPrixArticleFiltrerThemeIdx(-1)">Tous &middot; '+itemsRecherche.length+'</div>';
+  window._paThemesRender.forEach(function(t, i){
+    var on = (window._paFiltreTheme === t.theme);
+    hChips += '<div class="pa-chip'+(on?' on':'')+'" onclick="depPrixArticleFiltrerThemeIdx('+i+')">'
+      +   esc(t.theme) + ' &middot; ' + t.count
+      +   ' <span class="pa-chip-dots" onclick="event.stopPropagation();depPrixArticleThemeMenu('+i+')">&#8943;</span>'
+      + '</div>';
+  });
+  chipsBox.innerHTML = hChips;
+
+  var itemsAffiches = window._paFiltreTheme
+    ? itemsRecherche.filter(function(a){ return ((a.theme||'').trim() || 'Sans thème') === window._paFiltreTheme; })
+    : itemsRecherche;
+
+  if(!itemsAffiches.length){
+    liste.innerHTML = '<div class="dep-vide" style="padding:28px 16px;">'
+      + (tousItems.length ? 'Aucun article ne correspond.' : 'Aucun article pour l\'instant.')
+      + '</div>';
+    return;
+  }
+
+  var groupes = {};
+  itemsAffiches.forEach(function(a){
+    var t = (a.theme||'').trim() || 'Sans thème';
+    (groupes[t] = groupes[t] || []).push(a);
+  });
+  var themesOrdonnes = Object.keys(groupes).sort(function(a, b){
+    if(a === 'Sans thème') return 1;
+    if(b === 'Sans thème') return -1;
+    return a.localeCompare(b);
+  });
+
+  var h = '';
+  themesOrdonnes.forEach(function(t){
+    h += '<div class="dep-sec">'+esc(t)+'</div>';
+    groupes[t].sort(function(a, b){ return String(a.nom||'').localeCompare(String(b.nom||'')); });
+    groupes[t].forEach(function(a){
+      h += '<div class="pa-row" onclick="depPrixArticleModifier(\''+a._id+'\')">'
+        +   '<div class="pa-nom">'+esc(a.nom||'—')+'</div>'
+        +   '<div class="pa-prix">'+(parseFloat(a.prix)||0)+' &euro;</div>'
+        + '</div>';
+    });
+  });
+  liste.innerHTML = h;
+};
+
+function _paRemplirSuggestionsThemes(){
+  var dl = $('pa-themes-datalist');
+  if(!dl) return;
+  var data = window.prixArticlesData || {};
+  var set = {};
+  Object.keys(data).forEach(function(k){
+    var t = (data[k].theme||'').trim();
+    if(t) set[t] = true;
+  });
+  dl.innerHTML = Object.keys(set).sort().map(function(t){ return '<option value="'+esc(t)+'"></option>'; }).join('');
+}
+
+window.depPrixArticleOuvrirNouveau = function(){
+  window._paArticleEditId = null;
+  var t = $('pa-form-titre'); if(t) t.textContent = 'Nouvel article';
+  var n = $('pa-f-nom'); if(n) n.value = '';
+  var th = $('pa-f-theme'); if(th) th.value = (window._paFiltreTheme && window._paFiltreTheme !== 'Sans thème') ? window._paFiltreTheme : '';
+  var p = $('pa-f-prix'); if(p) p.value = '';
+  var z = $('pa-form-suppr-zone'); if(z) z.style.display = 'none';
+  _paRemplirSuggestionsThemes();
+  openModal('modal-prix-article-form');
+};
+
+window.depPrixArticleModifier = function(id){
+  var a = (window.prixArticlesData||{})[id];
+  if(!a){ toast('⚠️ Article introuvable.'); return; }
+  window._paArticleEditId = id;
+  var t = $('pa-form-titre'); if(t) t.textContent = 'Modifier l\'article';
+  var n = $('pa-f-nom'); if(n) n.value = a.nom || '';
+  var th = $('pa-f-theme'); if(th) th.value = a.theme || '';
+  var p = $('pa-f-prix'); if(p) p.value = (a.prix != null ? a.prix : '');
+  var z = $('pa-form-suppr-zone'); if(z) z.style.display = 'block';
+  _paRemplirSuggestionsThemes();
+  openModal('modal-prix-article-form');
+};
+
+window.depPrixArticleEnregistrer = function(){
+  var nom = (($('pa-f-nom')||{}).value || '').trim();
+  var theme = (($('pa-f-theme')||{}).value || '').trim();
+  var prix = parseFloat(($('pa-f-prix')||{}).value);
+  if(!nom){ toast('⚠️ Indiquez le nom de l\'article.'); return; }
+  if(isNaN(prix) || prix < 0){ toast('⚠️ Indiquez un prix valide.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
+
+  var obj = { nom: nom, theme: theme, prix: prix };
+  var editId = window._paArticleEditId;
+  if(editId){
+    var existant = (window.prixArticlesData||{})[editId] || {};
+    obj.creeLe = existant.creeLe || Date.now();
+    obj.creePar = existant.creePar || ((window.currentUser||{}).id || '');
+    obj.creeParNom = existant.creeParNom || ((window.currentUser||{}).name || '');
+    obj.modifieLe = Date.now();
+    db.ref('prixArticles/'+editId).set(obj).then(function(){
+      toast('✅ Article mis à jour.');
+      closeModal('modal-prix-article-form');
+    }).catch(function(e){
+      console.error('departs: mise à jour article', e);
+      toast('❌ Échec de la mise à jour, réessayez.');
+    });
+    return;
+  }
+
+  obj.creeLe = Date.now();
+  obj.creePar = (window.currentUser||{}).id || '';
+  obj.creeParNom = (window.currentUser||{}).name || '';
+  db.ref('prixArticles').push(obj).then(function(){
+    toast('✅ Article ajouté.');
+    closeModal('modal-prix-article-form');
+  }).catch(function(e){
+    console.error('departs: ajout article', e);
+    toast('❌ Échec de l\'enregistrement, réessayez.');
+  });
+};
+
+window.depPrixArticleSupprimerArticleDemander = function(){
+  var id = window._paArticleEditId;
+  if(!id) return;
+  var a = (window.prixArticlesData||{})[id] || {};
+  var t = $('pa-suppr-texte');
+  if(t) t.innerHTML = '&laquo; '+esc(a.nom||'Cet article')+' &raquo; sera d&eacute;finitivement supprim&eacute;.';
+  closeModal('modal-prix-article-form');
+  openModal('modal-prix-article-suppr');
+};
+
+window.depPrixArticleSupprimerArticleConfirmer = function(){
+  var id = window._paArticleEditId;
+  closeModal('modal-prix-article-suppr');
+  if(!id) return;
+  try{ db.ref('prixArticles/'+id).remove(); }catch(e){}
+  toast('🗑️ Article supprimé.');
+};
+
+// ---- Gestion d'UN THÈME : renommer ou vider en masse, jamais de
+// suppression en cascade des articles qui le portent.
+window.depPrixArticleThemeMenu = function(idx){
+  var t = (window._paThemesRender || [])[idx];
+  if(!t) return;
+  window._paThemeMenuTheme = t.theme;
+  var pluriel = t.count > 1 ? 's' : '';
+  var titre = $('pa-theme-menu-titre'); if(titre) titre.textContent = t.theme + ' · ' + t.count + ' article'+pluriel;
+  var subR = $('pa-theme-menu-sub-renommer'); if(subR) subR.textContent = 'Renomme les '+t.count+' article'+pluriel+' concerné'+pluriel+' en une fois';
+  var subS = $('pa-theme-menu-sub-suppr'); if(subS) subS.textContent = 'Les '+t.count+' article'+pluriel+' repassent dans « Sans thème » — ils ne sont pas effacés';
+  openModal('modal-prix-article-theme-menu');
+};
+
+window.depPrixArticleThemeRenommerDemander = function(){
+  closeModal('modal-prix-article-theme-menu');
+  var i = $('pa-theme-renommer-input');
+  if(i) i.value = (window._paThemeMenuTheme === 'Sans thème') ? '' : window._paThemeMenuTheme;
+  openModal('modal-prix-article-theme-renommer');
+};
+
+window.depPrixArticleThemeRenommerConfirmer = function(){
+  var nouveau = (($('pa-theme-renommer-input')||{}).value || '').trim();
+  if(!nouveau){ toast('⚠️ Indiquez un nom de thème.'); return; }
+  var ancien = window._paThemeMenuTheme;
+  if(nouveau === ancien){ closeModal('modal-prix-article-theme-renommer'); return; }
+  if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
+  var data = window.prixArticlesData || {};
+  var updates = {};
+  Object.keys(data).forEach(function(id){
+    var t = (data[id].theme||'').trim() || 'Sans thème';
+    if(t === ancien) updates['prixArticles/'+id+'/theme'] = (nouveau === 'Sans thème') ? '' : nouveau;
+  });
+  if(!Object.keys(updates).length){ closeModal('modal-prix-article-theme-renommer'); return; }
+  db.ref().update(updates).then(function(){
+    toast('✅ Thème renommé.');
+    closeModal('modal-prix-article-theme-renommer');
+    if(window._paFiltreTheme === ancien) window._paFiltreTheme = nouveau;
+  }).catch(function(e){
+    console.error('departs: renommage thème', e);
+    toast('❌ Échec du renommage, réessayez.');
+  });
+};
+
+window.depPrixArticleThemeSupprimerDemander = function(){
+  closeModal('modal-prix-article-theme-menu');
+  var t = $('pa-theme-suppr-texte');
+  if(t) t.innerHTML = 'Les articles de &laquo; '+esc(window._paThemeMenuTheme)+' &raquo; repasseront dans <b>Sans th&egrave;me</b> &mdash; ils ne seront pas effac&eacute;s.';
+  openModal('modal-prix-article-theme-suppr');
+};
+
+window.depPrixArticleThemeSupprimerConfirmer = function(){
+  closeModal('modal-prix-article-theme-suppr');
+  if(!window.db || !window.firebaseReady){ toast('❌ Connexion Firebase indisponible.'); return; }
+  var ancien = window._paThemeMenuTheme;
+  var data = window.prixArticlesData || {};
+  var updates = {};
+  Object.keys(data).forEach(function(id){
+    var t = (data[id].theme||'').trim() || 'Sans thème';
+    if(t === ancien) updates['prixArticles/'+id+'/theme'] = '';
+  });
+  if(!Object.keys(updates).length) return;
+  db.ref().update(updates).then(function(){
+    toast('🗑️ Thème supprimé — articles repassés dans « Sans thème ».');
+    if(window._paFiltreTheme === ancien) window._paFiltreTheme = '';
+  }).catch(function(e){
+    console.error('departs: suppression thème', e);
+    toast('❌ Échec de la suppression, réessayez.');
+  });
 };
 
 /* ─────────────────────────────────────────────
