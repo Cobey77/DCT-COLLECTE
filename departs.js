@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.97';
+var DEP_VERSION = 'v1.19.98';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -884,7 +884,11 @@ function injecterStyles(){
   s.id = 'dep-styles';
   s.textContent = ''
     + '.dep-cases{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:4px 0;}'
-    + '.dep-case{background:#fff;border:2.5px solid var(--border);border-radius:var(--radius);'
+    // v1.19.98 : fond teinté par carré au lieu du blanc + bordure colorée
+    // (retour de Cobey du 30/08/2026 : "l'esthétique est un peu froide") —
+    // chaque carré garde sa propre couleur (inline style="background:...")
+    // mais en version pastel, plus chaleureuse.
+    + '.dep-case{border:none;border-radius:var(--radius);'
     +   'padding:18px 12px;text-align:center;cursor:pointer;display:flex;flex-direction:column;'
     +   'align-items:center;justify-content:center;min-height:158px;transition:transform .12s;}'
     + '.dep-case:active{transform:scale(0.97);}'
@@ -1118,30 +1122,30 @@ function injecterEcrans(){
   // devient naturellement Client, Collecte, France & Europe, Inscription
   // au dépôt, QR Code, Archivage.
   +     '<div class="dep-cases">'
-  +       '<div class="dep-case" id="dep-case-departs" style="border-color:#252599;" onclick="depOuvrirEspaceDeparts()">'
+  +       '<div class="dep-case" id="dep-case-departs" style="background:#E2E2F1;" onclick="depOuvrirEspaceDeparts()">'
   +         '<div class="dep-case-ico">&#128674;</div>'
   +         '<div class="dep-case-tit" style="color:#252599;">D&Eacute;PARTS</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-dep">—</div>'
   +       '</div>'
-  +       '<div class="dep-case" style="border-color:#7c3aed;" onclick="depOuvrirEspaceClient()">'
+  +       '<div class="dep-case" style="background:#EDE5FC;" onclick="depOuvrirEspaceClient()">'
   +         '<div class="dep-case-ico">&#128100;</div>'
   +         '<div class="dep-case-tit" style="color:#7c3aed;">CLIENT</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-cli">—</div>'
   +       '</div>'
-  +       '<div class="dep-case" style="border-color:#009A44;" onclick="depOuvrirEspaceCollecte()">'
+  +       '<div class="dep-case" style="background:#DDF1E6;" onclick="depOuvrirEspaceCollecte()">'
   +         '<div class="dep-case-ico">&#128197;</div>'
   +         '<div class="dep-case-tit" style="color:#009A44;">COLLECTE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-col">—</div>'
   +       '</div>'
-  +       '<div class="dep-case" id="dep-case-france" style="border-color:#1a237e;" onclick="ouvrirFrance()">'
-  +         '<div class="dep-case-ico">&#127467;&#127479;&#127466;&#127482;</div>'
+  +       '<div class="dep-case" id="dep-case-france" style="background:#E1E2EE;" onclick="ouvrirFrance()">'
+  +         '<div class="dep-case-ico">&#127757;</div>'
   +         '<div class="dep-case-tit" style="color:#1a237e;">FRANCE &amp; EUROPE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-fr">—</div>'
   +       '</div>'
   // v1.19.50 : carré à part, ouvert à tout le monde (retour de Cobey du
   // 28/08/2026) — remplace l'ancien bouton "Inscrire un client au dépôt"
   // qui vivait dans le carré Départs, réservé à la direction.
-  +       '<div class="dep-case" id="dep-case-depot" style="border-color:#B8720C;" onclick="depCarreDepotOuvrir()">'
+  +       '<div class="dep-case" id="dep-case-depot" style="background:#F5ECDF;" onclick="depCarreDepotOuvrir()">'
   +         '<div class="dep-case-ico">&#127970;</div>'
   +         '<div class="dep-case-tit" style="color:#B8720C;">INSCRIPTION AU D&Eacute;P&Ocirc;T</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-depot">—</div>'
@@ -1149,7 +1153,7 @@ function injecterEcrans(){
   // v1.19.85 : nouveau carré DEVIS, ouvert à tout le monde (retour de
   // Cobey du 29/08/2026) — permet d'établir un devis avant même
   // l'inscription complète du client, avec export PDF à lui envoyer.
-  +       '<div class="dep-case" id="dep-case-devis" style="border-color:#00838F;" onclick="depOuvrirEspaceDevis()">'
+  +       '<div class="dep-case" id="dep-case-devis" style="background:#DDEEF0;" onclick="depOuvrirEspaceDevis()">'
   +         '<div class="dep-case-ico">&#128203;</div>'
   +         '<div class="dep-case-tit" style="color:#00838F;">DEVIS</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-devis">—</div>'
@@ -1157,12 +1161,12 @@ function injecterEcrans(){
   // v1.19.95 : nouveau carré PRIX ARTICLES, ouvert à tout le monde comme le
   // carré Devis (retour de Cobey du 30/08/2026) — grille tarifaire de
   // référence, placée juste après Devis.
-  +       '<div class="dep-case" id="dep-case-pa" style="border-color:#C2185B;" onclick="depOuvrirEspacePrixArticles()">'
+  +       '<div class="dep-case" id="dep-case-pa" style="background:#F7E0E9;" onclick="depOuvrirEspacePrixArticles()">'
   +         '<div class="dep-case-ico">&#127991;&#65039;</div>'
   +         '<div class="dep-case-tit" style="color:#C2185B;">PRIX ARTICLES</div>'
   +         '<div class="dep-case-sub">Grille tarifaire de r&eacute;f&eacute;rence</div>'
   +       '</div>'
-  +       '<div class="dep-case" style="border-color:#006b2d;" onclick="depOuvrirScanQR()">'
+  +       '<div class="dep-case" style="background:#DDEBE3;" onclick="depOuvrirScanQR()">'
   +         '<div class="dep-case-ico">&#128247;</div>'
   +         '<div class="dep-case-tit" style="color:#006b2d;">QR CODE</div>'
   +         '<div class="dep-case-sub">Scanner une facture</div>'
@@ -1170,7 +1174,7 @@ function injecterEcrans(){
   // v1.19.0 : nouveau carré ARCHIVAGE, ouvert à tous — consultation en
   // lecture seule des départs clôturés et des collectes terminées, dans un
   // seul endroit (demande de Cobey du 21/08/2026).
-  +       '<div class="dep-case" style="border-color:#8B5E34;" onclick="depOuvrirEspaceArchive()">'
+  +       '<div class="dep-case" style="background:#EFEAE4;" onclick="depOuvrirEspaceArchive()">'
   +         '<div class="dep-case-ico">&#128194;</div>'
   +         '<div class="dep-case-tit" style="color:#8B5E34;">ARCHIVAGE</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-arch">—</div>'
@@ -1179,7 +1183,7 @@ function injecterEcrans(){
   // simple emplacement en attendant (retour de Cobey du 30/08/2026 : "je
   // le ferai avec Issyaka car il y a beaucoup de choses dedans"), le
   // contenu réel viendra dans un chantier séparé.
-  +       '<div class="dep-case" id="dep-case-rapfin" style="border-color:#1565C0;" onclick="depOuvrirEspaceRapportFinancier()">'
+  +       '<div class="dep-case" id="dep-case-rapfin" style="background:#E0EAF6;" onclick="depOuvrirEspaceRapportFinancier()">'
   +         '<div class="dep-case-ico">&#128176;</div>'
   +         '<div class="dep-case-tit" style="color:#1565C0;">RAPPORT FINANCIER</div>'
   +         '<div class="dep-case-sub">&Agrave; venir</div>'
@@ -1187,7 +1191,7 @@ function injecterEcrans(){
   // v1.19.9 : nouveau carré STATISTIQUES, réservé à la direction — classement
   // des collaborateurs (clients inscrits, argent apporté/encaissé, collectes
   // travaillées, validations effectuées).
-  +       '<div class="dep-case" id="dep-case-stats" style="border-color:#B8860B;" onclick="depOuvrirEspaceStats()">'
+  +       '<div class="dep-case" id="dep-case-stats" style="background:#F5EFDF;" onclick="depOuvrirEspaceStats()">'
   +         '<div class="dep-case-ico">&#128202;</div>'
   +         '<div class="dep-case-tit" style="color:#B8860B;">STATISTIQUES</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-stats">—</div>'
@@ -1195,7 +1199,7 @@ function injecterEcrans(){
   // v1.19.8 : nouveau carré RÉGLAGES, réservé à la direction — reprend ce
   // qui était derrière la molette ⚙️ de l'écran Collecte (Équipe,
   // Partenaire, Accès, Données, Message), désormais retirée de là-bas.
-  +       '<div class="dep-case" id="dep-case-reglages" style="border-color:#455A64;" onclick="depOuvrirEspaceReglages()">'
+  +       '<div class="dep-case" id="dep-case-reglages" style="background:#E6E9EA;" onclick="depOuvrirEspaceReglages()">'
   +         '<div class="dep-case-ico">&#9881;&#65039;</div>'
   +         '<div class="dep-case-tit" style="color:#455A64;">R&Eacute;GLAGES</div>'
   +         '<div class="dep-case-sub" id="dep-case-sub-regl">—</div>'
@@ -2922,11 +2926,11 @@ window.depDepartsPaysRetour = function(){
 // sous forme de sous-carrés cliquables plutôt que d'onglets, pour rester
 // cohérent avec le reste du module (Archivage, Historique...).
 var DEP_REGLAGES_ITEMS = [
-  { tab:'equipe',      icone:'&#128101;', titre:'&Eacute;QUIPE',   couleur:'#009A44' },
-  { tab:'partenaires', icone:'&#128666;', titre:'PARTENAIRE',      couleur:'#1a237e' },
-  { tab:'acces',       icone:'&#128272;', titre:'ACC&Egrave;S',    couleur:'#c0392b' },
-  { tab:'donnees',     icone:'&#128190;', titre:'DONN&Eacute;ES',  couleur:'#455A64' },
-  { tab:'message',     icone:'&#128226;', titre:'MESSAGE',         couleur:'#7c3aed' }
+  { tab:'equipe',      icone:'&#128101;', titre:'&Eacute;QUIPE',   couleur:'#009A44', fond:'#DDF1E6' },
+  { tab:'partenaires', icone:'&#128666;', titre:'PARTENAIRE',      couleur:'#1a237e', fond:'#E1E2EE' },
+  { tab:'acces',       icone:'&#128272;', titre:'ACC&Egrave;S',    couleur:'#c0392b', fond:'#F6E5E3' },
+  { tab:'donnees',     icone:'&#128190;', titre:'DONN&Eacute;ES',  couleur:'#455A64', fond:'#E6E9EA' },
+  { tab:'message',     icone:'&#128226;', titre:'MESSAGE',         couleur:'#7c3aed', fond:'#EDE5FC' }
 ];
 
 window.depOuvrirEspaceReglages = function(){
@@ -2944,7 +2948,7 @@ function _depReglagesPreparerEcran(){
     grille.className = 'dep-cases';
     var h = '';
     DEP_REGLAGES_ITEMS.forEach(function(it){
-      h += '<div class="dep-case" style="border-color:'+it.couleur+';" onclick="_depReglagesOuvrirItem(\''+it.tab+'\')">'
+      h += '<div class="dep-case" style="background:'+it.fond+';" onclick="_depReglagesOuvrirItem(\''+it.tab+'\')">'
         +   '<div class="dep-case-ico">'+it.icone+'</div>'
         +   '<div class="dep-case-tit" style="color:'+it.couleur+';">'+it.titre+'</div>'
         +   '<div class="dep-case-sub" id="dep-regl-sub-'+it.tab+'">—</div>'
@@ -3519,6 +3523,12 @@ window.depRenderArchive = function(){
 
 window.depOuvrirEspaceCollecte = function(){
   goTo('s-home');
+  // v1.19.98 : s-home est l'écran natif d'origine (avant les carrés
+  // Espaces), qui garde son en-tête générique "Dakar City Transport /
+  // Bonjour..." — retour de Cobey du 30/08/2026 : "comme les autres
+  // carrés qui ont leur propre nom". On le retitre en "Collecte" ici.
+  var t = document.querySelector('#s-home .h-title'); if(t) t.textContent = 'Collecte';
+  var hg = $('home-greet'); if(hg) hg.style.display = 'none';
   try{ renderCollectesList(); }catch(e){}
 };
 
