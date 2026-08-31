@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <style>
 :root{--border:#E0E0E0;--radius:14px;--radius-sm:10px;--font:'DM Sans',sans-serif;}
 *{box-sizing:border-box;}
@@ -462,6 +463,18 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 var db = firebase.database();
 
+// v3 (31/08/2026) — connexion anonyme Firebase : cette page n'a pas de PIN
+// (elle est ouverte directement par les clients depuis un lien WhatsApp),
+// mais une fois les règles de sécurité Firebase resserrées (chantier
+// sécurité, retour de Cobey), toute lecture doit présenter ce "badge"
+// invisible, exactement comme l'appli interne (voir departs.js). Sans ça,
+// plus aucun client ne pourrait ouvrir sa facture. On tente la connexion,
+// mais on lance quand même la lecture si elle échoue ou tarde (ex. règles
+// pas encore resserrées) — pour ne rien casser avant/après ce chantier.
+var _connexionAnonyme = firebase.auth
+  ? firebase.auth().signInAnonymously().catch(function(e){ console.error('facture: connexion anonyme', e); })
+  : Promise.resolve();
+
 (function(){
   var m = /[?&]facture=([^&]+)/.exec(location.search);
   if(!m){ afficherErreur(); return; }
@@ -476,7 +489,7 @@ var db = firebase.database();
         ? db.ref('dct_depot/' + ctx.clientId)
         : db.ref('dct/clients/' + ctx.collecteId + '/' + ctx.clientId));
 
-  refClient.once('value').then(function(snap){
+  _connexionAnonyme.then(function(){ return refClient.once('value'); }).then(function(snap){
     var c = snap.val();
     var chargement = $('pub-chargement');
     if(chargement) chargement.style.display = 'none';
