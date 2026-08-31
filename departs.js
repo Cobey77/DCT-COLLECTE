@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.1';
+var DEP_VERSION = 'v1.20.2';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -590,12 +590,34 @@ function depRefClientPour(cle){
 // réécrit rien si tout est déjà à jour.
 function _depSyncRefsClients(contacts){
   contacts = contacts || {};
+  // v1.20.2 : contacts (dct/contacts) ne contient en réalité que les
+  // clients France & Europe (voir _versCarnet, index.html) — les clients
+  // Collecte/Dépôt (Sénégal/Mali), dont la réf est attribuée à la volée par
+  // depRefClientPour, n'y sont jamais écrits. Utiliser ce seul carnet comme
+  // référence de "ce client existe encore" effaçait donc leurs réf. à
+  // chaque mise à jour de dct/contacts, qui repartaient de CL-0001 à la
+  // collecte suivante (retour de Cobey du 31/08/2026). On complète avec
+  // toutes les autres sources réelles de clients avant de considérer
+  // qu'une réf. est orpheline.
+  var clesVivantes = Object.assign({}, contacts);
+  try{ tousLesClients().forEach(function(x){ clesVivantes[_depCleContact(x.c)] = true; }); }catch(e){}
+  try{
+    Object.keys(window.depotClients||{}).forEach(function(k){
+      if(window.depotClients[k]) clesVivantes[_depCleContact(window.depotClients[k])] = true;
+    });
+  }catch(e){}
+  try{
+    Object.keys((window.franceData||{}).clients||{}).forEach(function(k){
+      if(window.franceData.clients[k]) clesVivantes[_depCleContact(window.franceData.clients[k])] = true;
+    });
+  }catch(e){}
+
   var refs = window.dctRefsClients || (window.dctRefsClients = {});
   var updates = {};
   var dirty = false;
 
   Object.keys(refs).forEach(function(k){
-    if(!contacts[k]){ delete refs[k]; updates['dct_refs_clients/'+k] = null; dirty = true; }
+    if(!clesVivantes[k]){ delete refs[k]; updates['dct_refs_clients/'+k] = null; dirty = true; }
   });
 
   var compte = Object.keys(refs).length;
@@ -2797,7 +2819,15 @@ window.depRenderEspaces = function(){
   // Case CLIENT
   var scl = $('dep-case-sub-cli');
   if(scl){
-    var nbC = Object.keys(window.dctContacts||{}).length;
+    // v1.20.2 : dct/contacts (window.dctContacts) ne contient en réalité que
+    // les clients France & Europe (voir _versCarnet, index.html) — les
+    // clients Collecte/Dépôt (Sénégal/Mali) n'y sont jamais écrits. Ce badge
+    // affichait donc "Aucun contact" alors que le carnet, une fois ouvert
+    // (renderContacts → getAllContacts, qui recombine les deux sources),
+    // en montrait plein (retour de Cobey du 31/08/2026 : "le nombre ne
+    // correspond pas"). On compte désormais la même chose que ce qui
+    // s'affiche réellement à l'ouverture.
+    var nbC = (typeof getAllContacts === 'function') ? getAllContacts().length : Object.keys(window.dctContacts||{}).length;
     scl.innerHTML = nbC === 0
       ? 'Aucun contact'
       : '<b style="color:#7c3aed;">'+nbC+'</b> contact'+(nbC>1?'s':'')+'<br>enregistr&eacute;'+(nbC>1?'s':'');
