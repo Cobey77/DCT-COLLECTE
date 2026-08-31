@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.0';
+var DEP_VERSION = 'v1.20.1';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -4454,9 +4454,13 @@ window.depRetourFactureDepuisImpression = function(){
 // Lien de facture (lecture seule, sans connexion) — utilisé UNIQUEMENT
 // pour le texte envoyé par WhatsApp (voir depPartagerWhatsapp). Le QR
 // code, lui, n'utilise plus ce lien depuis la v1.16.2 (voir _depTokenQR).
+// v1.20.1 (chantier adresse, étape 4) : pointe maintenant vers la page
+// publique dédiée facture.html, à la racine du site, au lieu de l'adresse
+// de l'appli elle-même (gestion-dct.html) — le client n'a plus besoin de
+// charger toute l'appli pour voir sa facture.
 function depLienFacture(ctx){
   var code = (ctx.france ? 'F' : (ctx.depot ? 'D' : 'C')) + '|' + (ctx.collecteId || '') + '|' + ctx.clientId;
-  return location.origin + location.pathname + '?facture=' + encodeURIComponent(code);
+  return location.origin + '/facture.html?facture=' + encodeURIComponent(code);
 }
 
 // v1.16.2 : jeton QR opaque (pas une URL) — un appareil photo/scanner
