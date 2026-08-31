@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.2';
+var DEP_VERSION = 'v1.20.3';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -632,6 +632,29 @@ function _depSyncRefsClients(contacts){
   });
 
   if(dirty && window.db && window.firebaseReady) db.ref().update(updates);
+}
+
+// v1.20.3 : attribue une réf. CL-XXXX à absolument tous les clients
+// actuellement inscrits (Collecte, Dépôt, France & Europe), sans attendre
+// que quelqu'un ouvre individuellement leur fiche/facture (seul moment où
+// depRefClientPour en attribuait une jusqu'ici) — retour de Cobey du
+// 31/08/2026 : "chaque client doit avoir son numéro unique, peu importe
+// dans quel parcours il est, s'il est toujours inscrit dans l'application".
+// Idempotente et sans risque de doublon : depRefClientPour renvoie
+// directement la réf existante si elle l'a déjà.
+function _depBackfillRefsClients(){
+  try{ tousLesClients().forEach(function(x){ depRefClientPour(_depCleContact(x.c)); }); }
+  catch(e){ console.error('departs: backfill réfs collecte', e); }
+  try{
+    Object.keys(window.depotClients||{}).forEach(function(k){
+      if(window.depotClients[k]) depRefClientPour(_depCleContact(window.depotClients[k]));
+    });
+  }catch(e){ console.error('departs: backfill réfs dépôt', e); }
+  try{
+    Object.keys((window.franceData||{}).clients||{}).forEach(function(k){
+      if(window.franceData.clients[k]) depRefClientPour(_depCleContact(window.franceData.clients[k]));
+    });
+  }catch(e){ console.error('departs: backfill réfs France', e); }
 }
 
 // Sous-carré Sénégal/Mali actuellement ouvert dans l'espace DÉPARTS —
@@ -2746,6 +2769,9 @@ function ecouterDeparts(){
     try{
       if(_depDetailId && $('s-depart-detail') && $('s-depart-detail').classList.contains('active')) depDetail(_depDetailId);
     }catch(e){}
+    // v1.20.3 : voir _depBackfillRefsClients — un client dépôt tout juste
+    // inscrit doit avoir son numéro sans attendre qu'on ouvre sa fiche.
+    try{ _depBackfillRefsClients(); }catch(e){}
   });
 
   // v1.19.21 : Réf. client — voir dctRefsClients/depRefClientPour/
@@ -2760,8 +2786,16 @@ function ecouterDeparts(){
   db.ref('dct/contacts').on('value', function(snap){
     setTimeout(function(){
       try{ _depSyncRefsClients(snap.val()); }catch(e){ console.error('departs: sync réfs client', e); }
+      try{ _depBackfillRefsClients(); }catch(e){}
     }, 300);
   });
+
+  // v1.20.3 : passage supplémentaire au chargement, pour les clients
+  // Collecte — leur source (clientsParCollecte) vient de l'écoute native
+  // (voir ecouterChangements, index.html, illisible depuis ici) et non d'un
+  // des ref() ci-dessus ; un délai généreux laisse le temps à la synchro
+  // initiale de Firebase de se terminer.
+  setTimeout(function(){ try{ _depBackfillRefsClients(); }catch(e){} }, 4000);
 }
 
 /* ─────────────────────────────────────────────
