@@ -183,7 +183,22 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.3';
+var DEP_VERSION = 'v1.20.4';
+
+// v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
+// en parallèle du reste — pour que la connexion anonyme (voir
+// _depConnexionAnonyme, section T des greffes plus bas) soit prête le plus
+// tôt possible une fois Firebase initialisé, sans ajouter de délai de
+// chargement de script au moment crucial. index.html ne charge que
+// firebase-app-compat.js et firebase-database-compat.js (fichier natif,
+// jamais modifié directement) — celui-ci s'ajoute par-dessus.
+(function _depPrechargerFirebaseAuth(){
+  try{
+    var s = document.createElement('script');
+    s.src = 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js';
+    document.head.appendChild(s);
+  }catch(e){}
+})();
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -9729,6 +9744,42 @@ function greffer(){
     };
     window.renderFrance._depPatch = true;
   }
+
+  /* --- T (v1.20.4). Connexion anonyme Firebase — protège la base contre
+     les accès directs depuis l'extérieur de l'appli (robots/scanners qui
+     trouvent l'adresse de la base sans jamais l'ouvrir), une fois les
+     règles resserrées côté Firebase (alerte "Realtime Database ... règles
+     non sécurisées", retour de Cobey du 31/08/2026). Un badge invisible et
+     automatique — ne remplace PAS les codes PIN (toujours nécessaires pour
+     utiliser l'appli), juste une preuve qu'on est bien passé par elle. Le
+     SDK firebase-auth-compat.js est préchargé plus haut dans ce fichier
+     (voir _depPrechargerFirebaseAuth), en parallèle du reste, pour être
+     prêt le plus tôt possible ici. --- */
+  if(typeof window.initFirebase === 'function' && !window.initFirebase._depPatch){
+    var origInitFirebase = window.initFirebase;
+    window.initFirebase = function(){
+      origInitFirebase.apply(this, arguments);
+      try{ _depConnexionAnonyme(); }catch(e){ console.error('departs: connexion anonyme', e); }
+    };
+    window.initFirebase._depPatch = true;
+  }
+}
+
+function _depConnexionAnonyme(){
+  var tentatives = 0;
+  var essayer = function(){
+    tentatives++;
+    if(typeof firebase !== 'undefined' && firebase.auth){
+      firebase.auth().signInAnonymously().catch(function(e){ console.error('departs: signInAnonymously', e); });
+    } else if(tentatives < 30){
+      // Le SDK firebase-auth-compat.js (préchargé) n'a pas encore fini de
+      // charger — on réessaie brièvement plutôt que d'abandonner.
+      setTimeout(essayer, 250);
+    } else {
+      console.error('departs: firebase-auth-compat.js n\'a jamais chargé');
+    }
+  };
+  essayer();
 }
 
 // v1.14.0 : ajoute un bouton "🧾" sur la carte de chaque client déjà
