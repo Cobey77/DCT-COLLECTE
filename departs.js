@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.19.98';
+var DEP_VERSION = 'v1.19.99';
 
 // Parité légale fixe du franc CFA (zone UEMOA) — pas un taux flottant.
 var TAUX_FCFA_EUR = 655.957;
@@ -4996,6 +4996,11 @@ function depRenderSuiviTransportPublic(c){
 // (agrandi, voir plus bas) vraiment prêts — utilisé par
 // depExporterFacturePDF pour ne capturer la page qu'une fois le QR
 // effectivement dessiné (sinon il ressortirait vide sur le PDF).
+//
+// ⚠️ IMPORTANT (30/08/2026) : la mise en page de la facture est aussi
+// dupliquée dans facture.html (page publique autonome, chantier "adresse").
+// Tout futur changement visuel ici (nouveau champ, nouvelle ligne de
+// totaux, etc.) doit être répercuté aux DEUX endroits.
 function depRenderFacturePublique(c, ctx, cbApresQR){
   var pay = depCalculerPaiement(c);
   var payLivPub = depCalculerPaiementLivraison(c);
