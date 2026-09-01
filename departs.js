@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.5';
+var DEP_VERSION = 'v1.20.6';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -9778,6 +9778,31 @@ function greffer(){
       try{ _depAfficherSectionExterne(); }catch(e){ console.error('departs: section chauffeurs externes', e); }
     };
     window.renderDispatchTab._depPatch = true;
+  }
+
+  /* --- V (v1.20.6). Chauffeur externe — Suivi live : le clic
+     "Récupéré"/"Non récupéré" du chauffeur externe doit clôturer le
+     client dans Suivi, comme le fait un camion normal (retour de Cobey
+     du 01/09/2026 : "clic sur récupérer pour finaliser le client dans
+     le suivi"). On ne touche pas à validated/refused (qui restent
+     réservés à "facture faite" et au garde-fou de clôture) : on lit
+     chauffeurStatuts en plus, uniquement quand la Suivi n'a encore rien
+     de plus prioritaire à afficher (validated/refused/cancelled/
+     reported). --- */
+  if(typeof window._suiviStatut === 'function' && !window._suiviStatut._depPatch){
+    var origSuiviStatut = window._suiviStatut;
+    window._suiviStatut = function(tk, id){
+      var st = origSuiviStatut(tk, id);
+      if(st === 'route' || st === 'avenir'){
+        var cs = tk.chauffeurStatuts && tk.chauffeurStatuts[id];
+        if(cs){
+          if(cs.etat === 'recupere') return 'collecte';
+          if(cs.etat === 'refuse') return 'refuse';
+        }
+      }
+      return st;
+    };
+    window._suiviStatut._depPatch = true;
   }
 }
 
