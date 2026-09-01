@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.4';
+var DEP_VERSION = 'v1.20.5';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -9763,6 +9763,22 @@ function greffer(){
     };
     window.initFirebase._depPatch = true;
   }
+
+  /* --- U (v1.20.5). Chauffeur externe — bouton dédié "Ajouter un
+     chauffeur externe" dans le Dispatch (à part de "Ajouter un camion",
+     retour de Cobey du 01/09/2026 : une case dans la modale existante
+     aurait alourdi une fenêtre déjà utilisée souvent) + section dédiée en
+     bas de l'onglet Dispatch (code d'accès, statut de chaque client en
+     direct, bouton Facture) + garde-fou de clôture (voir plus bas). ---*/
+  if(typeof window.renderDispatchTab === 'function' && !window.renderDispatchTab._depPatch){
+    var origRenderDispatchTab = window.renderDispatchTab;
+    window.renderDispatchTab = function(){
+      origRenderDispatchTab.apply(this, arguments);
+      try{ _depAjouterBoutonCamionExterne(); }catch(e){ console.error('departs: bouton chauffeur externe', e); }
+      try{ _depAfficherSectionExterne(); }catch(e){ console.error('departs: section chauffeurs externes', e); }
+    };
+    window.renderDispatchTab._depPatch = true;
+  }
 }
 
 function _depConnexionAnonyme(){
@@ -9781,6 +9797,253 @@ function _depConnexionAnonyme(){
   };
   essayer();
 }
+
+/* ─────────────────────────────────────────────
+   CHAUFFEUR EXTERNE (v1.20.5) — Issyaka crée, depuis le Dispatch, un
+   camion pour un chauffeur externe (pas un "frère" habituel), avec un
+   code d'accès à 4 chiffres propre à cette collecte. Le chauffeur ouvre
+   chauffeur.html (page à part, aucun lien vers l'appli), tape le code,
+   voit sa tournée et marque chaque client "Récupéré" (photo obligatoire)
+   ou "Non récupéré" (motif) — écrit dans
+   dct/dispatch/{collecteId}/trucks/{camion}/chauffeurStatuts/{clientId},
+   un champ à PART de validated/refused (qui, eux, signifient "facture
+   faite" dans le reste de l'appli — voir _depTruckEtStatut — donc ne
+   doivent surtout pas être écrits directement par le chauffeur). Une fois
+   revenu au dépôt, DCT ouvre chaque client via le bouton "🧾 Facture" ici
+   même, qui retombe sur l'écran natif "Valider — [nom]" avec les photos
+   du chauffeur déjà chargées. La collecte ne peut être clôturée (bouton
+   dédié, uniquement affiché si elle contient un camion externe) que si
+   tous les clients affectés ont bien leur facture faite (retour de Cobey
+   du 01/09/2026 : "il faut que chaque client ait eu sa facture avant que
+   la collecte ne soit validée").
+   ───────────────────────────────────────────── */
+
+function _depGenererCodeExterne(){
+  return String(1000 + Math.floor(Math.random() * 9000));
+}
+
+window.depOuvrirNouveauCamionExterne = function(){
+  var m = $('modal-add-truck-externe');
+  if(!m){
+    m = document.createElement('div');
+    m.id = 'modal-add-truck-externe';
+    m.className = 'modal-overlay';
+    m.style.cssText = 'align-items:center;';
+    m.innerHTML = '<div class="modal-sheet" style="border-radius:16px;margin:16px;">'
+      +   '<div style="font-size:17px;font-weight:800;color:#1a1a2e;margin-bottom:6px;">🚚 Chauffeur externe</div>'
+      +   '<div style="font-size:13px;color:#666;line-height:1.5;margin-bottom:16px;">Un code d&rsquo;acc&egrave;s sera g&eacute;n&eacute;r&eacute; &agrave; la cr&eacute;ation, propre &agrave; cette collecte.</div>'
+      +   '<div class="fg"><label class="fl">Pr&eacute;nom du chauffeur</label>'
+      +   '<input class="fi" id="new-truck-externe-nom" placeholder="Amadou" maxlength="40"></div>'
+      +   '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px;">'
+      +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-add-truck-externe\')">Annuler</button>'
+      +   '<button class="btn-sm btn-green-sm" onclick="depConfirmerNouveauCamionExterne()">✅ Créer</button>'
+      +   '</div></div>';
+    document.body.appendChild(m);
+  }
+  var inp = $('new-truck-externe-nom'); if(inp) inp.value = '';
+  openModal('modal-add-truck-externe');
+  setTimeout(function(){ var i = $('new-truck-externe-nom'); if(i) i.focus(); }, 300);
+};
+
+window.depConfirmerNouveauCamionExterne = function(){
+  var nom = (($('new-truck-externe-nom') || {}).value || '').trim();
+  if(!nom){ toast('⚠️ Indiquez le prénom du chauffeur'); return; }
+  var trks = getTrucks();
+  var num = 1;
+  while(trks['T' + String(num).padStart(2, '0')]) num++;
+  if(num > 99) return;
+  var k = 'T' + String(num).padStart(2, '0');
+  var couleurs = ['#0d47a1', '#e65100', '#6b21a8', '#1a7a40', '#c0392b', '#00838f', '#4a148c', '#f57f17'];
+  var couleur = couleurs[(num - 1) % couleurs.length];
+  var code = _depGenererCodeExterne();
+  trks[k] = { name: nom, clients: [], validated: [], refused: [], hours: {}, cancelled: [], wazeTs: {}, finTs: {}, color: couleur, externe: true, codeExterne: code, chauffeurStatuts: {} };
+  window.truckCount = Object.keys(trks).length;
+  try{
+    var u = window.currentUser || {};
+    addActivity('🚚', u.bg, '<strong style="color:' + u.color + '">' + esc(u.name || '') + '</strong> a ajouté le chauffeur externe <strong>' + esc(nom) + '</strong>' + (typeof _sufColl === 'function' ? _sufColl() : ''), "À l'instant");
+  }catch(e){}
+  closeModal('modal-add-truck-externe');
+  try{ if(window.db && window.firebaseReady) db.ref('dct_codes_externe/' + code).set({ collecteId: window.currentCollecteId, camion: k, nom: nom, ts: Date.now() }); }catch(e){ console.error('departs: écriture code externe', e); }
+  sauvegarder();
+  renderDispatchTab();
+  _depAfficherCodeExterne(nom, code);
+};
+
+function _depAfficherCodeExterne(nom, code){
+  var m = $('modal-code-externe');
+  if(!m){
+    m = document.createElement('div');
+    m.id = 'modal-code-externe';
+    m.className = 'modal-overlay';
+    m.style.cssText = 'align-items:center;';
+    document.body.appendChild(m);
+  }
+  m.innerHTML = '<div class="modal-sheet" style="border-radius:16px;margin:16px;text-align:center;">'
+    +   '<div style="font-size:26px;">✅</div>'
+    +   '<div style="font-size:15px;font-weight:800;margin:6px 0 16px;">Chauffeur &laquo;&nbsp;' + esc(nom) + '&nbsp;&raquo; cr&eacute;&eacute;</div>'
+    +   '<div style="background:#F5F6FC;border:1.5px solid #1a237e;border-radius:12px;padding:16px;margin-bottom:14px;">'
+    +     '<div style="font-size:11px;font-weight:700;color:#1a237e;letter-spacing:.05em;text-transform:uppercase;">Code d&rsquo;acc&egrave;s &mdash; cette collecte</div>'
+    +     '<div style="font-size:30px;font-weight:800;color:#1a237e;letter-spacing:.15em;margin-top:6px;">' + esc(code) + '</div>'
+    +   '</div>'
+    +   '<button class="btn-sm btn-green-sm" style="width:100%;margin-bottom:10px;" onclick="_depCopierLienExterne(\'' + esc(nom).replace(/'/g, '&#39;') + '\',\'' + code + '\')">📋 Copier le lien + code à envoyer</button>'
+    +   '<button class="btn-sm btn-gray-sm" style="width:100%;" onclick="closeModal(\'modal-code-externe\')">Fermer</button>'
+    + '</div>';
+  openModal('modal-code-externe');
+}
+
+window._depCopierLienExterne = function(nom, code){
+  var lien = location.origin + '/chauffeur.html?code=' + code;
+  var texte = 'Salut ' + nom + ' 👋 Voici ta tournée du jour Dakar City Transport.\n'
+    + 'Ouvre ce lien : ' + lien + '\n'
+    + 'Code d\'accès : ' + code;
+  try{
+    navigator.clipboard.writeText(texte).then(function(){ toast('📋 Copié — colle-le dans WhatsApp'); }, function(){ toast('⚠️ Copie impossible, copie manuellement : ' + lien); });
+  }catch(e){ toast('⚠️ Copie impossible, copie manuellement : ' + lien); }
+};
+
+// Bouton "🚚 Ajouter un chauffeur externe", ajouté juste après le bouton
+// natif "➕ Ajouter un camion" (retrouvé par son texte, index.html n'a pas
+// d'id dessus) — absent si la collecte est clôturée, comme le bouton natif.
+function _depAjouterBoutonCamionExterne(){
+  if(typeof isLocked === 'function' && isLocked()) return;
+  var container = $('collecte-content');
+  if(!container) return;
+  var boutons = container.querySelectorAll('button');
+  var btnCamion = null;
+  for(var i = 0; i < boutons.length; i++){
+    if(boutons[i].textContent.indexOf('Ajouter un camion') !== -1){ btnCamion = boutons[i]; break; }
+  }
+  if(!btnCamion) return;
+  var btn = document.createElement('button');
+  btn.style.cssText = 'width:100%;padding:13px;background:#EAF7EE;color:#006b2d;border:2.5px solid #006b2d;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;margin-bottom:10px;font-family:var(--font);';
+  btn.textContent = '🚚 Ajouter un chauffeur externe';
+  btn.onclick = window.depOuvrirNouveauCamionExterne;
+  btnCamion.insertAdjacentElement('afterend', btn);
+}
+
+// Section dédiée, en bas du Dispatch : un bloc par camion chauffeur
+// externe (code d'accès, statut de récupération de chaque client en
+// direct, bouton Facture), puis le bouton de clôture si applicable.
+function _depAfficherSectionExterne(){
+  var container = $('collecte-content');
+  if(!container) return;
+  var trks = getTrucks();
+  var clesExternes = Object.keys(trks).filter(function(k){ return trks[k] && trks[k].externe; });
+  if(!clesExternes.length) return;
+  var cls = getClients();
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'margin-top:6px;';
+  var titre = document.createElement('div'); titre.className = 'slabel'; titre.textContent = 'Chauffeurs externes';
+  wrap.appendChild(titre);
+  clesExternes.forEach(function(k){
+    var tk = trks[k];
+    var statuts = tk.chauffeurStatuts || {};
+    var card = document.createElement('div');
+    card.style.cssText = 'border:2px solid #1a237e;background:#F5F6FC;border-radius:12px;padding:13px 14px;margin-bottom:12px;';
+    var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
+      +   '<span style="font-size:13.5px;font-weight:800;color:#111;">🚛 ' + esc(tk.name) + '</span>'
+      +   '<span style="font-size:9px;font-weight:800;background:#1a237e;color:#fff;padding:3px 7px;border-radius:20px;">CHAUFFEUR EXTERNE</span>'
+      + '</div>'
+      +  '<button type="button" onclick="_depCopierLienExterne(\'' + esc(tk.name).replace(/'/g, '&#39;') + '\',\'' + esc(tk.codeExterne || '') + '\')" style="width:100%;padding:9px;background:#fff;border:1.5px solid #1a237e;color:#1a237e;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:10px;">📋 Copier le lien + code (' + esc(tk.codeExterne || '—') + ')</button>';
+    (tk.clients || []).forEach(function(id){
+      var c = cls[id]; if(!c) return;
+      var st = statuts[id];
+      var factFaite = (tk.validated || []).indexOf(id) !== -1 || (tk.refused || []).indexOf(id) !== -1;
+      var etat = st
+        ? (st.etat === 'recupere' ? '✅ Récupéré' + (st.nbPhotos ? (' · ' + st.nbPhotos + ' photo' + (st.nbPhotos > 1 ? 's' : '')) : '') : '❌ Non récupéré — ' + esc(st.motifLib || ''))
+        : '⏳ En attente';
+      var couleurEtat = st ? (st.etat === 'recupere' ? '#006b2d' : '#992020') : '#888';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #E0E9FF;">'
+        +   '<div><div style="font-size:12.5px;font-weight:700;color:#111;">' + esc(c.name || '') + '</div>'
+        +   '<div style="font-size:11px;color:' + couleurEtat + ';font-weight:600;">' + etat + '</div></div>';
+      if(st && st.etat === 'recupere' && !factFaite){
+        h += '<button type="button" onclick="_depFactureExterneOuvrir(\'' + id + '\',\'' + k + '\')" style="flex-shrink:0;padding:8px 12px;background:#006b2d;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:var(--font);">🧾 Facture</button>';
+      } else if(factFaite){
+        h += '<span style="flex-shrink:0;font-size:10.5px;font-weight:800;color:#006b2d;">✅ Facturé</span>';
+      }
+      h += '</div>';
+    });
+    if(!(tk.clients || []).length){
+      h += '<div style="font-size:12px;color:#888;font-style:italic;padding-top:6px;">Aucun client affecté pour l\'instant.</div>';
+    }
+    card.innerHTML = h;
+    wrap.appendChild(card);
+  });
+  if(typeof isLocked === 'function' && !isLocked()){
+    var btnClot = document.createElement('button');
+    btnClot.style.cssText = 'width:100%;padding:14px;background:#111;color:#fff;border:2.5px solid #000;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:14px;';
+    btnClot.textContent = '🔒 Clôturer la collecte';
+    btnClot.onclick = window._depClotureCollecteExterne;
+    wrap.appendChild(btnClot);
+  }
+  container.appendChild(wrap);
+}
+
+// Ouvre l'écran natif "Valider — [nom]" pour un client d'un camion
+// chauffeur externe, puis pré-remplit la zone photo avec celles déjà
+// prises par le chauffeur (dct_photos_colis/{clientId}) — le ramassage
+// est déjà acquis, DCT n'a pas à reprendre une photo (retour de Cobey du
+// 01/09/2026, confirmé sur sa propre capture d'écran de cet écran).
+window._depFactureExterneOuvrir = function(id, tk){
+  var fiche = (typeof getClients === 'function') ? getClients()[id] : null;
+  if(!fiche){ toast('⚠️ Client introuvable.'); return; }
+  var pay = depCalculerPaiement(fiche);
+  try{ window.depOuvrirValidation(id, tk, fiche.name, pay.total); }catch(e){ console.error('departs: ouverture validation (chauffeur externe)', e); return; }
+  if(window.db && window.firebaseReady){
+    db.ref('dct_photos_colis/' + id).once('value', function(snap){
+      var v = snap.val(); if(!v) return;
+      var arr = Object.keys(v).map(function(kk){ return v[kk]; }).filter(function(p){ return p && p.d; });
+      arr.sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); });
+      if(arr.length && _depValiderCtx && _depValiderCtx.clientId === id){
+        _depValiderCtx.photos = arr.slice(0, PHOTO_MAX);
+        _depRenderPhotosGrille('dv');
+      }
+    });
+  }
+};
+
+// Liste les clients (parmi TOUS les camions de la collecte, pas
+// seulement les externes) affectés à un camion mais sans facture faite
+// (ni validated, ni refused — voir _depTruckEtStatut) — utilisé comme
+// garde-fou avant de clôturer une collecte contenant un chauffeur
+// externe (retour de Cobey du 01/09/2026).
+function _depClientsSansFacture(collecteId){
+  var trks = ((window.dispatchParCollecte || {})[collecteId] || {}).trucks || {};
+  var cls = ((window.clientsParCollecte || {})[collecteId]) || {};
+  var manquants = [];
+  Object.keys(trks).forEach(function(k){
+    var t = trks[k];
+    (t.clients || []).forEach(function(id){
+      var fait = (t.validated || []).indexOf(id) !== -1 || (t.refused || []).indexOf(id) !== -1;
+      if(!fait){
+        var c = cls[id];
+        manquants.push((c && c.name) || id);
+      }
+    });
+  });
+  return manquants;
+}
+
+window._depClotureCollecteExterne = function(){
+  var collecteId = window.currentCollecteId;
+  var manquants = _depClientsSansFacture(collecteId);
+  if(manquants.length){
+    toast('⚠️ Facture manquante pour : ' + manquants.slice(0, 5).join(', ') + (manquants.length > 5 ? '…' : ''));
+    return;
+  }
+  var c = (window.collectes || []).find(function(x){ return x.id === collecteId; });
+  if(!c){ toast('⚠️ Collecte introuvable.'); return; }
+  c.statut = 'terminee';
+  try{
+    var u = window.currentUser || {};
+    addActivity('🔒', u.bg, '<strong style="color:' + u.color + '">' + esc(u.name || '') + '</strong> a clôturé la collecte', "À l'instant");
+  }catch(e){}
+  try{ sauvegarder(); }catch(e){}
+  try{ renderCollectesList(); }catch(e){}
+  try{ if(collecteId === window.currentCollecteId) updateCollecteHeader(); }catch(e){}
+  try{ renderDispatchTab(); }catch(e){}
+  toast('✅ Collecte clôturée');
+};
 
 // v1.14.0 : ajoute un bouton "🧾" sur la carte de chaque client déjà
 // validé, sur l'écran camion (voir greffe L). renderCamion() original
