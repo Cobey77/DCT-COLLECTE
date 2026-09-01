@@ -51,7 +51,6 @@ input{width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10p
 .vignettes{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;}
 [hidden]{display:none!important;}
 .retour{font-size:12.5px;color:#888;text-align:center;margin-top:10px;cursor:pointer;text-decoration:underline;}
-.note-bas{font-size:10.5px;color:#aaa;text-align:center;margin-top:6px;}
 </style>
 </head>
 <body>
@@ -77,9 +76,18 @@ input{width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10p
         <div class="compteur" id="tr-compteur"></div>
         <div class="barre-bg"><div class="barre" id="tr-barre" style="width:0%;"></div></div>
       </div>
+      <div style="padding:12px 14px 0;">
+        <button type="button" class="btn" style="background:#fff;border:1.5px solid #006b2d;color:#006b2d;padding:11px;" onclick="ouvrirCarte()">🗺️ Voir mon trajet sur la carte</button>
+      </div>
       <div class="liste" id="tr-liste"></div>
     </div>
-    <div class="note-bas">Aucun lien vers l'application Dakar City Transport sur cette page.</div>
+  </div>
+
+  <div id="ecran-carte" hidden class="card" style="padding:0;overflow:hidden;">
+    <div id="carte-map" style="width:100%;height:70vh;"></div>
+    <div class="pad" style="padding-top:14px;padding-bottom:16px;">
+      <div class="retour" onclick="fermerCarte()">← Retour à la tournée</div>
+    </div>
   </div>
 
   <div id="ecran-photo" hidden class="card">
@@ -161,6 +169,8 @@ var _connexionAnonyme = firebase.auth
 
 var ctx = null; // { collecteId, camion, nom, code }
 var clientsTournee = []; // [{id, ...fiche}]
+var truckCourant = null; // dernier objet camion reçu (pour horaires + carte)
+var carteInstance = null;
 var clientCourantPhoto = null;
 var photosCourantes = [];
 
@@ -203,11 +213,13 @@ function chargerTruck(){
 }
 
 function afficherTournee(tk){
+  truckCourant = tk;
   $('ecran-code').hidden = true;
   $('ecran-tournee').hidden = false;
   $('tr-nom').textContent = '👋 Salut ' + (tk.name || ctx.nom || '');
   var ids = tk.clients || [];
   var statuts = tk.chauffeurStatuts || {};
+  var horaires = tk.hours || {};
   var faits = ids.filter(function(id){ return statuts[id]; }).length;
   $('tr-compteur').textContent = faits + ' / ' + ids.length + ' colis traités';
   $('tr-barre').style.width = (ids.length ? Math.round(faits / ids.length * 100) : 0) + '%';
@@ -216,6 +228,13 @@ function afficherTournee(tk){
     $('tr-liste').innerHTML = '<div style="text-align:center;color:#999;font-size:13px;padding:20px 0;">Aucun client affecté pour l\'instant.</div>';
     return;
   }
+
+  // Ordre de ramassage : même tri que côté DCT (Dispatch) quand Issyaka a
+  // donné un horaire à certains clients — sans horaire, ils restent à la
+  // fin, dans l'ordre d'affectation (retour de Cobey du 01/09/2026).
+  ids = ids.slice().sort(function(a, b){
+    return (horaires[a] || '99').localeCompare(horaires[b] || '99');
+  });
 
   // Charge les fiches clients une seule fois (nom/adresse/tél ne changent
   // pas pendant la tournée), puis ré-affiche à chaque mise à jour du
@@ -230,45 +249,79 @@ function afficherTournee(tk){
       });
     })).then(function(res){
       res.forEach(function(c){ if(c) clientsTournee.push(c); });
-      dessinerListe(ids, statuts);
+      dessinerListe(ids, statuts, horaires);
     });
   } else {
-    dessinerListe(ids, statuts);
+    dessinerListe(ids, statuts, horaires);
   }
 }
 
-function dessinerListe(ids, statuts){
+function dessinerListe(ids, statuts, horaires){
   var h = '';
   ids.forEach(function(id){
     var c = clientsTournee.find(function(x){ return x.id === id; });
     if(!c) return;
     var st = statuts[id];
+    var heure = horaires[id];
     var adresse = [c.adresse, c.cp, c.ville].filter(Boolean).join(', ');
     var tel = (c.tel || '').replace(/\s/g, '');
     var cls = st ? (st.etat === 'recupere' ? 'client fait' : 'client refuse') : 'client';
     h += '<div class="' + cls + '">'
       +   '<div class="client-top">'
-      +     '<div><div class="client-nom">' + esc(c.name || '') + '</div>'
+      +     '<div><div class="client-nom">' + (heure ? ('🕐 ' + esc(heure) + ' — ') : '') + esc(c.name || '') + '</div>'
       +     '<div class="client-adresse">📍 ' + esc(adresse || '—') + '</div></div>';
     if(st) h += st.etat === 'recupere' ? '<span class="badge-fait">✓ Récupéré</span>' : '<span class="badge-refus">✕ Non récupéré</span>';
     h += '</div>';
+    // Appeler / Waze restent accessibles même une fois le client clôturé
+    // — le chauffeur peut avoir besoin de recontacter quelqu'un après
+    // coup (retour de Cobey du 01/09/2026 : "s'il a besoin pour x raison
+    // de revenir au client").
+    h += '<div class="actions">'
+      +    (tel ? ('<a class="act" href="tel:' + esc(tel) + '">📞 Appeler</a>') : '<span class="act" style="opacity:.4;">📞 —</span>')
+      +    (adresse ? ('<button type="button" class="act" style="cursor:pointer;" onclick="ouvrirWaze(\'' + id + '\',\'' + esc(adresse).replace(/'/g, '&#39;') + '\')">🧭 Waze</button>') : '<span class="act" style="opacity:.4;">🧭 —</span>')
+      +  '</div>';
     if(!st){
       h += '<div class="actions">'
-        +    (tel ? ('<a class="act" href="tel:' + esc(tel) + '">📞 Appeler</a>') : '<span class="act" style="opacity:.4;">📞 —</span>')
-        +    (adresse ? ('<a class="act" href="https://waze.com/ul?q=' + encodeURIComponent(adresse) + '&navigate=yes" target="_blank" rel="noopener">🧭 Waze</a>') : '<span class="act" style="opacity:.4;">🧭 —</span>')
-        +  '</div>'
-        +  '<div class="actions">'
         +    '<button type="button" class="act act-recup" style="flex:2;" onclick="ouvrirEcranPhoto(\'' + id + '\')">📷 Récupéré (photo)</button>'
         +    '<button type="button" class="act act-refus" style="flex:1;" onclick="ouvrirEcranMotif(\'' + id + '\')">✕</button>'
         +  '</div>';
     } else if(st.etat === 'recupere'){
-      h += '<div class="cloture-note">Clôturé · ' + (st.nbPhotos || 0) + ' photo' + (st.nbPhotos > 1 ? 's' : '') + ' jointe' + (st.nbPhotos > 1 ? 's' : '') + '</div>';
+      h += '<div class="cloture-note">Clôturé · ' + (st.nbPhotos || 0) + ' photo' + (st.nbPhotos > 1 ? 's' : '') + ' jointe' + (st.nbPhotos > 1 ? 's' : '') + ' · <span style="cursor:pointer;text-decoration:underline;" onclick="revenirSurClient(\'' + id + '\')">↩️ Revenir sur ce client</span></div>';
     } else {
-      h += '<div class="refus-note">' + esc(st.motifLib || '') + '</div>';
+      h += '<div class="refus-note">' + esc(st.motifLib || '') + ' · <span style="cursor:pointer;text-decoration:underline;" onclick="revenirSurClient(\'' + id + '\')">↩️ Revenir sur ce client</span></div>';
     }
     h += '</div>';
   });
   $('tr-liste').innerHTML = h;
+}
+
+// Ouvre Waze pour ce client — écrit d'abord le départ (wazeTs) dans
+// dispatch, exactement comme le fait DCT côté Dispatch natif (mêmes
+// champ et chemin), pour que le camion externe apparaisse dans "Suivi
+// live" (bug remonté par Cobey le 01/09/2026 : rien ne s'affichait dans
+// Suivi malgré le clic Waze, car rien n'écrivait wazeTs). Premier clic
+// fait foi, comme côté natif — on ne réécrit jamais un départ existant.
+function ouvrirWaze(id, adresse){
+  var url = 'https://waze.com/ul?q=' + encodeURIComponent(adresse) + '&navigate=yes';
+  if(ctx && !(truckCourant && truckCourant.wazeTs && truckCourant.wazeTs[id])){
+    var ts = Date.now();
+    db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/wazeTs/' + id).set(ts)
+      .catch(function(e){ console.error('chauffeur: écriture départ waze', e); });
+  }
+  window.open(url, '_blank');
+}
+
+// Annule le statut d'un client déjà clôturé (récupéré ou non récupéré)
+// pour permettre au chauffeur d'y revenir — les photos déjà envoyées, le
+// cas échéant, restent en base et seront simplement remplacées s'il
+// reprend une nouvelle série de photos.
+function revenirSurClient(id){
+  db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/chauffeurStatuts/' + id).remove().then(function(){
+    return db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/finTs/' + id).remove();
+  }).catch(function(e){
+    console.error('chauffeur: annulation statut', e);
+    alert('Erreur de connexion, réessaie.');
+  });
 }
 
 // ---- Récupéré : photo(s) puis clôture ----
@@ -321,12 +374,17 @@ function photoChoisie(input){
 function terminerRecuperation(){
   if(!photosCourantes.length || !clientCourantPhoto) return;
   var id = clientCourantPhoto;
+  var ts = Date.now();
   var mapPhotos = {};
   photosCourantes.forEach(function(p, i){ mapPhotos['p' + i] = p; });
   db.ref('dct_photos_colis/' + id).set(mapPhotos).then(function(){
     return db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/chauffeurStatuts/' + id).set({
-      etat: 'recupere', ts: Date.now(), nbPhotos: photosCourantes.length
+      etat: 'recupere', ts: ts, nbPhotos: photosCourantes.length
     });
+  }).then(function(){
+    // finTs = heure de fin, comme côté DCT natif (confirmValider) — sert
+    // au calcul de durée et à l'heure affichés dans Suivi live.
+    return db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/finTs/' + id).set(ts);
   }).then(function(){
     fermerEcranPhoto();
   }).catch(function(e){
@@ -358,14 +416,98 @@ function fermerEcranMotif(){
 function choisirMotif(motifId, motifLib){
   var id = clientCourantPhoto;
   if(!id) return;
+  var ts = Date.now();
   db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/chauffeurStatuts/' + id).set({
-    etat: 'refuse', motif: motifId, motifLib: motifLib, ts: Date.now()
+    etat: 'refuse', motif: motifId, motifLib: motifLib, ts: ts
+  }).then(function(){
+    // finTs = heure de fin, comme côté DCT natif (confirmRefus).
+    return db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/finTs/' + id).set(ts);
   }).then(function(){
     fermerEcranMotif();
   }).catch(function(e){
     console.error('chauffeur: enregistrement refus', e);
     alert('Erreur de connexion, réessaie.');
   });
+}
+
+// ---- Carte du trajet — consultation uniquement, réutilise les
+// positions (lat/lng) déjà calculées côté DCT (carré "🗺️ Carte des
+// clients" du Dispatch) quand la fiche du client a déjà été localisée.
+// Pas de nouvelle géolocalisation ici — juste l'affichage de ce qui
+// existe déjà (retour de Cobey du 01/09/2026).
+function clientsAvecCoord(){
+  if(!truckCourant) return [];
+  var horaires = truckCourant.hours || {};
+  var ids = (truckCourant.clients || []).slice().sort(function(a, b){
+    return (horaires[a] || '99').localeCompare(horaires[b] || '99');
+  });
+  var out = [];
+  ids.forEach(function(id){
+    var c = clientsTournee.find(function(x){ return x.id === id; });
+    if(c && c.lat && c.lng) out.push({ id: id, name: c.name || '', heure: horaires[id], lat: c.lat, lng: c.lng });
+  });
+  return out;
+}
+
+function chargerLeaflet(cb){
+  if(typeof L !== 'undefined'){ cb(); return; }
+  if(!document.getElementById('leaflet-css')){
+    var link = document.createElement('link');
+    link.id = 'leaflet-css';
+    link.rel = 'stylesheet';
+    link.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.css';
+    document.head.appendChild(link);
+  }
+  if(!document.getElementById('leaflet-js')){
+    var s = document.createElement('script');
+    s.id = 'leaflet-js';
+    s.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js';
+    s.onload = cb;
+    s.onerror = function(){ alert('Impossible de charger la carte — vérifie ta connexion.'); };
+    document.head.appendChild(s);
+  } else {
+    var wait = setInterval(function(){ if(typeof L !== 'undefined'){ clearInterval(wait); cb(); } }, 100);
+  }
+}
+
+function ouvrirCarte(){
+  var pts = clientsAvecCoord();
+  if(!pts.length){ alert('Aucune position connue pour ces clients pour l\'instant.'); return; }
+  $('ecran-tournee').hidden = true;
+  $('ecran-carte').hidden = false;
+  chargerLeaflet(function(){
+    // Laisse le conteneur devenir visible avant d'initialiser Leaflet,
+    // sinon la carte se dessine avec une taille de 0.
+    setTimeout(function(){ dessinerCarte(pts); }, 50);
+  });
+}
+
+function fermerCarte(){
+  $('ecran-carte').hidden = true;
+  $('ecran-tournee').hidden = false;
+}
+
+function dessinerCarte(pts){
+  if(carteInstance){ carteInstance.remove(); carteInstance = null; }
+  carteInstance = L.map('carte-map');
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(carteInstance);
+  var latlngs = [];
+  pts.forEach(function(p, i){
+    var icon = L.divIcon({
+      className: '',
+      html: '<div style="background:#006b2d;color:#fff;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);">' + (i + 1) + '</div>',
+      iconSize: [26, 26], iconAnchor: [13, 13]
+    });
+    L.marker([p.lat, p.lng], { icon: icon }).addTo(carteInstance)
+      .bindPopup((p.heure ? ('🕐 ' + esc(p.heure) + ' — ') : '') + esc(p.name));
+    latlngs.push([p.lat, p.lng]);
+  });
+  if(latlngs.length > 1){
+    L.polyline(latlngs, { color: '#006b2d', weight: 3, opacity: .8 }).addTo(carteInstance);
+    carteInstance.fitBounds(latlngs, { padding: [30, 30] });
+  } else {
+    carteInstance.setView(latlngs[0], 14);
+  }
 }
 </script>
 </body>
