@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.6';
+var DEP_VERSION = 'v1.20.7';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -3457,10 +3457,18 @@ function _depArchiveCarteCollecte(c){
   var cls = (window.clientsParCollecte||{})[c.id] || {};
   var nb = Object.keys(cls).length;
   var total = Object.values(cls).reduce(function(s, cl){ return s + (parseFloat(cl && cl.prix)||0); }, 0);
+  // v1.20.7 : crayon (rouvrir/changer le statut) + corbeille (supprimer)
+  // sur chaque carte — l'Archivage était resté lecture seule après le
+  // retrait de l'ancien "Historique" (greffe M), sans moyen de rouvrir
+  // une collecte clôturée par erreur (retour de Cobey du 01/09/2026).
   return '<div class="dep-card" style="border-left-color:#8B5E34;cursor:pointer;" onclick="ouvrirCollecte(\''+c.id+'\')">'
     +   '<div class="dep-card-top">'
     +     '<div class="dep-nom">'+esc(c.date||'Collecte')+'</div>'
-    +     '<div class="dep-badge" style="background:#EDEDED;color:#777;">Termin&eacute;e</div>'
+    +     '<div style="display:flex;align-items:center;gap:6px;">'
+    +       '<div class="dep-badge" style="background:#EDEDED;color:#777;">Termin&eacute;e</div>'
+    +       '<button type="button" onclick="event.stopPropagation();ouvrirStatut(\''+c.id+'\')" style="background:#f0f0f0;border:1.5px solid #ccc;border-radius:6px;padding:3px 8px;font-size:11px;color:#555;cursor:pointer;font-weight:700;">&#9999;&#65039;</button>'
+    +       '<button type="button" onclick="event.stopPropagation();supprimerCollecte(\''+c.id+'\')" style="background:#fde0e0;border:1.5px solid #c0392b;border-radius:6px;padding:3px 8px;font-size:11px;color:#992020;cursor:pointer;font-weight:700;">&#128465;&#65039;</button>'
+    +     '</div>'
     +   '</div>'
     +   '<div class="dep-meta">'
     +     '<span>&#128100; <b>'+nb+'</b> client'+(nb>1?'s':'')+'</span>'
@@ -9803,6 +9811,33 @@ function greffer(){
       return st;
     };
     window._suiviStatut._depPatch = true;
+  }
+
+  /* --- W (v1.20.7). Rafraîchit la vue Archivage après réouverture
+     (crayon) ou suppression (corbeille) d'une collecte archivée, pour
+     qu'elle disparaisse tout de suite de la liste sans devoir ressortir/
+     rentrer dans Archivage. --- */
+  if(typeof window.changerStatut === 'function' && !window.changerStatut._depPatch){
+    var origChangerStatut = window.changerStatut;
+    window.changerStatut = function(s){
+      origChangerStatut.apply(this, arguments);
+      try{
+        var a = document.querySelector('.screen.active');
+        if(a && a.id === 's-archive' && typeof window.depRenderArchive === 'function') window.depRenderArchive();
+      }catch(e){}
+    };
+    window.changerStatut._depPatch = true;
+  }
+  if(typeof window.confirmerSupprimerCollecte === 'function' && !window.confirmerSupprimerCollecte._depPatch){
+    var origConfirmerSupprimerCollecte = window.confirmerSupprimerCollecte;
+    window.confirmerSupprimerCollecte = function(){
+      origConfirmerSupprimerCollecte.apply(this, arguments);
+      try{
+        var a = document.querySelector('.screen.active');
+        if(a && a.id === 's-archive' && typeof window.depRenderArchive === 'function') window.depRenderArchive();
+      }catch(e){}
+    };
+    window.confirmerSupprimerCollecte._depPatch = true;
   }
 }
 
