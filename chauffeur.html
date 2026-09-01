@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Tournée — Dakar City Transport</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<style>
+:root{--border:#E0E0E0;--font:'DM Sans',sans-serif;}
+*{box-sizing:border-box;}
+body{margin:0;padding:0;font-family:var(--font);background:#e8e8e8;min-height:100vh;}
+.wrap{max-width:460px;margin:0 auto;padding:20px 14px 40px;}
+.card{background:#fff;border-radius:14px;box-shadow:0 2px 14px rgba(0,0,0,.1);overflow:hidden;margin-bottom:16px;}
+.pad{padding:22px 18px;}
+.topbar{height:8px;background:#006b2d;}
+.logo{width:44px;height:44px;border-radius:50%;background:#006b2d;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;margin:0 auto 14px;}
+h1{font-size:17px;text-align:center;color:#111;margin:0 0 4px;}
+.sub{font-size:12.5px;text-align:center;color:#777;margin:0 0 22px;line-height:1.5;}
+label{font-size:12px;font-weight:700;color:#444;display:block;margin-bottom:6px;}
+input{width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10px;font-size:15px;font-family:var(--font);margin-bottom:16px;}
+.btn{width:100%;padding:15px;border:none;border-radius:10px;font-size:14.5px;font-weight:800;font-family:var(--font);cursor:pointer;}
+.btn-green{background:#006b2d;color:#fff;}
+.btn-light{background:#e8f7ee;color:#00b34e;border:1.5px solid #B7E4C7;}
+.err{background:#FDEDED;border:1.5px solid #F5C6C6;color:#992020;font-size:12.5px;font-weight:600;border-radius:9px;padding:10px 12px;margin-bottom:14px;text-align:center;display:none;}
+.hdr2{background:#006b2d;color:#fff;padding:16px 18px;}
+.hdr2 .nom{font-size:15px;font-weight:800;}
+.hdr2 .compteur{font-size:12px;opacity:.9;margin-top:2px;}
+.barre-bg{height:6px;background:rgba(255,255,255,.3);border-radius:4px;margin-top:10px;overflow:hidden;}
+.barre{height:100%;background:#fff;border-radius:4px;}
+.liste{padding:14px;}
+.client{border:1.5px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;}
+.client.fait{border-color:#B7E4C7;background:#F5FBF7;}
+.client.refuse{border-color:#F5C6C6;background:#FFF7F7;}
+.client-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
+.client-nom{font-size:14.5px;font-weight:800;color:#111;}
+.client-adresse{font-size:12.5px;color:#666;margin-top:3px;line-height:1.4;}
+.badge-fait{font-size:10px;font-weight:800;background:#00b34e;color:#fff;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+.badge-refus{font-size:10px;font-weight:800;background:#c0392b;color:#fff;padding:3px 9px;border-radius:20px;white-space:nowrap;}
+.actions{display:flex;gap:7px;margin-top:11px;}
+.act{flex:1;text-align:center;padding:11px 4px;border-radius:9px;font-size:12px;font-weight:700;border:1.5px solid var(--border);color:#333;text-decoration:none;display:block;}
+.act-recup{background:#006b2d;color:#fff;border:none;font-weight:800;cursor:pointer;}
+.act-refus{background:#FDEDED;border:1.5px solid #F5C6C6;color:#992020;font-weight:800;cursor:pointer;}
+.cloture-note{font-size:11px;color:#4a8a63;margin-top:8px;padding-top:8px;border-top:1px dashed #C8E6D0;font-weight:600;}
+.refus-note{font-size:11px;color:#992020;margin-top:8px;padding-top:8px;border-top:1px dashed #F5C6C6;font-weight:600;}
+.motif{padding:14px;border:1.5px solid var(--border);border-radius:10px;margin-bottom:9px;font-size:13.5px;font-weight:700;color:#333;cursor:pointer;background:#fff;text-align:left;width:100%;font-family:var(--font);}
+.photo-vignette{width:56px;height:56px;border-radius:8px;background:#ddd;display:flex;align-items:center;justify-content:center;font-size:22px;overflow:hidden;}
+.photo-vignette img{width:100%;height:100%;object-fit:cover;}
+.vignettes{display:flex;gap:8px;margin:16px 0;flex-wrap:wrap;}
+[hidden]{display:none!important;}
+.retour{font-size:12.5px;color:#888;text-align:center;margin-top:10px;cursor:pointer;text-decoration:underline;}
+.note-bas{font-size:10.5px;color:#aaa;text-align:center;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div id="ecran-code" class="card">
+    <div class="topbar"></div>
+    <div class="pad">
+      <div class="logo">DCT</div>
+      <h1>Ta tournée du jour</h1>
+      <div class="sub">Tape le code donné par Dakar City Transport pour retrouver les colis à récupérer.</div>
+      <div id="code-err" class="err"></div>
+      <label>Code d'accès</label>
+      <input id="code-input" placeholder="ex : 4827" inputmode="numeric" maxlength="4" style="text-align:center;font-size:22px;font-weight:800;letter-spacing:.15em;">
+      <button class="btn btn-green" onclick="ouvrirTournee()">Voir ma tournée</button>
+    </div>
+  </div>
+
+  <div id="ecran-tournee" hidden>
+    <div class="card">
+      <div class="hdr2">
+        <div class="nom" id="tr-nom">👋 Salut</div>
+        <div class="compteur" id="tr-compteur"></div>
+        <div class="barre-bg"><div class="barre" id="tr-barre" style="width:0%;"></div></div>
+      </div>
+      <div class="liste" id="tr-liste"></div>
+    </div>
+    <div class="note-bas">Aucun lien vers l'application Dakar City Transport sur cette page.</div>
+  </div>
+
+  <div id="ecran-photo" hidden class="card">
+    <div class="pad">
+      <h1 style="text-align:left;" id="ph-nom"></h1>
+      <div class="sub" style="text-align:left;margin-bottom:4px;" id="ph-sous">Aucune photo prise.</div>
+      <div class="vignettes" id="ph-vignettes"></div>
+      <input type="file" id="ph-input" accept="image/*" capture="environment" hidden onchange="photoChoisie(this)">
+      <button class="btn act-recup" style="margin-bottom:9px;" onclick="document.getElementById('ph-input').click()">📷 <span id="ph-btn-txt">Prendre une photo</span></button>
+      <button class="btn btn-light" id="ph-terminer" onclick="terminerRecuperation()" disabled style="opacity:.45;">✅ Terminer — clôturer ce client</button>
+      <div class="retour" onclick="fermerEcranPhoto()">← Retour à la tournée</div>
+    </div>
+  </div>
+
+  <div id="ecran-motif" hidden class="card">
+    <div class="pad">
+      <h1 style="text-align:left;">Colis non récupéré ?</h1>
+      <div class="sub" style="text-align:left;margin-bottom:16px;" id="mo-nom"></div>
+      <div id="mo-liste"></div>
+      <div class="retour" onclick="fermerEcranMotif()">← Retour à la tournée</div>
+    </div>
+  </div>
+
+</div>
+<script>
+function $(id){ return document.getElementById(id); }
+function esc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+var MOTIFS_NON_RAMASSE = [
+  {id:'annule',      lib:'Le client a annulé'},
+  {id:'absent',      lib:'Client absent au passage'},
+  {id:'injoignable', lib:'Client injoignable'},
+  {id:'adresse',     lib:'Adresse introuvable'}
+];
+
+var PHOTO_MAX = 5, PHOTO_COTE = 1000, PHOTO_QUALITE = 0.55;
+function compresserPhoto(file, cb){
+  try{
+    var r = new FileReader();
+    r.onload = function(ev){
+      var img = new Image();
+      img.onload = function(){
+        var w = img.width, h = img.height;
+        var f = Math.min(1, PHOTO_COTE / Math.max(w, h));
+        var cv = document.createElement('canvas');
+        cv.width = Math.round(w * f); cv.height = Math.round(h * f);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        cb(cv.toDataURL('image/jpeg', PHOTO_QUALITE));
+      };
+      img.onerror = function(){ cb(null); };
+      img.src = ev.target.result;
+    };
+    r.onerror = function(){ cb(null); };
+    r.readAsDataURL(file);
+  }catch(e){ cb(null); }
+}
+
+var firebaseConfig = {
+  apiKey: "AIzaSyCs7oTZAG8vzhqY3rSEqCnwSnQY8hm_f2A",
+  authDomain: "dakar-collecte.firebaseapp.com",
+  databaseURL: "https://dakar-collecte-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "dakar-collecte",
+  storageBucket: "dakar-collecte.firebasestorage.app",
+  messagingSenderId: "910296510414",
+  appId: "1:910296510414:web:de6b814b3420adcd68859f"
+};
+firebase.initializeApp(firebaseConfig);
+var db = firebase.database();
+
+// Page à part, sans PIN (ouverte via un lien + code WhatsApp) — même
+// principe de connexion anonyme que facture.html : un badge invisible
+// pour passer les règles Firebase resserrées, ne remplace pas le code
+// d'accès qui, lui, reste le vrai contrôle d'accès à cette tournée.
+var _connexionAnonyme = firebase.auth
+  ? firebase.auth().signInAnonymously().catch(function(e){ console.error('chauffeur: connexion anonyme', e); })
+  : Promise.resolve();
+
+var ctx = null; // { collecteId, camion, nom, code }
+var clientsTournee = []; // [{id, ...fiche}]
+var clientCourantPhoto = null;
+var photosCourantes = [];
+
+(function(){
+  var m = /[?&]code=(\d{3,6})/.exec(location.search);
+  if(m) $('code-input').value = m[1];
+})();
+
+function afficherErreurCode(msg){
+  var el = $('code-err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function ouvrirTournee(){
+  var code = ($('code-input').value || '').trim();
+  if(!code){ afficherErreurCode('Indique le code reçu par WhatsApp.'); return; }
+  $('code-err').style.display = 'none';
+  _connexionAnonyme.then(function(){
+    return db.ref('dct_codes_externe/' + code).once('value');
+  }).then(function(snap){
+    var v = snap.val();
+    if(!v || !v.collecteId || !v.camion){ afficherErreurCode('Code invalide. Vérifie le code reçu.'); return; }
+    ctx = { collecteId: v.collecteId, camion: v.camion, nom: v.nom || '', code: code };
+    chargerTruck();
+  }).catch(function(e){
+    console.error('chauffeur: lecture code', e);
+    afficherErreurCode('Connexion impossible. Réessaie.');
+  });
+}
+
+function chargerTruck(){
+  // Écoute en direct : si DCT modifie les clients affectés pendant la
+  // tournée, la liste se met à jour toute seule.
+  db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion).on('value', function(snap){
+    var tk = snap.val();
+    if(!tk){ afficherErreurCode('Cette tournée n\'existe plus.'); $('ecran-code').hidden = false; $('ecran-tournee').hidden = true; return; }
+    afficherTournee(tk);
+  });
+}
+
+function afficherTournee(tk){
+  $('ecran-code').hidden = true;
+  $('ecran-tournee').hidden = false;
+  $('tr-nom').textContent = '👋 Salut ' + (tk.name || ctx.nom || '');
+  var ids = tk.clients || [];
+  var statuts = tk.chauffeurStatuts || {};
+  var faits = ids.filter(function(id){ return statuts[id]; }).length;
+  $('tr-compteur').textContent = faits + ' / ' + ids.length + ' colis traités';
+  $('tr-barre').style.width = (ids.length ? Math.round(faits / ids.length * 100) : 0) + '%';
+
+  if(!ids.length){
+    $('tr-liste').innerHTML = '<div style="text-align:center;color:#999;font-size:13px;padding:20px 0;">Aucun client affecté pour l\'instant.</div>';
+    return;
+  }
+
+  // Charge les fiches clients une seule fois (nom/adresse/tél ne changent
+  // pas pendant la tournée), puis ré-affiche à chaque mise à jour du
+  // camion (statuts) sans re-télécharger les fiches.
+  var idsManquants = ids.filter(function(id){ return !clientsTournee.some(function(c){ return c.id === id; }); });
+  if(idsManquants.length){
+    Promise.all(idsManquants.map(function(id){
+      return db.ref('dct/clients/' + ctx.collecteId + '/' + id).once('value').then(function(s){
+        var c = s.val(); if(!c) return null;
+        c.id = id;
+        return c;
+      });
+    })).then(function(res){
+      res.forEach(function(c){ if(c) clientsTournee.push(c); });
+      dessinerListe(ids, statuts);
+    });
+  } else {
+    dessinerListe(ids, statuts);
+  }
+}
+
+function dessinerListe(ids, statuts){
+  var h = '';
+  ids.forEach(function(id){
+    var c = clientsTournee.find(function(x){ return x.id === id; });
+    if(!c) return;
+    var st = statuts[id];
+    var adresse = [c.adresse, c.cp, c.ville].filter(Boolean).join(', ');
+    var tel = (c.tel || '').replace(/\s/g, '');
+    var cls = st ? (st.etat === 'recupere' ? 'client fait' : 'client refuse') : 'client';
+    h += '<div class="' + cls + '">'
+      +   '<div class="client-top">'
+      +     '<div><div class="client-nom">' + esc(c.name || '') + '</div>'
+      +     '<div class="client-adresse">📍 ' + esc(adresse || '—') + '</div></div>';
+    if(st) h += st.etat === 'recupere' ? '<span class="badge-fait">✓ Récupéré</span>' : '<span class="badge-refus">✕ Non récupéré</span>';
+    h += '</div>';
+    if(!st){
+      h += '<div class="actions">'
+        +    (tel ? ('<a class="act" href="tel:' + esc(tel) + '">📞 Appeler</a>') : '<span class="act" style="opacity:.4;">📞 —</span>')
+        +    (adresse ? ('<a class="act" href="https://waze.com/ul?q=' + encodeURIComponent(adresse) + '&navigate=yes" target="_blank" rel="noopener">🧭 Waze</a>') : '<span class="act" style="opacity:.4;">🧭 —</span>')
+        +  '</div>'
+        +  '<div class="actions">'
+        +    '<button type="button" class="act act-recup" style="flex:2;" onclick="ouvrirEcranPhoto(\'' + id + '\')">📷 Récupéré (photo)</button>'
+        +    '<button type="button" class="act act-refus" style="flex:1;" onclick="ouvrirEcranMotif(\'' + id + '\')">✕</button>'
+        +  '</div>';
+    } else if(st.etat === 'recupere'){
+      h += '<div class="cloture-note">Clôturé · ' + (st.nbPhotos || 0) + ' photo' + (st.nbPhotos > 1 ? 's' : '') + ' jointe' + (st.nbPhotos > 1 ? 's' : '') + '</div>';
+    } else {
+      h += '<div class="refus-note">' + esc(st.motifLib || '') + '</div>';
+    }
+    h += '</div>';
+  });
+  $('tr-liste').innerHTML = h;
+}
+
+// ---- Récupéré : photo(s) puis clôture ----
+function ouvrirEcranPhoto(id){
+  clientCourantPhoto = id;
+  photosCourantes = [];
+  var c = clientsTournee.find(function(x){ return x.id === id; });
+  $('ph-nom').textContent = c ? c.name : '';
+  $('ecran-tournee').hidden = true;
+  $('ecran-photo').hidden = false;
+  redessinerVignettes();
+}
+
+function fermerEcranPhoto(){
+  clientCourantPhoto = null;
+  photosCourantes = [];
+  $('ecran-photo').hidden = true;
+  $('ecran-tournee').hidden = false;
+}
+
+function redessinerVignettes(){
+  var h = '';
+  photosCourantes.forEach(function(p){
+    h += '<div class="photo-vignette"><img src="' + p.d + '"></div>';
+  });
+  $('ph-vignettes').innerHTML = h;
+  $('ph-sous').textContent = photosCourantes.length
+    ? (photosCourantes.length + ' photo' + (photosCourantes.length > 1 ? 's' : '') + ' prise' + (photosCourantes.length > 1 ? 's' : '') + '.')
+    : 'Aucune photo prise — au moins une est obligatoire.';
+  $('ph-btn-txt').textContent = photosCourantes.length ? 'Ajouter une autre photo' : 'Prendre une photo';
+  var plein = photosCourantes.length >= PHOTO_MAX;
+  $('ph-input').disabled = plein;
+  var terminer = $('ph-terminer');
+  terminer.disabled = photosCourantes.length === 0;
+  terminer.style.opacity = photosCourantes.length === 0 ? '.45' : '1';
+}
+
+function photoChoisie(input){
+  var f = input.files && input.files[0];
+  input.value = '';
+  if(!f) return;
+  if(photosCourantes.length >= PHOTO_MAX) return;
+  compresserPhoto(f, function(data){
+    if(!data) return;
+    photosCourantes.push({ d: data, ts: Date.now(), q: (ctx.nom || ''), uid: '' });
+    redessinerVignettes();
+  });
+}
+
+function terminerRecuperation(){
+  if(!photosCourantes.length || !clientCourantPhoto) return;
+  var id = clientCourantPhoto;
+  var mapPhotos = {};
+  photosCourantes.forEach(function(p, i){ mapPhotos['p' + i] = p; });
+  db.ref('dct_photos_colis/' + id).set(mapPhotos).then(function(){
+    return db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/chauffeurStatuts/' + id).set({
+      etat: 'recupere', ts: Date.now(), nbPhotos: photosCourantes.length
+    });
+  }).then(function(){
+    fermerEcranPhoto();
+  }).catch(function(e){
+    console.error('chauffeur: enregistrement récupération', e);
+    alert('Erreur de connexion, réessaie.');
+  });
+}
+
+// ---- Non récupéré : motif ----
+function ouvrirEcranMotif(id){
+  clientCourantPhoto = id;
+  var c = clientsTournee.find(function(x){ return x.id === id; });
+  $('mo-nom').textContent = (c ? c.name : '') + ' — pourquoi ?';
+  var h = '';
+  MOTIFS_NON_RAMASSE.forEach(function(m){
+    h += '<button type="button" class="motif" onclick="choisirMotif(\'' + m.id + '\',\'' + esc(m.lib).replace(/'/g, '&#39;') + '\')">' + esc(m.lib) + '</button>';
+  });
+  $('mo-liste').innerHTML = h;
+  $('ecran-tournee').hidden = true;
+  $('ecran-motif').hidden = false;
+}
+
+function fermerEcranMotif(){
+  clientCourantPhoto = null;
+  $('ecran-motif').hidden = true;
+  $('ecran-tournee').hidden = false;
+}
+
+function choisirMotif(motifId, motifLib){
+  var id = clientCourantPhoto;
+  if(!id) return;
+  db.ref('dct/dispatch/' + ctx.collecteId + '/trucks/' + ctx.camion + '/chauffeurStatuts/' + id).set({
+    etat: 'refuse', motif: motifId, motifLib: motifLib, ts: Date.now()
+  }).then(function(){
+    fermerEcranMotif();
+  }).catch(function(e){
+    console.error('chauffeur: enregistrement refus', e);
+    alert('Erreur de connexion, réessaie.');
+  });
+}
+</script>
+</body>
+</html>
