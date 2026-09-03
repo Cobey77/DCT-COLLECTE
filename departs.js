@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.7';
+var DEP_VERSION = 'v1.20.8';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -9838,6 +9838,25 @@ function greffer(){
       }catch(e){}
     };
     window.confirmerSupprimerCollecte._depPatch = true;
+  }
+  /* --- X (v1.20.8). Rafraîchit l'écran détail Départ après suppression
+     d'un client depuis sa fiche (bouton corbeille), pour qu'il disparaisse
+     tout de suite du container au lieu de rester affiché jusqu'à sortie/
+     rentrée manuelle. --- */
+  if(typeof window.confirmDelete === 'function' && !window.confirmDelete._depPatch){
+    var origConfirmDelete = window.confirmDelete;
+    window.confirmDelete = function(){
+      origConfirmDelete.apply(this, arguments);
+      setTimeout(function(){
+        try{
+          var a = document.querySelector('.screen.active');
+          if(a && a.id === 's-depart-detail' && typeof window.depDetail === 'function' && typeof window._depDetailIdPublic === 'function'){
+            window.depDetail(window._depDetailIdPublic());
+          }
+        }catch(e){}
+      }, 1600);
+    };
+    window.confirmDelete._depPatch = true;
   }
 }
 
