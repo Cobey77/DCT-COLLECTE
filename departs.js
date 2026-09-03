@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.8';
+var DEP_VERSION = 'v1.20.9';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -2097,7 +2097,7 @@ function injecterEcrans(){
     + '<div id="dep-valider-reste-msg" style="font-size:13px;color:#555;margin:4px 0 16px;"></div>'
     + '<div class="modal-confirm-btns">'
     +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-valider-reste\')">Non, revenir</button>'
-    +   '<button class="btn-sm btn-green-sm" onclick="depValiderFactureFinaleExecuter()">Oui, valider</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depValiderFactureFinaleExecuterAuto()">Oui, valider</button>'
     + '</div></div></div>';
   document.body.appendChild(m6);
 
@@ -4526,6 +4526,68 @@ window.depValiderFactureFinaleExecuter = function(){
   _depAfficherEcranDocuments();
 };
 
+// v1.20.9 : la modale "Paiement incomplet" (#modal-dep-valider-reste) sert
+// désormais à la Collecte ET au Dépôt direct — son bouton "Oui, valider"
+// doit exécuter la bonne validation selon la source du client affiché.
+window.depValiderFactureFinaleExecuterAuto = function(){
+  var ctx = _depFactureCtx;
+  if(ctx && ctx.depot) window.depValiderFactureFinaleDepotExecuter();
+  else window.depValiderFactureFinaleExecuter();
+};
+
+// v1.20.9 : le Dépôt direct n'a pas de camion/tournée à valider, mais
+// Cobey veut le même garde-fou qu'en Collecte — une validation explicite
+// avant de pouvoir imprimer/partager les documents (retour de Cobey du
+// 03/09/2026 : "il faut mettre un système de validation de la facture
+// avec [...] modal de confirmation [...] comme le parcours de la
+// collecte"). Même principe que depValiderFactureFinaleFrance : un champ
+// c.factureValidee sur la fiche, écrit via _depEcrireFacture.
+window.depValiderFactureFinaleDepot = function(){
+  var ctx = _depFactureCtx;
+  if(!ctx || !ctx.depot) return;
+  var c = (window.depotClients || {})[ctx.clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  if(c.factureValidee){ depRenderFacture(c); _depAfficherEcranDocuments(); return; }
+
+  // Même rappel non bloquant que la Collecte si un paiement manque.
+  var payC = depCalculerPaiement(c);
+  var resteMsg = '';
+  if(payC.reste > 0) resteMsg += payC.reste + ' € (colis)';
+  if(c.livraisonDakar){
+    var payLivC = depCalculerPaiementLivraison(c);
+    if(payLivC.reste > 0) resteMsg += (resteMsg ? ' + ' : '') + payLivC.reste + ' € (livraison)';
+  }
+  if(resteMsg){
+    var msgEl = $('dep-valider-reste-msg');
+    if(msgEl) msgEl.textContent = 'Il manque ' + resteMsg + '. Voulez-vous valider quand même ?';
+    openModal('modal-dep-valider-reste');
+    return;
+  }
+
+  window.depValiderFactureFinaleDepotExecuter();
+};
+
+window.depValiderFactureFinaleDepotExecuter = function(){
+  closeModal('modal-dep-valider-reste');
+  var ctx = _depFactureCtx;
+  if(!ctx || !ctx.depot) return;
+  var c = (window.depotClients || {})[ctx.clientId];
+  if(!c) return;
+
+  var u = window.currentUser || {};
+  var hist = (c.hist || []).slice();
+  hist.push({ q: u.name || '', a: 'a valid&eacute; la facture', ts: Date.now(), type: 'validation' });
+  c.factureValidee = true;
+  c.hist = hist;
+
+  _depEcrireFacture(ctx, { factureValidee: true, hist: hist });
+
+  toast('✅ Facture validée');
+  depRenderFacture(c);
+  _depAfficherEcranDocuments();
+};
+
 // v1.19.23 : retour "Documents" → "Facture" — on ré-affiche la facture
 // (désormais débloquée) plutôt qu'un simple goTo sur un contenu resté
 // figé dans son état d'avant validation.
@@ -6081,6 +6143,10 @@ function depRenderFacture(c){
   // container correspondant").
   var franceAValider = !!(ctxFact.france && c.statut !== 'parti');
   var franceValidee = !!(ctxFact.france && c.statut === 'parti');
+  // v1.20.9 : Dépôt direct — même validation explicite que Collecte/France
+  // avant de débloquer l'impression (voir depValiderFactureFinaleDepot).
+  var depotAValider = !!(ctxFact.depot && !c.factureValidee);
+  var depotValidee = !!(ctxFact.depot && c.factureValidee);
 
   if(gatePrint){
     h += '<div style="margin-top:18px;">'
@@ -6102,12 +6168,24 @@ function depRenderFacture(c){
       + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Facture d&eacute;j&agrave; valid&eacute;e. Modifiez un paiement si besoin, puis retrouvez les documents &agrave; imprimer.</div>'
       + '<button class="btn btn-green" onclick="depValiderFactureFinaleFrance()">&#128196; Voir les documents</button>'
       + '</div>';
+  } else if(depotAValider){
+    // v1.20.9 : Dépôt direct — même garde-fou que la Collecte/France, voir
+    // depValiderFactureFinaleDepot : une validation explicite avant de
+    // débloquer l'impression/le partage des documents.
+    h += '<div style="margin-top:18px;">'
+      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">La facture n&rsquo;est pas encore valid&eacute;e &mdash; l&rsquo;impression des documents sera disponible juste apr&egrave;s.</div>'
+      + '<button class="btn btn-green" onclick="depValiderFactureFinaleDepot()">&#9989; Valider la facture</button>'
+      + '</div>';
+  } else if(depotValidee){
+    h += '<div style="margin-top:18px;">'
+      + '<div style="font-size:12px;color:var(--text3);text-align:center;margin-bottom:10px;">Facture d&eacute;j&agrave; valid&eacute;e. Modifiez un paiement si besoin, puis retrouvez les documents &agrave; imprimer.</div>'
+      + '<button class="btn btn-green" onclick="depValiderFactureFinaleDepot()">&#128196; Voir les documents</button>'
+      + '</div>';
   } else {
-    // Dépôt direct : pas de notion de validation, impression accessible
-    // directement.
+    // Repli (ne devrait plus arriver : cas ni collecte, ni France, ni
+    // dépôt reconnu) — on garde l'ancien comportement direct par sécurité.
     h += '<div style="margin-top:18px;display:flex;flex-direction:column;gap:8px;">'
       +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
-      // v1.19.21 : étiquette(s) colis — voir depOuvrirEtiquette.
       +   '<button class="btn" style="background:#111;color:#fff;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
       +   '<button class="btn" style="background:#25D366;color:#fff;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
       +   '<button class="btn" style="background:#eee;color:#333;" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>'
@@ -6128,7 +6206,7 @@ function depRenderFacture(c){
   // désormais sur la facture imprimable (voir depRenderFacturePublique),
   // pas ici (même logique que ci-dessus : plus de doublon paiement/
   // impression sur cette page-là).
-  if(!gatePrint && !estCollecteValidee && !ctxFact.france){
+  if(!gatePrint && !estCollecteValidee && !ctxFact.france && !depotValidee){
     h += '<div class="dep-sec">QR code (r&eacute;serv&eacute; aux employ&eacute;s DCT)</div>'
       + '<div style="text-align:center;padding:6px 0 10px;">'
       +   '<canvas id="dep-fact-qr" width="176" height="176" style="max-width:176px;border-radius:8px;"></canvas>'
