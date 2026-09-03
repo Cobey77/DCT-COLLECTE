@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.9';
+var DEP_VERSION = 'v1.20.10';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -4097,9 +4097,12 @@ window.depDetail = function(id, gardeFiltres){
     affiches.forEach(function(x){
       var c = x.c;
       // v1.19.67 : Déplacer/Détacher s'appuient sur des fonctions propres à
-      // la Collecte (collecteId) — pas encore adaptées à France & Europe,
+      // la Collecte/au Dépôt direct (pas encore adaptées à France & Europe),
       // on les masque simplement pour ces clients-là pour l'instant.
-      var peutBouger = (d.statut === 'preparation') && !x.depot && !x.france;
+      // v1.20.10 : Dépôt direct récupère Déplacer/Détacher, absents jusqu'ici
+      // alors que visibles pour les autres parcours (retour de Cobey du
+      // 03/09/2026).
+      var peutBouger = (d.statut === 'preparation') && !x.france;
       // v1.19.44 : "Détacher" n'a pas de sens depuis le Dépôt lui-même —
       // le client y est déjà "détaché", seul "Déplacer" (vers un vrai
       // container) reste utile ici.
@@ -4139,11 +4142,11 @@ window.depDetail = function(id, gardeFiltres){
               + '<button class="dep-cli-btn" style="background:#F3EFFF;border-color:#D9C8F5;color:#6d28d9;" '
                 + 'onclick="event.stopPropagation();depOuvrirPhotosRapide(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+','+(x.france?'true':'false')+')">&#128247; Photos</button>'
               + (peutBouger
-                ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;placer</button>'
+                ? '<button class="dep-cli-btn" onclick="event.stopPropagation();depOuvrirMove(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">D&eacute;placer</button>'
                 : '')
               + (peutDetacher
                 ? '<button class="dep-cli-btn" style="background:#FDEDED;border-color:#F5C6C6;color:#992020;" '
-                  + 'onclick="event.stopPropagation();depDetacherClient(\''+x.collecteId+'\',\''+x.clientId+'\')">D&eacute;tacher</button>'
+                  + 'onclick="event.stopPropagation();depDetacherClient(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+')">D&eacute;tacher</button>'
                 : '')
             + '</div>'
         + '</div>';
@@ -7140,12 +7143,12 @@ window.depSupprimerDepot = function(){
    11. CHANGER UN CLIENT DE DÉPART  (direction seulement)
    ───────────────────────────────────────────── */
 
-window.depOuvrirMove = function(collecteId, clientId){
+window.depOuvrirMove = function(collecteId, clientId, depot){
   if(!estDirection()){ toast('🔒 Seul Issyaka peut changer un client de départ.'); return; }
-  var c = ((window.clientsParCollecte||{})[collecteId]||{})[clientId];
+  var c = depot ? (window.depotClients||{})[clientId] : ((window.clientsParCollecte||{})[collecteId]||{})[clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
-  _depMoveClient = { collecteId:collecteId, clientId:clientId, nom:(c.name||''), departId:(c.departId||'') };
+  _depMoveClient = { collecteId:collecteId, clientId:clientId, depot:!!depot, nom:(c.name||''), departId:(c.departId||'') };
 
   var info = $('dep-move-info');
   if(info) info.innerHTML = '<b>'+esc(c.name||'')+'</b><br>Actuellement dans : '+esc(nomDepart(c.departId)||'aucun d&eacute;part');
@@ -7176,8 +7179,7 @@ window.depConfirmerMove = function(){
   if(!vers){ toast('⚠️ Choisissez un départ.'); return; }
 
   var mv = _depMoveClient;
-  var cls = (window.clientsParCollecte||{})[mv.collecteId] || {};
-  var c   = cls[mv.clientId];
+  var c = mv.depot ? (window.depotClients||{})[mv.clientId] : ((window.clientsParCollecte||{})[mv.collecteId]||{})[mv.clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
   // Le client existe-t-il déjà dans le départ de destination ?
@@ -7207,7 +7209,8 @@ window.depConfirmerMove = function(){
   c.departId = vers;
   c.historiqueDepart = hist;
 
-  try{ sauvegarder(); }catch(e){}
+  if(mv.depot) _depEcrireClient({ depot:true, clientId: mv.clientId }, { departId: vers, historiqueDepart: hist });
+  else try{ sauvegarder(); }catch(e){}
   depActivite('&#128666;', 'a d&eacute;plac&eacute; <strong>'+esc(c.name||'')+'</strong> vers <strong>'+esc(nomDepart(vers))+'</strong>');
 
   closeModal('modal-dep-move');
@@ -7223,12 +7226,12 @@ window.depConfirmerMove = function(){
    l'affectation se fera client par client, au moment de la facture.
    ───────────────────────────────────────────── */
 
-window.depDetacherClient = function(collecteId, clientId){
+window.depDetacherClient = function(collecteId, clientId, depot){
   if(!estDirection()){ toast('🔒 Seul Issyaka peut détacher un client.'); return; }
-  var c = ((window.clientsParCollecte||{})[collecteId]||{})[clientId];
+  var c = depot ? (window.depotClients||{})[clientId] : ((window.clientsParCollecte||{})[collecteId]||{})[clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
-  _depDetachClient = { collecteId:collecteId, clientId:clientId, nom:(c.name||''), departId:(c.departId||'') };
+  _depDetachClient = { collecteId:collecteId, clientId:clientId, depot:!!depot, nom:(c.name||''), departId:(c.departId||'') };
 
   var info = $('dep-dc-info');
   // v1.19.44 : le client ne redevient plus "sans départ" (nulle part,
@@ -7244,8 +7247,7 @@ window.depDetacherClient = function(collecteId, clientId){
 window.depConfirmerDetacherClient = function(){
   if(!_depDetachClient) return;
   var dc = _depDetachClient;
-  var cls = (window.clientsParCollecte||{})[dc.collecteId] || {};
-  var c   = cls[dc.clientId];
+  var c = dc.depot ? (window.depotClients||{})[dc.clientId] : ((window.clientsParCollecte||{})[dc.collecteId]||{})[dc.clientId];
   if(!c){ toast('⚠️ Client introuvable.'); return; }
 
   var u = window.currentUser || {};
@@ -7256,7 +7258,8 @@ window.depConfirmerDetacherClient = function(){
   c.departId = DEP_ID_DEPOT; // v1.19.44 : au Dépôt, plus "nulle part"
   c.historiqueDepart = hist;
 
-  try{ sauvegarder(); }catch(e){}
+  if(dc.depot) _depEcrireClient({ depot:true, clientId: dc.clientId }, { departId: DEP_ID_DEPOT, historiqueDepart: hist });
+  else try{ sauvegarder(); }catch(e){}
   depActivite('&#8617;', 'a d&eacute;tach&eacute; <strong>'+esc(c.name||'')+'</strong> du d&eacute;part <strong>'+esc(nomDepart(ancienDepart))+'</strong> (plac&eacute; au D&eacute;p&ocirc;t)');
 
   closeModal('modal-dep-detach-client');
