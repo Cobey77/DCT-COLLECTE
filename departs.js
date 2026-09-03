@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.10';
+var DEP_VERSION = 'v1.20.12';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -2534,9 +2534,27 @@ function _depDepotCarreRenderListe(filtre){
         +     '<div class="dep-cli-n">'+esc(c.name || ((c.prenom||'')+' '+(c.nom||'')))
         +       (x.depot ? ' <span style="font-size:10.5px;font-weight:700;color:#006b2d;">&#127970; D&eacute;p&ocirc;t direct</span>' : '')
         +       (x.france ? ' <span style="font-size:10.5px;font-weight:700;color:#1a237e;">&#9992;&#65039; France &amp; Europe</span>' : '')+'</div>'
-        +     '<div class="dep-cli-s">'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
-        +       (c.destinataireNom ? ' &middot; &#127968; '+esc(c.destinataireNom) : '')
-        +       (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</div>'
+        +     '<div class="dep-cli-s" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+        +       '<span>'+esc(c.tel||'—')+' &middot; '+(parseFloat(c.prix)||0)+' &euro;'
+        +         (c.destinataireNom ? ' &middot; &#127968; '+esc(c.destinataireNom) : '')
+        +         (c.livraisonDakar ? ' &middot; &#128666; livraison' : '')+'</span>'
+        // v1.20.12 : pastille d'appel remise ici (comme dans l'écran Départ,
+        // voir depDetail/_depLienTelIcone) — retour de Cobey du 03/09/2026.
+        +       _depLienTelIcone(c.tel)
+        +     '</div>'
+        +   '</div>'
+        // v1.20.11 : Facture/Photos remis ici — sans ça, un collaborateur
+        // non-direction (Déplacer/Détacher restent réservés à Issyaka) n'a
+        // aucun moyen de compléter un paiement ou réimprimer un document
+        // depuis ce carré (retour de Cobey du 03/09/2026).
+        +   '<div class="dep-cli-btns" style="margin-top:12px;">'
+        +     '<button class="dep-cli-btn" style="background:#EAF7EE;border-color:#C8E6D0;color:#006b2d;" '
+        +       (x.france
+                  ? 'onclick="event.stopPropagation();depOuvrirFactureFrance(\''+x.clientId+'\')"'
+                  : 'onclick="event.stopPropagation();depOuvrirFacture(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+',false,false,false,\''+departId+'\')"')
+        +       '>&#129534; Facture</button>'
+        +     '<button class="dep-cli-btn" style="background:#F3EFFF;border-color:#D9C8F5;color:#6d28d9;" '
+        +       'onclick="event.stopPropagation();depOuvrirPhotosRapide(\''+(x.collecteId||'')+'\',\''+x.clientId+'\','+(x.depot?'true':'false')+','+(x.france?'true':'false')+')">&#128247; Photos</button>'
         +   '</div>'
         + '</div>';
     });
@@ -4317,7 +4335,7 @@ function _depTruckEtStatut(collecteId, clientId){
   return null;
 }
 
-window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, viaScan, viaHistorique){
+window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, viaScan, viaHistorique, carreDepartId){
   var c = depot
     ? (window.depotClients || {})[clientId]
     : (((window.clientsParCollecte || {})[collecteId]) || {})[clientId];
@@ -4366,6 +4384,13 @@ window.depOuvrirFacture = function(collecteId, clientId, depot, retourCamion, vi
       // départ (qui n'a pas forcément été ouvert avant).
       btnRetour.textContent = '← Retour';
       btnRetour.onclick = function(){ goTo('s-dep-historique-contact'); };
+    } else if(carreDepartId){
+      // v1.20.11 : Facture ouverte depuis la liste du carré Dépôt (tout
+      // client, pas seulement dépôt direct) — retour vers ce même carré,
+      // sans dépendre de l'état global _depDepotViaCarre (pas forcément
+      // posé si on n'est jamais passé par le formulaire).
+      btnRetour.textContent = '← Dépôt';
+      btnRetour.onclick = function(){ depCarreDepotContainer(carreDepartId); };
     } else if(depot && _depDepotViaCarre){
       // v1.19.50 : client dépôt inscrit depuis le carré Dépôt (pas le
       // carré Départs) — _depDetailId n'a jamais été posé dans ce cas.
