@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.28';
+var DEP_VERSION = 'v1.20.29';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -1073,6 +1073,30 @@ function nomDepart(id){
   return d ? d.nom : '';
 }
 
+// v1.20.29 : numéro de place du client dans ce départ (container) — utilisé
+// sur l'étiquette colis (voir depRenderEtiquettes) à la place du numéro de
+// colis dans l'envoi, retour de Cobey du 03/09/2026. Attribué UNE SEULE
+// fois, au premier rattachement à ce départ précis (compteur départs/
+// {departId}/prochainRang), puis fige pour toujours sur le client
+// (c.rangDepart/c.rangDepartId) — ne change plus, même détaché puis
+// rattaché au même départ. Un vrai déplacement vers un AUTRE départ (voir
+// depConfirmerMove) recalcule un nouveau numéro, propre à ce nouveau
+// container. Mute directement l'objet client passé ; ne fait rien (et ne
+// touche à rien) si un numéro est déjà posé pour ce départ précis, ou si
+// departId est vide/le Dépôt virtuel (DEP_ID_DEPOT, pas un vrai container).
+function _depAssignerRangDepart(c, departId){
+  if(!c || !departId || departId === DEP_ID_DEPOT) return;
+  if(c.rangDepartId === departId && c.rangDepart) return;
+  var d = (window.departsData || {})[departId] || {};
+  var rang = d.prochainRang || 1;
+  c.rangDepart = rang;
+  c.rangDepartId = departId;
+  if(window.departsData && window.departsData[departId]) window.departsData[departId].prochainRang = rang + 1;
+  if(window.db && window.firebaseReady){
+    try{ window.db.ref('departs/'+departId+'/prochainRang').set(rang + 1); }catch(e){ console.error('departs: compteur rang départ', e); }
+  }
+}
+
 /* ─────────────────────────────────────────────
    3. STYLES
    ───────────────────────────────────────────── */
@@ -1708,11 +1732,17 @@ function injecterEcrans(){
   +     '<button class="btn" style="background:#25D366;color:#fff;margin-top:10px;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
   // v1.19.27 : copier le texte du message — certains clients n'ont pas
   // WhatsApp (retour de Cobey du 22/08/2026).
-  +     '<button class="btn" style="background:#eee;color:#333;margin-top:10px;" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>'
+  +     '<button class="btn" style="background:#1a237e;color:#fff;margin-top:10px;" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>'
   // v1.19.27 : retour direct vers la tourn&eacute;e pour encha&icirc;ner sur
   // le client suivant, sans repasser par la facture (retour de Cobey :
   // "aucun moyen de revenir directement sur la dispatch").
-  +     '<button class="btn btn-gray" style="margin-top:18px;" onclick="depRetourDocumentsListe()">&#128666; Retour &agrave; la tourn&eacute;e</button>'
+  // v1.20.29 : masqu&eacute; (voir _depAfficherEcranDocuments) quand on
+  // n'arrive pas vraiment d'une tourn&eacute;e (carr&eacute; D&eacute;part
+  // ou inscription D&eacute;p&ocirc;t direct) &mdash; sinon il renvoyait
+  // vers un &eacute;cran Camion sans rapport (retour de Cobey du
+  // 03/09/2026 : "&ccedil;a donne trop de possibilit&eacute;s de
+  // s'&eacute;parpiller et de se perdre").
+  +     '<button id="dep-doc-retour-tournee" class="btn btn-gray" style="margin-top:18px;" onclick="depRetourDocumentsListe()">&#128666; Retour &agrave; la tourn&eacute;e</button>'
   +   '</div>'
   + '</div>'
 
@@ -4700,6 +4730,13 @@ function _depAfficherEcranDocuments(){
   if(btn) btn.innerHTML = window._depDocVientDepart
     ? '&#128230; Retour au d&eacute;part'
     : '&#128666; Retour &agrave; la dispatch';
+  // v1.20.29 : voir le commentaire sur le bouton lui-même plus haut.
+  var btnTournee = $('dep-doc-retour-tournee');
+  if(btnTournee){
+    var ctx = _depFactureCtx;
+    var venuDeTournee = !window._depDocVientDepart && !(ctx && ctx.depot);
+    btnTournee.style.display = venuDeTournee ? '' : 'none';
+  }
   goTo('s-dep-impression');
 }
 
@@ -5768,7 +5805,13 @@ function depRenderEtiquettes(c, ctx, n){
 
   var pages = '';
   for(var i = 1; i <= n; i++){
-    var numEtq = refClient + '-' + (ddmmyy || 'XXXXXX') + '-' + i;
+    // v1.20.29 : le dernier segment n'est plus le numéro de colis dans cet
+    // envoi (déjà visible via le badge "i/n" juste au-dessus, voir
+    // etq-compte) mais le numéro de place du client dans ce départ (voir
+    // _depAssignerRangDepart) — évite de répéter deux fois la même info,
+    // et affiche à la place quelque chose d'utile en plus. Repli sur i si
+    // jamais aucun numéro de place n'a encore été posé (ancienne fiche).
+    var numEtq = refClient + '-' + (ddmmyy || 'XXXXXX') + '-' + (c.rangDepart || i);
     pages += ''
       + '<div class="etq-page">'
       +   '<div class="etq-doc">'
@@ -6552,7 +6595,7 @@ function depRenderFacture(c){
       +   '<button class="btn btn-green" onclick="depOuvrirFacturePDF()">&#128424;&#65039; Imprimer / PDF</button>'
       +   '<button class="btn" style="background:#111;color:#fff;" onclick="depOuvrirEtiquette()">&#127991;&#65039; &Eacute;tiquette</button>'
       +   '<button class="btn" style="background:#25D366;color:#fff;" onclick="depPartagerWhatsapp()">&#128172; Envoyer par WhatsApp</button>'
-      +   '<button class="btn" style="background:#eee;color:#333;" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>'
+      +   '<button class="btn" style="background:#1a237e;color:#fff;" onclick="depCopierMessageWhatsapp()">&#128203; Copier le message</button>'
       + '</div>';
   }
 
@@ -6648,7 +6691,10 @@ window.depValiderFactureFinaleFrance = function(){
     c.statut = 'parti';
     c.partiTs = now;
     c.partiPar = u.name || '';
+    _depAssignerRangDepart(c, departId);
     maj.departId = departId;
+    maj.rangDepart = c.rangDepart || null;
+    maj.rangDepartId = c.rangDepartId || null;
     maj.statut = 'parti';
     maj.partiTs = now;
     maj.partiPar = u.name || '';
@@ -7498,7 +7544,13 @@ window.depEnregistrerDepot = function(){
     // .set() remplace tout le nœud : sans ça, corriger la fiche d'un client
     // dépôt effacerait aussi ses versements déjà enregistrés (v1.8.0).
     fiche.versements = existant.versements || [];
+    // v1.20.29 : idem pour le numéro de place dans le départ (voir
+    // _depAssignerRangDepart) — sinon .set() l'effacerait à chaque
+    // modification de la fiche.
+    fiche.rangDepart = existant.rangDepart || null;
+    fiche.rangDepartId = existant.rangDepartId || null;
   }
+  _depAssignerRangDepart(fiche, departId);
 
   db.ref('dct_depot/'+id).set(fiche);
   // v1.20.21 : le devis d'origine (voir depDevisValiderVers) n'est
@@ -7633,8 +7685,14 @@ window.depConfirmerMove = function(){
 
   c.departId = vers;
   c.historiqueDepart = hist;
+  // v1.20.29 : "Déplacer" change réellement de container — nouveau numéro
+  // de place dans CE nouveau départ (voir _depAssignerRangDepart). Un
+  // "Détacher" (vers le Dépôt virtuel) ne repasse pas par ici, donc ne
+  // touche à rien : le numéro de l'ancien départ reste posé, réutilisé tel
+  // quel si jamais le client est un jour rerattaché à ce même départ.
+  _depAssignerRangDepart(c, vers);
 
-  if(mv.depot) _depEcrireClient({ depot:true, clientId: mv.clientId }, { departId: vers, historiqueDepart: hist });
+  if(mv.depot) _depEcrireClient({ depot:true, clientId: mv.clientId }, { departId: vers, rangDepart: c.rangDepart || null, rangDepartId: c.rangDepartId || null, historiqueDepart: hist });
   else try{ sauvegarder(); }catch(e){}
   depActivite('&#128666;', 'a d&eacute;plac&eacute; <strong>'+esc(c.name||'')+'</strong> vers <strong>'+esc(nomDepart(vers))+'</strong>');
 
@@ -8684,6 +8742,7 @@ window.depValiderConfirmer = function(){
   }
   fiche.departId = departId;
   fiche.aPhotoColis = true;
+  _depAssignerRangDepart(fiche, departId);
 
   // v1.18.0 : le paiement ne se fait plus depuis cet écran (MONTANT REÇU
   // retiré) — il se fait exclusivement via "Ajouter un versement" sur la
@@ -8719,6 +8778,8 @@ window.depValiderConfirmer = function(){
     livraisonVilleAutre: fiche.livraisonVilleAutre || '',
     prixLivraison: fiche.prixLivraison || 0,
     departId: fiche.departId,
+    rangDepart: fiche.rangDepart || null,
+    rangDepartId: fiche.rangDepartId || null,
     historiqueDepart: fiche.historiqueDepart || null,
     prix: fiche.prix,
     prixADefinir: !!fiche.prixADefinir,
@@ -9780,6 +9841,9 @@ function greffer(){
       // 03/09/2026 : "on peut pas intégrer ça directement dans le
       // camion ? changer le code couleur de la case avec une note".
       try{ _depColorerCarteChauffeurExterne(k); }catch(e){ console.error('departs: couleur carte chauffeur externe', e); }
+      // v1.20.29 : boutons de rappel WhatsApp avant la ramasse, sur
+      // chaque carte de la tournée — voir _depAjouterWhatsappCamion.
+      try{ _depAjouterWhatsappCamion(k); }catch(e){ console.error('departs: rappel WhatsApp (camion)', e); }
     };
     window.renderCamion._depPatch = true;
   }
@@ -10821,6 +10885,132 @@ function _depColorerCarteChauffeurExterne(k){
       continue;
     }
     det.insertBefore(note, det.firstChild);
+  }
+}
+
+/* ─────────────────────────────────────────────
+   v1.20.29. RAPPEL WHATSAPP AVANT LA RAMASSE — un client dont le colis
+   n'est pas prêt à l'arrivée du camion fait perdre du temps à toute la
+   tournée (retour de Cobey du 03/09/2026). Deux boutons directement sur
+   la carte de chaque client de la tournée (voir _depAjouterWhatsappCamion,
+   appelée depuis le patch de renderCamion), une ligne entre le nom et
+   l'adresse — même technique de correspondance carte↔client que
+   _depAjouterSuiviCamion/_depColorerCarteChauffeurExterne (même tri,
+   cartes dans le même ordre). Créneau matin/après-midi déduit de l'heure
+   déjà programmée pour ce client (celle du badge, tk.hours[id]) : 8h-12h
+   = matinée, 13h-20h = après-midi (texte affiché "13h et 18h", ajustable
+   plus tard côté classement — retour de Cobey du 03/09/2026, "à titre
+   informatif"). Le bouton "Copier" copie le texte SEUL (sans lien), pour
+   un envoi par SMS classique si le client n'a pas WhatsApp.
+   ───────────────────────────────────────────── */
+
+function _depCreneauRelance(heure){
+  var h = heure ? parseInt(String(heure).split('h')[0], 10) : NaN;
+  if(isNaN(h)) return null;
+  if(h >= 8 && h < 13) return 'dans la matinée (entre 8h et 12h)';
+  if(h >= 13 && h <= 20) return 'dans l’après-midi (entre 13h et 18h)';
+  return null;
+}
+
+function _depTexteMessageRelance(c, creneauTxt, dateTxt){
+  var prenom = (c.prenom || c.name || '').trim() || 'bonjour';
+  var ligne = 'Dakar City Transport passera chez vous'
+    + (dateTxt ? (' le ' + dateTxt) : '')
+    + (creneauTxt ? (', ' + creneauTxt) : '')
+    + ', pour la collecte de votre colis.';
+  return 'Bonjour ' + prenom + ' \u{1F44B}\n\n'
+    + ligne + '\n\n'
+    + 'Merci de bien vouloir préparer votre colis avant notre arrivée \u{1F4E6}.\n\n'
+    + 'À très bientôt !\nL’équipe Dakar City Transport';
+}
+
+// Format international requis par WhatsApp (wa.me) : chiffres seuls, sans
+// le 0 initial. Les clients de la collecte sont ramassés en France — un
+// numéro français local (« 06... ») devient donc « 336... ».
+function _depTelIntlRelance(tel){
+  var digits = String(tel||'').replace(/\D/g,'');
+  if(!digits) return '';
+  if(digits.charAt(0) === '0') return '33' + digits.slice(1);
+  return digits;
+}
+
+function _depCopierTexteRelance(msg){
+  var reussi = function(){ toast('📋 Message copié'); };
+  var echoue = function(){ toast('⚠️ Copie impossible — sélectionnez le message manuellement.'); };
+  var repliManuel = function(){
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = msg;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if(ok) reussi(); else echoue();
+    }catch(e){ echoue(); }
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(msg).then(reussi).catch(repliManuel);
+  } else {
+    repliManuel();
+  }
+}
+
+function _depAjouterWhatsappCamion(k){
+  var trks = getTrucks(), tk = trks[k];
+  if(!tk || !(tk.clients||[]).length) return;
+  var hours = tk.hours || {};
+  var sorted = (tk.clients || []).slice().sort(function(a,b){
+    var ha = hours[a], hb = hours[b];
+    if(ha && hb) return ha.localeCompare(hb);
+    if(ha) return -1;
+    if(hb) return 1;
+    return tk.clients.indexOf(a) - tk.clients.indexOf(b);
+  });
+  var col = (window.collectes || []).filter(function(x){ return x && x.id === window.currentCollecteId; })[0];
+  var dateTxt = col ? (col.date || '') : '';
+  var clients = getClients() || {};
+  var cartes = document.querySelectorAll('#camion-route .route-card');
+  for(var i = 0; i < sorted.length; i++){
+    var id = sorted[i];
+    var carte = cartes[i];
+    if(!carte || carte.querySelector('.dep-relance-whatsapp')) continue;
+    var det = carte.querySelector('.route-details');
+    if(!det) continue;
+    var c = clients[id];
+    if(!c) continue;
+
+    var tel = _depTelIntlRelance(c.tel);
+    var creneau = _depCreneauRelance(hours[id]);
+    var msg = _depTexteMessageRelance(c, creneau, dateTxt);
+
+    var ligne = document.createElement('div');
+    ligne.className = 'route-detail-row dep-relance-whatsapp';
+    ligne.style.cssText = 'display:flex;gap:8px;margin:2px 0 6px;';
+
+    var btnWa = document.createElement('button');
+    btnWa.type = 'button';
+    btnWa.innerHTML = '&#128172; WhatsApp';
+    btnWa.style.cssText = 'flex:1;padding:7px;background:#25D366;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--font);';
+    btnWa.onclick = (function(numero, texte){ return function(e){
+      if(e) e.stopPropagation();
+      if(!numero){ toast('⚠️ Numéro de téléphone manquant.'); return; }
+      window.open('https://wa.me/' + numero + '?text=' + encodeURIComponent(texte), '_blank');
+    }; })(tel, msg);
+
+    var btnCop = document.createElement('button');
+    btnCop.type = 'button';
+    btnCop.innerHTML = '&#128203; Copier';
+    btnCop.style.cssText = 'flex:1;padding:7px;background:#1a237e;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--font);';
+    btnCop.onclick = (function(texte){ return function(e){
+      if(e) e.stopPropagation();
+      _depCopierTexteRelance(texte);
+    }; })(msg);
+
+    ligne.appendChild(btnWa);
+    ligne.appendChild(btnCop);
+    det.insertBefore(ligne, det.firstChild);
   }
 }
 
