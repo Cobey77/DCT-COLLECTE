@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.29';
+var DEP_VERSION = 'v1.20.30';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -10987,7 +10987,9 @@ function _depAjouterWhatsappCamion(k){
 
     var ligne = document.createElement('div');
     ligne.className = 'route-detail-row dep-relance-whatsapp';
-    ligne.style.cssText = 'display:flex;gap:8px;margin:2px 0 6px;';
+    // v1.20.30 : marge basse agrandie (retour de Cobey du 03/09/2026 :
+    // trop collé à l'adresse juste en dessous, risque de fausse manip).
+    ligne.style.cssText = 'display:flex;gap:8px;margin:2px 0 16px;';
 
     var btnWa = document.createElement('button');
     btnWa.type = 'button';
