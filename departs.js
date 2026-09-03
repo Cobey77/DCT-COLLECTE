@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.25';
+var DEP_VERSION = 'v1.20.26';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -10391,48 +10391,58 @@ function _depAjouterBoutonCamionExterne(){
 // Section dédiée, en bas du Dispatch : un bloc par camion chauffeur
 // externe (code d'accès, statut de récupération de chaque client en
 // direct, bouton Facture), puis le bouton de clôture si applicable.
+// v1.20.26 : le bandeau "chauffeur externe" (code + compteur facturé)
+// n'est plus regroupé à part en bas de l'écran — il s'affiche maintenant
+// directement AU-DESSUS de la carte du camion correspondant, dans la
+// liste normale des camions, pour qu'on voie tout de suite à quel camion
+// il correspond (retour de Cobey du 03/09/2026 : "tu peux le mettre au-
+// dessus du camion, comme ça on sait que ça correspond"). Toujours
+// réservé à DCT — le chauffeur externe, lui, n'a accès qu'à
+// chauffeur.html, jamais à cet écran. Seul "Clôturer la collecte" reste
+// un bouton à part (une seule collecte à clôturer, pas un par camion).
 function _depAfficherSectionExterne(){
   var container = $('collecte-content');
   if(!container) return;
   var trks = getTrucks();
-  var clesExternes = Object.keys(trks).filter(function(k){ return trks[k] && trks[k].externe; });
+  var cles = Object.keys(trks);
+  var clesExternes = cles.filter(function(k){ return trks[k] && trks[k].externe; });
   if(!clesExternes.length) return;
-  var wrap = document.createElement('div');
-  wrap.style.cssText = 'margin-top:6px;';
-  var titre = document.createElement('div'); titre.className = 'slabel'; titre.textContent = 'Chauffeurs externes';
-  wrap.appendChild(titre);
-  clesExternes.forEach(function(k){
+  // Les cartes .truck-card sont rendues (natif) dans le MÊME ordre que
+  // Object.keys(trks) — voir renderDispatchTab, sans rien d'autre entre
+  // elles — donc cartes[i] correspond bien à trks[cles[i]] (même
+  // technique de correspondance que _depAjouterSuiviCamion/
+  // _depColorerCarteChauffeurExterne).
+  var cartes = container.querySelectorAll('.truck-card');
+  cles.forEach(function(k, i){
     var tk = trks[k];
-    var card = document.createElement('div');
-    card.style.cssText = 'border:2px solid #1a237e;background:#F5F6FC;border-radius:12px;padding:13px 14px;margin-bottom:12px;';
-    // v1.20.24 : le détail par client (statut, photos, "Facturé") ne
-    // s'affiche plus ici — il est directement visible sur la carte de
-    // chaque client dans le camion (couleur + note, voir
-    // _depColorerCarteChauffeurExterne), pour ne plus dupliquer la même
-    // information à deux endroits (retour de Cobey du 03/09/2026). Cette
-    // section garde juste l'essentiel : le code d'accès à renvoyer, et un
-    // petit compteur pour un coup d'œil sans ouvrir le camion.
+    if(!tk || !tk.externe) return;
+    var carte = cartes[i];
+    if(!carte || !carte.parentNode) return;
     var nb = (tk.clients || []).length;
     var nbFait = (tk.clients || []).filter(function(id){
       return (tk.validated || []).indexOf(id) !== -1 || (tk.refused || []).indexOf(id) !== -1;
     }).length;
-    var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
-      +   '<span style="font-size:13.5px;font-weight:800;color:#111;">🚛 ' + esc(tk.name) + '</span>'
+    var bandeau = document.createElement('div');
+    bandeau.style.cssText = 'border:2px solid #1a237e;background:#F5F6FC;border-radius:12px 12px 0 0;border-bottom:none;padding:10px 14px;';
+    bandeau.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
       +   '<span style="font-size:9px;font-weight:800;background:#1a237e;color:#fff;padding:3px 7px;border-radius:20px;">CHAUFFEUR EXTERNE</span>'
+      +   '<span style="font-size:12px;color:#444;font-weight:700;">' + nbFait + '/' + nb + ' factur&eacute;' + (nbFait > 1 ? 's' : '') + '</span>'
       + '</div>'
-      +   '<div style="font-size:12px;color:#444;font-weight:600;margin-bottom:10px;">' + nbFait + '/' + nb + ' client' + (nb > 1 ? 's' : '') + ' factur&eacute;' + (nbFait > 1 ? 's' : '') + '</div>'
-      +  '<button type="button" onclick="_depCopierLienExterne(\'' + esc(tk.name).replace(/'/g, '&#39;') + '\',\'' + esc(tk.codeExterne || '') + '\')" style="width:100%;padding:9px;background:#fff;border:1.5px solid #1a237e;color:#1a237e;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">📋 Copier le lien + code (' + esc(tk.codeExterne || '—') + ')</button>';
-    card.innerHTML = h;
-    wrap.appendChild(card);
+      +  '<button type="button" onclick="event.stopPropagation();_depCopierLienExterne(\'' + esc(tk.name).replace(/'/g, '&#39;') + '\',\'' + esc(tk.codeExterne || '') + '\')" style="width:100%;padding:8px;background:#fff;border:1.5px solid #1a237e;color:#1a237e;border-radius:8px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--font);">📋 Copier le lien + code (' + esc(tk.codeExterne || '—') + ')</button>';
+    carte.parentNode.insertBefore(bandeau, carte);
+    // La carte elle-même perd son arrondi du haut pour que le bandeau et
+    // la carte aient l'air d'un seul bloc.
+    carte.style.borderTopLeftRadius = '0';
+    carte.style.borderTopRightRadius = '0';
+    carte.style.marginTop = '-1px';
   });
   if(typeof isLocked === 'function' && !isLocked()){
     var btnClot = document.createElement('button');
     btnClot.style.cssText = 'width:100%;padding:14px;background:#111;color:#fff;border:2.5px solid #000;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:14px;';
     btnClot.textContent = '🔒 Clôturer la collecte';
     btnClot.onclick = window._depClotureCollecteExterne;
-    wrap.appendChild(btnClot);
+    container.appendChild(btnClot);
   }
-  container.appendChild(wrap);
 }
 
 // Liste les clients (parmi TOUS les camions de la collecte, pas
