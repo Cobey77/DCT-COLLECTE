@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.21';
+var DEP_VERSION = 'v1.20.24';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -8249,6 +8249,26 @@ window.depOuvrirValidation = function(id, tk, name, prix){
 
   window.depRetirerPhotoValider();
 
+  // v1.20.22 : si des photos existent déjà pour ce client (typiquement un
+  // chauffeur externe qui a déjà pris la photo du colis via chauffeur.html
+  // avant de rendre sa tournée), elles se rechargent ici automatiquement,
+  // quel que soit le bouton utilisé pour arriver sur cet écran — retour de
+  // Cobey du 03/09/2026 : en passant par le camion directement, l'écran
+  // Valider arrivait avec "0/5 photos" alors que le chauffeur en avait
+  // bien pris. v1.20.23 : le bouton "🧾 Facture" dédié (section Chauffeurs
+  // externes), devenu redondant avec le "Valider" du camion, a été retiré.
+  if(window.db && window.firebaseReady){
+    db.ref('dct_photos_colis/'+id).once('value', function(snap){
+      var v = snap.val(); if(!v) return;
+      var arr = Object.keys(v).map(function(kk){ return v[kk]; }).filter(function(p){ return p && p.d; });
+      arr.sort(function(a,b){ return (a.ts||0) - (b.ts||0); });
+      if(arr.length && _depValiderCtx && _depValiderCtx.clientId === id){
+        _depValiderCtx.photos = arr.slice(0, PHOTO_MAX);
+        _depRenderPhotosGrille('dv');
+      }
+    });
+  }
+
   var dn = $('dv-dest-nom'); if(dn) dn.value = fiche.destinataireNom || '';
   var dt = $('dv-dest-tel'); if(dt) dt.value = fiche.destinataireTel || '';
   var dt2 = $('dv-dest-tel2'); if(dt2) dt2.value = fiche.destinataireTel2 || '';
@@ -9525,6 +9545,13 @@ function greffer(){
       // quotidien, retour de Cobey du 21/08/2026 ("pas dans la facture,
       // plutôt à côté de chaque client sur l'écran de la tournée").
       try{ _depAjouterSuiviCamion(k); }catch(e){ console.error('departs: icône suivi (camion)', e); }
+      // v1.20.24 : pour un camion "chauffeur externe", la carte d'un
+      // client déjà récupéré (ou refusé) par le chauffeur se colore et
+      // affiche une note directement ici, sans avoir besoin d'ouvrir
+      // l'encadré "Chauffeurs externes" à part — retour de Cobey du
+      // 03/09/2026 : "on peut pas intégrer ça directement dans le
+      // camion ? changer le code couleur de la case avec une note".
+      try{ _depColorerCarteChauffeurExterne(k); }catch(e){ console.error('departs: couleur carte chauffeur externe', e); }
     };
     window.renderCamion._depPatch = true;
   }
@@ -10328,42 +10355,31 @@ function _depAfficherSectionExterne(){
   var trks = getTrucks();
   var clesExternes = Object.keys(trks).filter(function(k){ return trks[k] && trks[k].externe; });
   if(!clesExternes.length) return;
-  var cls = getClients();
   var wrap = document.createElement('div');
   wrap.style.cssText = 'margin-top:6px;';
   var titre = document.createElement('div'); titre.className = 'slabel'; titre.textContent = 'Chauffeurs externes';
   wrap.appendChild(titre);
   clesExternes.forEach(function(k){
     var tk = trks[k];
-    var statuts = tk.chauffeurStatuts || {};
     var card = document.createElement('div');
     card.style.cssText = 'border:2px solid #1a237e;background:#F5F6FC;border-radius:12px;padding:13px 14px;margin-bottom:12px;';
+    // v1.20.24 : le détail par client (statut, photos, "Facturé") ne
+    // s'affiche plus ici — il est directement visible sur la carte de
+    // chaque client dans le camion (couleur + note, voir
+    // _depColorerCarteChauffeurExterne), pour ne plus dupliquer la même
+    // information à deux endroits (retour de Cobey du 03/09/2026). Cette
+    // section garde juste l'essentiel : le code d'accès à renvoyer, et un
+    // petit compteur pour un coup d'œil sans ouvrir le camion.
+    var nb = (tk.clients || []).length;
+    var nbFait = (tk.clients || []).filter(function(id){
+      return (tk.validated || []).indexOf(id) !== -1 || (tk.refused || []).indexOf(id) !== -1;
+    }).length;
     var h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">'
       +   '<span style="font-size:13.5px;font-weight:800;color:#111;">🚛 ' + esc(tk.name) + '</span>'
       +   '<span style="font-size:9px;font-weight:800;background:#1a237e;color:#fff;padding:3px 7px;border-radius:20px;">CHAUFFEUR EXTERNE</span>'
       + '</div>'
-      +  '<button type="button" onclick="_depCopierLienExterne(\'' + esc(tk.name).replace(/'/g, '&#39;') + '\',\'' + esc(tk.codeExterne || '') + '\')" style="width:100%;padding:9px;background:#fff;border:1.5px solid #1a237e;color:#1a237e;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:10px;">📋 Copier le lien + code (' + esc(tk.codeExterne || '—') + ')</button>';
-    (tk.clients || []).forEach(function(id){
-      var c = cls[id]; if(!c) return;
-      var st = statuts[id];
-      var factFaite = (tk.validated || []).indexOf(id) !== -1 || (tk.refused || []).indexOf(id) !== -1;
-      var etat = st
-        ? (st.etat === 'recupere' ? '✅ Récupéré' + (st.nbPhotos ? (' · ' + st.nbPhotos + ' photo' + (st.nbPhotos > 1 ? 's' : '')) : '') : '❌ Non récupéré — ' + esc(st.motifLib || ''))
-        : '⏳ En attente';
-      var couleurEtat = st ? (st.etat === 'recupere' ? '#006b2d' : '#992020') : '#888';
-      h += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #E0E9FF;">'
-        +   '<div><div style="font-size:12.5px;font-weight:700;color:#111;">' + esc(c.name || '') + '</div>'
-        +   '<div style="font-size:11px;color:' + couleurEtat + ';font-weight:600;">' + etat + '</div></div>';
-      if(st && st.etat === 'recupere' && !factFaite){
-        h += '<button type="button" onclick="_depFactureExterneOuvrir(\'' + id + '\',\'' + k + '\')" style="flex-shrink:0;padding:8px 12px;background:#006b2d;color:#fff;border:none;border-radius:8px;font-size:11.5px;font-weight:800;cursor:pointer;font-family:var(--font);">🧾 Facture</button>';
-      } else if(factFaite){
-        h += '<span style="flex-shrink:0;font-size:10.5px;font-weight:800;color:#006b2d;">✅ Facturé</span>';
-      }
-      h += '</div>';
-    });
-    if(!(tk.clients || []).length){
-      h += '<div style="font-size:12px;color:#888;font-style:italic;padding-top:6px;">Aucun client affecté pour l\'instant.</div>';
-    }
+      +   '<div style="font-size:12px;color:#444;font-weight:600;margin-bottom:10px;">' + nbFait + '/' + nb + ' client' + (nb > 1 ? 's' : '') + ' factur&eacute;' + (nbFait > 1 ? 's' : '') + '</div>'
+      +  '<button type="button" onclick="_depCopierLienExterne(\'' + esc(tk.name).replace(/'/g, '&#39;') + '\',\'' + esc(tk.codeExterne || '') + '\')" style="width:100%;padding:9px;background:#fff;border:1.5px solid #1a237e;color:#1a237e;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:var(--font);">📋 Copier le lien + code (' + esc(tk.codeExterne || '—') + ')</button>';
     card.innerHTML = h;
     wrap.appendChild(card);
   });
@@ -10376,29 +10392,6 @@ function _depAfficherSectionExterne(){
   }
   container.appendChild(wrap);
 }
-
-// Ouvre l'écran natif "Valider — [nom]" pour un client d'un camion
-// chauffeur externe, puis pré-remplit la zone photo avec celles déjà
-// prises par le chauffeur (dct_photos_colis/{clientId}) — le ramassage
-// est déjà acquis, DCT n'a pas à reprendre une photo (retour de Cobey du
-// 01/09/2026, confirmé sur sa propre capture d'écran de cet écran).
-window._depFactureExterneOuvrir = function(id, tk){
-  var fiche = (typeof getClients === 'function') ? getClients()[id] : null;
-  if(!fiche){ toast('⚠️ Client introuvable.'); return; }
-  var pay = depCalculerPaiement(fiche);
-  try{ window.depOuvrirValidation(id, tk, fiche.name, pay.total); }catch(e){ console.error('departs: ouverture validation (chauffeur externe)', e); return; }
-  if(window.db && window.firebaseReady){
-    db.ref('dct_photos_colis/' + id).once('value', function(snap){
-      var v = snap.val(); if(!v) return;
-      var arr = Object.keys(v).map(function(kk){ return v[kk]; }).filter(function(p){ return p && p.d; });
-      arr.sort(function(a, b){ return (a.ts || 0) - (b.ts || 0); });
-      if(arr.length && _depValiderCtx && _depValiderCtx.clientId === id){
-        _depValiderCtx.photos = arr.slice(0, PHOTO_MAX);
-        _depRenderPhotosGrille('dv');
-      }
-    });
-  }
-};
 
 // Liste les clients (parmi TOUS les camions de la collecte, pas
 // seulement les externes) affectés à un camion mais sans facture faite
@@ -10516,6 +10509,55 @@ function _depAjouterSuiviCamion(k){
       ic.onclick = function(e){ if(e) e.stopPropagation(); depOuvrirSuiviCamion(window.currentCollecteId || '', cid); };
       nomEl.appendChild(ic);
     })(sorted[i]);
+  }
+}
+
+// v1.20.24 : colore la carte + ajoute une note quand le chauffeur externe
+// a déjà traité ce client (récupéré ou non) mais que la facture DCT n'est
+// pas encore faite — même technique de correspondance carte↔client que
+// _depAjouterSuiviCamion (même tri, cartes dans le même ordre).
+function _depColorerCarteChauffeurExterne(k){
+  var trks = getTrucks(), tk = trks[k];
+  if(!tk || !tk.externe || !(tk.clients||[]).length) return;
+  var statuts = tk.chauffeurStatuts || {};
+  if(!Object.keys(statuts).length) return;
+  var validated = tk.validated || [], refused = tk.refused || [];
+  var hours = tk.hours || {};
+  var sorted = (tk.clients || []).slice().sort(function(a,b){
+    var ha = hours[a], hb = hours[b];
+    if(ha && hb) return ha.localeCompare(hb);
+    if(ha) return -1;
+    if(hb) return 1;
+    return tk.clients.indexOf(a) - tk.clients.indexOf(b);
+  });
+  var cartes = document.querySelectorAll('#camion-route .route-card');
+  for(var i = 0; i < sorted.length; i++){
+    var id = sorted[i];
+    var cs = statuts[id];
+    if(!cs) continue;
+    // La facture faite (validated/refused) l'emporte — la couleur native
+    // (vert "done"/rouge "refused") reste seule affichée dans ce cas.
+    if(validated.indexOf(id) !== -1 || refused.indexOf(id) !== -1) continue;
+    var carte = cartes[i];
+    if(!carte || carte.querySelector('.dep-note-externe')) continue;
+    var det = carte.querySelector('.route-details');
+    if(!det) continue;
+    var note = document.createElement('div');
+    note.className = 'route-detail-row dep-note-externe';
+    if(cs.etat === 'recupere'){
+      carte.style.background = '#eef1ff';
+      carte.style.borderColor = '#1a237e';
+      note.style.cssText = 'color:#1a237e;font-weight:700;';
+      note.innerHTML = '&#9989; R&eacute;cup&eacute;r&eacute; par le chauffeur' + (cs.nbPhotos ? (' &middot; ' + cs.nbPhotos + ' photo' + (cs.nbPhotos > 1 ? 's' : '')) : '');
+    } else if(cs.etat === 'refuse'){
+      carte.style.background = '#fff5f5';
+      carte.style.borderColor = '#c0392b';
+      note.style.cssText = 'color:#c0392b;font-weight:700;';
+      note.innerHTML = '&#10060; Non r&eacute;cup&eacute;r&eacute; &mdash; ' + esc(cs.motifLib || '');
+    } else {
+      continue;
+    }
+    det.insertBefore(note, det.firstChild);
   }
 }
 
