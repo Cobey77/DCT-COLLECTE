@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.27';
+var DEP_VERSION = 'v1.20.28';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -484,6 +484,9 @@ var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bout
 // v1.19.22 : caisse livraison, indépendante de celle du colis ci-dessus.
 var _depVersMethodeLivraison = '';
 var _depVersDeviseLivraison  = 'eur';
+// v1.20.28 : { collecteId: { clientId: true } } — clients définitivement
+// supprimés, voir dct_supprimes / _depNettoyerClientsSupprimes plus bas.
+var _depTombstones = {};
 // v1.20.27 : versement "avance" (paiement reçu avant la ramasse, voir plus
 // bas) — mêmes deux variables que ci-dessus, dédiées pour ne pas interférer
 // avec la saisie en cours sur une facture éventuellement déjà ouverte.
@@ -3017,12 +3020,58 @@ function ecouterDeparts(){
     }, 300);
   });
 
+  // v1.20.28 : liste partagée des clients définitivement supprimés (voir
+  // confirmDelete plus bas) — retour de Cobey du
+  // même (v1.20.15). Cause réelle : sauvegarderFirebase() réécrit TOUJOURS
+  // l'arbre COMPLET de clientsParCollecte, pas seulement ce qui a changé —
+  // si un autre appareil resté ouvert a encore le client supprimé dans sa
+  // copie locale (pas encore resynchronisée) et déclenche sa propre
+  // sauvegarde pour toute autre raison, il réécrase Firebase et fait
+  // réapparaître le client. Un identifiant présent ici ne doit plus jamais
+  // repartir vers Firebase, quel que soit l'appareil (voir le patch de
+  // sauvegarderFirebase plus bas, qui nettoie systématiquement avant
+  // chaque écriture).
+  db.ref('dct_supprimes').on('value', function(snap){
+    _depTombstones = snap.val() || {};
+    try{ _depNettoyerClientsSupprimes(); }catch(e){}
+  });
+
   // v1.20.3 : passage supplémentaire au chargement, pour les clients
   // Collecte — leur source (clientsParCollecte) vient de l'écoute native
   // (voir ecouterChangements, index.html, illisible depuis ici) et non d'un
   // des ref() ci-dessus ; un délai généreux laisse le temps à la synchro
   // initiale de Firebase de se terminer.
   setTimeout(function(){ try{ _depBackfillRefsClients(); }catch(e){} }, 4000);
+}
+
+// v1.20.28 : retire de la copie locale (clientsParCollecte) tout client
+// listé dans _depTombstones — appelée à chaque mise à jour de
+// dct_supprimes (temps réel) et juste avant chaque sauvegarde Firebase
+// (voir le patch de sauvegarderFirebase, section des greffes) pour
+// qu'aucune copie locale périmée ne puisse jamais le réécrire. Rafraîchit
+// aussi l'écran actuellement affiché si un client visible vient de
+// disparaître.
+function _depNettoyerClientsSupprimes(){
+  var touche = false;
+  Object.keys(_depTombstones || {}).forEach(function(colId){
+    var ids = _depTombstones[colId] || {};
+    var cls = (window.clientsParCollecte || {})[colId];
+    if(!cls) return;
+    Object.keys(ids).forEach(function(cid){
+      if(cls[cid]){ delete cls[cid]; touche = true; }
+    });
+  });
+  if(!touche) return;
+  try{
+    var a = document.querySelector('.screen.active');
+    if(!a) return;
+    if(a.id === 's-depart-detail' && typeof window.depDetail === 'function' && typeof window._depDetailIdPublic === 'function'){
+      window.depDetail(window._depDetailIdPublic());
+    } else if(a.id === 's-collecte'){
+      if(window.currentSubtab === 'clients' && typeof window.renderClientsTab === 'function') window.renderClientsTab();
+      else if(window.currentSubtab === 'dispatch' && typeof window.renderDispatchTab === 'function') window.renderDispatchTab();
+    }
+  }catch(e){}
 }
 
 /* ─────────────────────────────────────────────
@@ -10370,6 +10419,14 @@ function greffer(){
       try{
         if(_delClientId && _delCollecteId && window.db && window.firebaseReady){
           window.db.ref('dct/clients/'+_delCollecteId+'/'+_delClientId).remove();
+          // v1.20.28 : tombstone partagé — voir dct_supprimes/
+          // _depNettoyerClientsSupprimes/le patch de sauvegarderFirebase.
+          // Le retrait ciblé ci-dessus ne suffisait pas seul (retour de
+          // Cobey du 03/09/2026 : "les clients test sont revenus") : cette
+          // trace empêche qu'un AUTRE appareil, encore chargé avec ce
+          // client dans sa copie locale, le fasse réapparaître en écrivant
+          // sa propre sauvegarde complète, même longtemps après.
+          window.db.ref('dct_supprimes/'+_delCollecteId+'/'+_delClientId).set(true);
         }
       }catch(e){ console.error('departs: suppression ciblée Firebase', e); }
       setTimeout(function(){
@@ -10382,6 +10439,23 @@ function greffer(){
       }, 1600);
     };
     window.confirmDelete._depPatch = true;
+  }
+  /* --- Y (v1.20.28). Protection définitive contre la résurrection des
+     clients supprimés : sauvegarderFirebase() (natif) réécrit TOUJOURS
+     l'arbre complet de clientsParCollecte à chaque sauvegarde, quel que
+     soit l'appareil ni la raison de la sauvegarde. Si un appareil a encore
+     un client supprimé dans sa copie locale (pas encore resynchronisée) et
+     sauvegarde pour une tout autre raison, il le réécrivait dans Firebase.
+     On nettoie donc systématiquement, sur CE critère seul (la liste
+     partagée _depTombstones, voir dct_supprimes/ecouterDeparts), juste
+     avant chaque écriture — quel que soit l'appareil qui sauvegarde. --- */
+  if(typeof window.sauvegarderFirebase === 'function' && !window.sauvegarderFirebase._depPatch){
+    var origSauvegarderFirebase = window.sauvegarderFirebase;
+    window.sauvegarderFirebase = function(){
+      try{ _depNettoyerClientsSupprimes(); }catch(e){}
+      return origSauvegarderFirebase.apply(this, arguments);
+    };
+    window.sauvegarderFirebase._depPatch = true;
   }
 }
 
