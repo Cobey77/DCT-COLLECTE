@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.13';
+var DEP_VERSION = 'v1.20.15';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -528,6 +528,70 @@ var DEP_PAYS_DEFAUT = 'SN';
 // la destination : "Chargement DKR" (Sénégal) ou "Chargement BMK" (Mali).
 var DEP_NOM_CHARGEMENT = { SN:'Chargement DKR', ML:'Chargement BMK' };
 function depNomParDefaut(pays){ return DEP_NOM_CHARGEMENT[pays] || DEP_NOM_CHARGEMENT[DEP_PAYS_DEFAUT]; }
+
+// v1.20.14 : liste de villes/communes du Sénégal pour "Livraison à Dakar"
+// — remplace la saisie libre de la ville pour que chacun l'écrive
+// exactement pareil (retour de Cobey du 03/09/2026 : "le but c'est que
+// les collaborateurs ne se trompent pas en écrivant la ville, pour que
+// Modou ait un filtrage 100% bon"). Grande mais pas exhaustive (le
+// Sénégal compte plus de 550 communes officielles) : la case "Autre"
+// couvre ce qui manque, sans jamais bloquer une inscription — liste à
+// compléter au fil de l'eau si besoin (juste ajouter un nom ici).
+var DEP_VILLES_SENEGAL = ["Adéane","Aéré Lao","Agnam Civol","Baba Garage","Bagadadji","Bakel","Bala","Bambali","Bambey","Bambilor","Bandafassi","Bargny","Barkédji","Bignona","Birkelane","Bodé Lao","Bokidiawé","Boulel","Bounkiling","Cap Skirring","Chérif Lô","Coki","Dabo","Dagana","Dahra","Dakar","Dankh Sène","Darou Khoudoss","Dembancané","Démette","Diakhao","Diamagadio","Diamniadio","Dianké Makha","Diannah Malary","Diaobé-Kabendou","Diass","Diattacounda","Diawara","Dimboli","Dindéfélo","Diofior","Dioulacolon","Diouloulou","Diourbel","Djibanar","Djilor","Fanaye","Fatick","Fimela","Fissel","Fongolimbi","Foundiougne","Gabou","Gaé","Gandiaye","Gandon","Gossas","Goudiry","Goudomp","Guédé Chantier","Guédiawaye","Guéoul","Guinguinéo","Ida Mouride","Jaxaay-Parcelles-Niakoul Rap","Joal-Fadiouth","Kael","Kaffrine","Kafountine","Kahone","Kanel","Kaolack","Karang Poste","Kathiotte","Kayar","Kébémer","Kédougou","Kelle Guèye","Keur Madiabel","Keur Massar","Khombole","Khossanto","Kidira","Kolda","Kothiary","Koul","Koumpentoum","Koungheul","Kounkané","Koussanar","Lambaye","Latmingué","Léona","Linguère","Louga","Loul Sessène","Mabo","Madina Wandifa","Makacoulibantang","Malem Hodar","Malicounda","Mampatim","Marsassoum","Matam","Mbacké","Mbellacadiao","Mboula","Mboumba","Mbour","Méckhé","Médina Sabakh","Médina Yoro Foulah","Meouane","Mérina Dakhar","Missira Sirimana","Missirah","Missirah Wadène","Mlomp","Mont-Rolland","Moudéry","Mpal","Nabadji Civol","Ndame","Ndande","Ndiaffate","Ndiayène Pendao","Ndiébène Gandiole","Ndiédieng","Ndindy","Ndiob","Ndioum","Ndoffane","Ndoulo","Néttéboulou","Nganda","Ngaparou","Ngoundiane","Ngoye","Nguékhokh","Nguéniène","Nguidile","Niaguis","Niakhar","Niakhène","Nioro du Rip","Notto","Nyassia","Ogo","Orkadiéré","Ouonck","Ourossogui","Oussouye","Pambal","Paoskoto","Passy","Pata","Pékesse","Pété","Pikine","Podor","Popenguine-Ndayane","Pout","Ranérou","Richard-Toll","Ross Béthio","Rosso-Sénégal","Rufisque","Sagatta Djoloff","Saint-Louis","Sakal","Salémata","Salikégné","Saly Portudal","Samine","Sangalkam","Saraya","Saré Yoba Diéga","Sébikotane","Sédhiou","Sémé","Sendou","Sibassor","Sikilo","Sindia","Sindian","Sinthiou Maléme","Sokone","Somone","Taïf","Tambacounda","Tanaff","Tattaguine","Tenghori","Thiadiaye","Thiamène","Thiès","Thilogne","Thionck Essyl","Tivaouane","Tivaouane Peulh-Niaga","Tocky Gare","Touba","Toubacouta","Touré Mbonde","Vélingara","Vélingara Ferlo","Wack Ngouna","Walaldé","Waoundé","Yang-Yang","Yène","Ziguinchor"];
+var DEP_VILLE_AUTRE = '__autre__';
+
+// Bloc HTML "Ville" (menu déroulant + case "Autre" avec saisie libre) à
+// injecter juste au-dessus du champ adresse/quartier existant, sur
+// chaque formulaire concerné (préfixe : f/e/dp/fa/devis-f).
+function _depChampVille(prefixe){
+  var opts = '<option value="">— Choisir la ville —</option>'
+    + DEP_VILLES_SENEGAL.map(function(v){ return '<option value="'+esc(v)+'">'+esc(v)+'</option>'; }).join('')
+    + '<option value="'+DEP_VILLE_AUTRE+'">Autre (pr&eacute;ciser)&hellip;</option>';
+  return '<div class="fg"><label class="fl">Ville</label>'
+    + '<select class="fi" id="'+prefixe+'-liv-ville" onchange="depVilleChange(\''+prefixe+'\')">'+opts+'</select>'
+    + '<input class="fi" id="'+prefixe+'-liv-ville-autre" placeholder="Nom de la ville/du village" '
+    +   'style="display:none;margin-top:8px;"></div>';
+}
+
+// Affiche/cache la saisie libre selon le choix "Autre".
+window.depVilleChange = function(prefixe){
+  var sel = $(prefixe+'-liv-ville');
+  var autre = $(prefixe+'-liv-ville-autre');
+  if(!sel || !autre) return;
+  autre.style.display = (sel.value === DEP_VILLE_AUTRE) ? 'block' : 'none';
+};
+
+// Pré-remplit le champ Ville (édition d'un client existant) à partir de
+// ses champs livraisonVille/livraisonVilleAutre déjà enregistrés.
+function _depVilleRemplir(prefixe, ville, villeAutre){
+  var sel = $(prefixe+'-liv-ville');
+  var autre = $(prefixe+'-liv-ville-autre');
+  if(sel) sel.value = ville && DEP_VILLES_SENEGAL.indexOf(ville) !== -1 ? ville : (villeAutre ? DEP_VILLE_AUTRE : '');
+  if(autre){
+    autre.value = villeAutre || '';
+    autre.style.display = (sel && sel.value === DEP_VILLE_AUTRE) ? 'block' : 'none';
+  }
+}
+
+// Lit le champ Ville au moment d'enregistrer → { livraisonVille, livraisonVilleAutre }.
+function _depVilleLire(prefixe){
+  var sel = $(prefixe+'-liv-ville');
+  var v = sel ? sel.value : '';
+  if(v === DEP_VILLE_AUTRE){
+    return { livraisonVille: '', livraisonVilleAutre: (($(prefixe+'-liv-ville-autre')||{}).value || '').trim() };
+  }
+  return { livraisonVille: v || '', livraisonVilleAutre: '' };
+}
+
+// Libellé d'affichage (facture, fiche, étiquette...) — ville en tête,
+// puis le quartier/repère existant s'il y en a un.
+function _depLivraisonLibelle(c){
+  var ville = (c && c.livraisonVille) || (c && c.livraisonVilleAutre) || '';
+  var adr = (c && c.livraisonAdresse) || '';
+  if(ville && adr) return esc(ville) + ' — ' + esc(adr);
+  if(ville) return esc(ville);
+  return esc(adr || '—');
+}
 // v1.19.44 : "Dépôt (en attente)" — un container virtuel, jamais stocké
 // côté Firebase (voir son injection dans window.departsData plus bas),
 // qui accueille les clients détachés d'un vrai départ tant qu'ils ne
@@ -1433,7 +1497,8 @@ function injecterEcrans(){
   +         '<button type="button" class="dep-st" id="dp-liv-oui" onclick="depSetLivraisonDepot(true)">Oui &middot; livraison</button>'
   +       '</div></div>'
   +     '<div id="dp-liv-bloc" style="display:none;">'
-  +       '<div class="fg"><label class="fl">Ville / adresse de livraison</label><input class="fi" id="dp-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+  +       _depChampVille('dp')
+  +       '<div class="fg"><label class="fl">Adresse / quartier (pr&eacute;cision)</label><input class="fi" id="dp-liv-adresse" placeholder="Quartier, rep&egrave;re..."></div>'
   +       '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label><input class="fi" id="dp-liv-prix" type="number" min="0" placeholder="0"></div>'
   +     '</div>'
 
@@ -1855,7 +1920,8 @@ function injecterEcrans(){
   +       '<button type="button" class="dep-st" id="dv-liv-oui" onclick="depValiderToggleLivraison(true)" style="flex:1;">Oui &middot; livraison</button>'
   +     '</div>'
   +     '<div id="dv-liv-bloc" style="display:none;">'
-  +       '<div class="fg"><label class="fl">Ville / adresse de livraison</label><input class="fi" id="dv-liv-adresse" placeholder="Thi&egrave;s, quartier..."></div>'
+  +       _depChampVille('dv')
+  +       '<div class="fg"><label class="fl">Adresse / quartier (pr&eacute;cision)</label><input class="fi" id="dv-liv-adresse" placeholder="Quartier, rep&egrave;re..."></div>'
   +       '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label><input class="fi" id="dv-liv-prix" type="number" min="0" placeholder="0"></div>'
   +     '</div>'
 
@@ -1928,8 +1994,9 @@ function injecterEcrans(){
   +         '<button type="button" class="dep-st" id="devis-f-liv-oui" onclick="depDevisSetLivraison(true)">Oui &middot; livraison</button>'
   +       '</div></div>'
   +     '<div id="devis-f-liv-bloc" style="display:none;">'
-  +       '<div class="fg"><label class="fl">Ville / adresse de livraison</label>'
-  +         '<input class="fi" id="devis-f-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+  +       _depChampVille('devis-f')
+  +       '<div class="fg"><label class="fl">Adresse / quartier (pr&eacute;cision)</label>'
+  +         '<input class="fi" id="devis-f-liv-adresse" placeholder="Quartier, rep&egrave;re..."></div>'
   +       '<div class="fg"><label class="fl">Prix de la livraison (&euro;) '
   +         '<span style="color:#aaa;font-weight:500;">&middot; peut &ecirc;tre ajout&eacute; plus tard</span></label>'
   +         '<input class="fi" id="devis-f-liv-prix" type="number" min="0" placeholder="0"></div>'
@@ -2639,8 +2706,9 @@ function injecterChampsClient(){
     +     '<button type="button" class="dep-st" id="f-liv-oui" onclick="depSetLivraison(true)">Oui &middot; livraison</button>'
     +   '</div></div>'
     + '<div id="f-liv-bloc" style="display:none;">'
-    +   '<div class="fg"><label class="fl">Ville / adresse de livraison</label>'
-    +     '<input class="fi" id="f-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+    +   _depChampVille('f')
+    +   '<div class="fg"><label class="fl">Adresse / quartier (pr&eacute;cision)</label>'
+    +     '<input class="fi" id="f-liv-adresse" placeholder="Quartier, rep&egrave;re..."></div>'
     +   '<div class="fg"><label class="fl">Prix de la livraison (&euro;) '
     +     '<span style="color:#aaa;font-weight:500;">&middot; peut &ecirc;tre ajout&eacute; plus tard</span></label>'
     +     '<input class="fi" id="f-liv-prix" type="number" min="0" placeholder="0"></div>'
@@ -2710,8 +2778,9 @@ function injecterChampsClientFrance(){
     +     '<button type="button" class="dep-st" id="fa-liv-oui" onclick="depSetLivraisonFrance(true)">Oui &middot; livraison</button>'
     +   '</div></div>'
     + '<div id="fa-liv-bloc" style="display:none;">'
-    +   '<div class="fg"><label class="fl">Ville / adresse de livraison</label>'
-    +     '<input class="fi" id="fa-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+    +   _depChampVille('fa')
+    +   '<div class="fg"><label class="fl">Adresse / quartier (pr&eacute;cision)</label>'
+    +     '<input class="fi" id="fa-liv-adresse" placeholder="Quartier, rep&egrave;re..."></div>'
     +   '<div class="fg"><label class="fl">Prix de la livraison (&euro;) '
     +     '<span style="color:#aaa;font-weight:500;">&middot; peut &ecirc;tre ajout&eacute; plus tard</span></label>'
     +     '<input class="fi" id="fa-liv-prix" type="number" min="0" placeholder="0"></div>'
@@ -5217,7 +5286,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     ? ('<div class="fac-partie-nom">'+esc(c.destinataireNom)+'</div>'
        + '<div class="fac-partie-detail">'+_depLienTel(c.destinataireTel, c.destinataireTel||'—')
        + (c.destinataireTel2 ? ' &middot; '+_depLienTel(c.destinataireTel2, c.destinataireTel2) : '')
-       + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(c.livraisonAdresse) : '')
+       + (c.livraisonDakar ? '<br>'+_depLivraisonLibelle(c) : '')
        + '</div>')
     : '<div class="fac-partie-nom">—</div>';
 
@@ -5270,7 +5339,7 @@ function depRenderFacturePublique(c, ctx, cbApresQR){
     +       '<thead><tr><th>N&deg;</th><th>Description</th><th>Qt&eacute;</th><th>Unit&eacute;</th><th>Prix unitaire</th><th>Montant</th></tr></thead>'
     +       '<tbody>'
     +         '<tr><td>1</td><td>'+esc(c.colis||'Colis')+'</td><td>1</td><td>colis</td><td>'+esc(totalColisTxt)+'</td><td>'+esc(totalColisTxt)+'</td></tr>'
-    +         (c.livraisonDakar ? ('<tr><td>2</td><td>Livraison &agrave; Dakar'+(c.livraisonAdresse ? (' &mdash; '+esc(c.livraisonAdresse)) : '')+'</td><td>1</td><td>service</td><td>'+totalLivraison+' &euro;</td><td>'+totalLivraison+' &euro;</td></tr>') : '')
+    +         (c.livraisonDakar ? ('<tr><td>2</td><td>Livraison &agrave; Dakar'+((c.livraisonVille||c.livraisonVilleAutre||c.livraisonAdresse) ? (' &mdash; '+_depLivraisonLibelle(c)) : '')+'</td><td>1</td><td>service</td><td>'+totalLivraison+' &euro;</td><td>'+totalLivraison+' &euro;</td></tr>') : '')
     +       '</tbody>'
     +     '</table></div>'
 
@@ -5522,7 +5591,9 @@ function depRenderEtiquettes(c, ctx, n){
     ? ('<div class="etq-partie-nom">'+esc(c.destinataireNom)+'</div>'
        + '<div class="etq-partie-detail">'+esc(_depMasquerTel(c.destinataireTel))
        + (c.destinataireTel2 ? ' &middot; '+esc(_depMasquerTel(c.destinataireTel2)) : '')
-       + (c.livraisonDakar && c.livraisonAdresse ? '<br>'+esc(_depMasquerAdresse(c.livraisonAdresse)) : '')
+       + (c.livraisonDakar && (c.livraisonVille || c.livraisonVilleAutre || c.livraisonAdresse)
+           ? '<br>'+esc([c.livraisonVille||c.livraisonVilleAutre||'', c.livraisonAdresse ? _depMasquerAdresse(c.livraisonAdresse) : ''].filter(Boolean).join(' — '))
+           : '')
        + '</div>')
     : '<div class="etq-partie-nom">—</div>';
 
@@ -6086,7 +6157,7 @@ function depRenderFacture(c){
       + '<div style="background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:16px;margin-bottom:14px;text-align:center;">'
         + '<div style="font-size:11px;color:var(--text3);font-weight:800;text-transform:uppercase;letter-spacing:0.05em;">Total livraison</div>'
         + '<div style="font-size:22px;font-weight:800;color:var(--text);margin:4px 0;">' + prixLivraison + ' &euro;</div>'
-        + (c.livraisonAdresse ? '<div style="font-size:12px;color:var(--text3);margin-top:2px;">' + esc(c.livraisonAdresse) + '</div>' : '')
+        + ((c.livraisonVille||c.livraisonVilleAutre||c.livraisonAdresse) ? '<div style="font-size:12px;color:var(--text3);margin-top:2px;">' + _depLivraisonLibelle(c) + '</div>' : '')
       + '</div>'
       + '<div style="display:flex;gap:10px;margin-bottom:14px;">'
       + '<div style="flex:1;background:#fff;border:1.5px solid var(--border);border-radius:var(--radius-sm);padding:11px;text-align:center;">'
@@ -6594,7 +6665,7 @@ function depRenderFicheLecture(colId, clientId, depot){
           ? (kv('Destinataire', esc(c.destinataireNom||'—')
                 + (c.destinataireTel ? ('<br>'+_depLienTel(c.destinataireTel, c.destinataireTel)) : '')
                 + (c.destinataireTel2 ? ('<br>'+_depLienTel(c.destinataireTel2, c.destinataireTel2)) : ''))
-            + kv('Livraison &agrave; Dakar', esc(c.livraisonAdresse||'—') + '<br>' + ((c.prixLivraison||0)+'&nbsp;&euro;')))
+            + kv('Livraison &agrave; Dakar', _depLivraisonLibelle(c) + '<br>' + ((c.prixLivraison||0)+'&nbsp;&euro;')))
           : kv('Livraison &agrave; Dakar', 'Retrait sur place'))
     + '</div>'
     // v1.19.57 : photos du colis + possibilité d'en reprendre une (retour
@@ -6860,6 +6931,9 @@ window.depOuvrirDepotForm = function(departId, clientId, viaCarre){
     e = $('dp-liv-adresse');if(e) e.value = c.livraisonAdresse || '';
     e = $('dp-liv-prix');   if(e) e.value = c.prixLivraison ? String(c.prixLivraison) : '';
     e = $('dp-note');       if(e) e.value = c.note || '';
+    _depVilleRemplir('dp', c.livraisonVille, c.livraisonVilleAutre);
+  } else {
+    _depVilleRemplir('dp', '', '');
   }
 
   depSetLivraisonDepot(c.livraisonDakar === true);
@@ -7092,6 +7166,7 @@ window.depEnregistrerDepot = function(){
   var livraison = !!window._depLivraisonDepot;
   var ladresse  = livraison ? (($('dp-liv-adresse')||{}).value || '').trim() : '';
   var lprix     = livraison ? (parseFloat(($('dp-liv-prix')||{}).value) || 0) : 0;
+  var lville    = livraison ? _depVilleLire('dp') : { livraisonVille:'', livraisonVilleAutre:'' };
   var note      = (($('dp-note')||{}).value || '').trim();
   var civ       = _civDct.dp || '';
   var dept      = cp.substring(0,2);
@@ -7107,6 +7182,7 @@ window.depEnregistrerDepot = function(){
     departId: departId,
     destinataireNom: dnom, destinataireTel: dtel, destinataireTel2: dtel2,
     livraisonDakar: livraison, livraisonAdresse: ladresse, prixLivraison: lprix,
+    livraisonVille: lville.livraisonVille, livraisonVilleAutre: lville.livraisonVilleAutre,
     note: note,
     bg: (existant && existant.bg) || u.bg || '#eee',
     color: (existant && existant.color) || u.color || '#333',
@@ -7789,8 +7865,9 @@ function injecterChampsFiche(){
     +     '<button type="button" class="dep-st" id="e-liv-oui" onclick="depSetLivraisonFiche(true)">Oui &middot; livraison</button>'
     +   '</div></div>'
     + '<div id="e-liv-bloc" style="display:none;">'
-    +   '<div class="fg"><label class="fl">Ville / adresse de livraison</label>'
-    +     '<input class="fi" id="e-liv-adresse" placeholder="Guediawaye, quartier..."></div>'
+    +   _depChampVille('e')
+    +   '<div class="fg"><label class="fl">Adresse / quartier (pr&eacute;cision)</label>'
+    +     '<input class="fi" id="e-liv-adresse" placeholder="Quartier, rep&egrave;re..."></div>'
     +   '<div class="fg"><label class="fl">Prix de la livraison (&euro;)</label>'
     +     '<input class="fi" id="e-liv-prix" type="number" min="0" placeholder="0"></div>'
     +   '<div style="font-size:11.5px;color:var(--text3);background:#f7f7f7;border-radius:8px;padding:9px 11px;margin-bottom:12px;line-height:1.5;">'
@@ -7829,6 +7906,7 @@ function remplirFiche(clientId){
   e = $('e-dest-tel2');   if(e) e.value = c.destinataireTel2 || '';
   e = $('e-liv-adresse'); if(e) e.value = c.livraisonAdresse || '';
   e = $('e-liv-prix');    if(e) e.value = c.prixLivraison ? String(c.prixLivraison) : '';
+  _depVilleRemplir('e', c.livraisonVille, c.livraisonVilleAutre);
   depSetLivraisonFiche(c.livraisonDakar === true);
   _depChargerPhotosFiche(clientId, c);
 
@@ -7959,6 +8037,7 @@ function reinitialiserNouveauxChamps(){
   ['f-dest-nom','f-dest-tel','f-dest-tel2','f-liv-adresse','f-liv-prix','f-note'].forEach(function(id){
     var e = $(id); if(e) e.value = '';
   });
+  _depVilleRemplir('f', '', '');
   depSetLivraison(false);
   _depPrixIndefiniCollecte = false;
   depAppliquerPrixIndefiniCollecte();
@@ -8131,6 +8210,7 @@ window.depOuvrirValidation = function(id, tk, name, prix){
   if(dvLivBloc) dvLivBloc.style.display = livOui ? 'block' : 'none';
   var dvLivAdr = $('dv-liv-adresse'); if(dvLivAdr) dvLivAdr.value = fiche.livraisonAdresse || '';
   var dvLivPrix = $('dv-liv-prix'); if(dvLivPrix) dvLivPrix.value = fiche.prixLivraison || '';
+  _depVilleRemplir('dv', fiche.livraisonVille, fiche.livraisonVilleAutre);
 
   // v1.19.16 : ne proposer que les containers du pays déclaré à l'inscription
   // de ce client (Sénégal par défaut pour une fiche créée avant ce chantier).
@@ -8271,7 +8351,8 @@ window.depValiderConfirmer = function(){
   var livOui = !!($('dv-liv-oui') && $('dv-liv-oui').className.indexOf(' on') !== -1);
   var livAdresse = livOui ? (($('dv-liv-adresse')||{}).value || '').trim() : '';
   var livPrix = livOui ? (parseFloat(($('dv-liv-prix')||{}).value) || 0) : 0;
-  if(livOui && !livAdresse){ toast('⚠️ Indiquez la ville / adresse de livraison.'); return; }
+  var livVille = livOui ? _depVilleLire('dv') : { livraisonVille:'', livraisonVilleAutre:'' };
+  if(livOui && !livVille.livraisonVille && !livVille.livraisonVilleAutre){ toast('⚠️ Choisissez la ville de livraison.'); return; }
 
   var avant = {};
   try{ avant = JSON.parse(JSON.stringify(fiche)); }catch(e){}
@@ -8291,6 +8372,8 @@ window.depValiderConfirmer = function(){
   fiche.livraisonDakar = livOui;
   fiche.livraisonAdresse = livAdresse;
   fiche.prixLivraison = livPrix;
+  fiche.livraisonVille = livVille.livraisonVille;
+  fiche.livraisonVilleAutre = livVille.livraisonVilleAutre;
 
   var u = window.currentUser || {};
   if(departId !== (avant.departId || '')){
@@ -8331,6 +8414,8 @@ window.depValiderConfirmer = function(){
     destinataireTel: fiche.destinataireTel,
     livraisonDakar: !!fiche.livraisonDakar,
     livraisonAdresse: fiche.livraisonAdresse || '',
+    livraisonVille: fiche.livraisonVille || '',
+    livraisonVilleAutre: fiche.livraisonVilleAutre || '',
     prixLivraison: fiche.prixLivraison || 0,
     departId: fiche.departId,
     historiqueDepart: fiche.historiqueDepart || null,
@@ -8989,6 +9074,8 @@ function greffer(){
         livraisonDakar   : !!window._depLivraison,
         livraisonAdresse : window._depLivraison ? (($('f-liv-adresse')||{}).value || '').trim() : '',
         prixLivraison    : window._depLivraison ? (parseFloat(($('f-liv-prix')||{}).value) || 0) : 0,
+        livraisonVille      : window._depLivraison ? _depVilleLire('f').livraisonVille : '',
+        livraisonVilleAutre : window._depLivraison ? _depVilleLire('f').livraisonVilleAutre : '',
         // v1.19.16 : pays choisi dans la modale modal-dep-pays-client, avant
         // même de remplir la fiche — détermine les containers proposés
         // ensuite à la validation (voir depValiderRemplirDepart).
@@ -9099,7 +9186,9 @@ function greffer(){
         // telle quelle par le recollage ci-dessous (avant[k] -> fiche[k]).
         livraisonDakar   : !!window._depLivraisonFiche,
         livraisonAdresse : window._depLivraisonFiche ? (($('e-liv-adresse')||{}).value || '').trim() : '',
-        prixLivraison    : window._depLivraisonFiche ? (parseFloat(($('e-liv-prix')||{}).value) || 0) : 0
+        prixLivraison    : window._depLivraisonFiche ? (parseFloat(($('e-liv-prix')||{}).value) || 0) : 0,
+        livraisonVille      : window._depLivraisonFiche ? _depVilleLire('e').livraisonVille : '',
+        livraisonVilleAutre : window._depLivraisonFiche ? _depVilleLire('e').livraisonVilleAutre : ''
       };
 
       // v1.19.49 : le prix redevient modifiable depuis cette fiche (voir
@@ -9492,7 +9581,12 @@ function greffer(){
         // une nouvelle entrée du Suivi à chaque fois — jamais pré-remplie.
         g('fa-note', '');
         depSetLivraisonFrance(!!c.livraisonDakar);
-        if(c.livraisonDakar){ g('fa-liv-adresse', c.livraisonAdresse); g('fa-liv-prix', c.prixLivraison ? String(c.prixLivraison) : ''); }
+        if(c.livraisonDakar){
+          g('fa-liv-adresse', c.livraisonAdresse); g('fa-liv-prix', c.prixLivraison ? String(c.prixLivraison) : '');
+          _depVilleRemplir('fa', c.livraisonVille, c.livraisonVilleAutre);
+        } else {
+          _depVilleRemplir('fa', '', '');
+        }
         _frPrixIndefini = !!c.prixADefinir;
         depAppliquerPrixIndefiniFrance();
         window._frClientPaysChoisi = c.paysDestination || null;
@@ -9660,6 +9754,8 @@ function greffer(){
           maj['clients/'+id+'/livraisonDakar']    = !!_frLivraison;
           maj['clients/'+id+'/livraisonAdresse']  = _frLivraison ? (($('fa-liv-adresse')||{}).value || '').trim() : '';
           maj['clients/'+id+'/prixLivraison']     = _frLivraison ? (parseFloat(($('fa-liv-prix')||{}).value) || 0) : 0;
+          maj['clients/'+id+'/livraisonVille']      = _frLivraison ? _depVilleLire('fa').livraisonVille : '';
+          maj['clients/'+id+'/livraisonVilleAutre'] = _frLivraison ? _depVilleLire('fa').livraisonVilleAutre : '';
           maj['clients/'+id+'/prixADefinir']      = !!_frPrixIndefini;
           // v1.19.60 : la note tapée à l'inscription/modification n'existait
           // nulle part ensuite (champ "note" mort) — retour de Cobey du
@@ -9995,7 +10091,28 @@ function greffer(){
   if(typeof window.confirmDelete === 'function' && !window.confirmDelete._depPatch){
     var origConfirmDelete = window.confirmDelete;
     window.confirmDelete = function(){
+      // v1.20.15 : capturés AVANT l'appel natif — currentClientId/
+      // currentCollecteId peuvent changer une fois goTo(clientRetour)
+      // exécuté par confirmDelete() lui-même.
+      var _delClientId = window.currentClientId;
+      var _delCollecteId = window.currentCollecteId;
       origConfirmDelete.apply(this, arguments);
+      // v1.20.15 : suppression Firebase CIBLÉE et immédiate, en plus du
+      // sauvegarder() natif — celui-ci réécrit TOUT l'arbre
+      // clientsParCollecte, en debounce 800ms. Si un autre appareil
+      // connecté a encore en mémoire une copie pas tout à fait à jour
+      // (avant cette suppression) et déclenche lui aussi une sauvegarde
+      // dans la foulée, sa réécriture complète peut faire "revenir" le
+      // client qu'on vient d'effacer. Ce retrait ciblé, immédiat, réduit
+      // fortement ce risque : Firebase reflète la suppression tout de
+      // suite, avant qu'un autre appareil n'ait la chance de la
+      // recouvrir par erreur (retour de Cobey du 03/09/2026 : "les
+      // clients test effacés reviennent").
+      try{
+        if(_delClientId && _delCollecteId && window.db && window.firebaseReady){
+          window.db.ref('dct/clients/'+_delCollecteId+'/'+_delClientId).remove();
+        }
+      }catch(e){ console.error('departs: suppression ciblée Firebase', e); }
       setTimeout(function(){
         try{
           var a = document.querySelector('.screen.active');
@@ -10465,7 +10582,7 @@ window.depRenderListeDevis = function(){
       // v1.19.88 : livraison affichée à part, jamais additionnée au montant
       // du devis (retour de Cobey du 29/08/2026 : "ça tout additionner
       // c'est pas bon") — même logique que sur la facture définitive.
-      +   (d.livraison ? ('<div class="dep-meta" style="margin-top:4px;"><span>&#128666; Livraison (hors montant)'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+(d.livraisonPrix ? (' &middot; '+d.livraisonPrix+' &euro;') : '')+'</span></div>') : '')
+      +   (d.livraison ? ('<div class="dep-meta" style="margin-top:4px;"><span>&#128666; Livraison (hors montant)'+((d.livraisonVille||d.livraisonVilleAutre||d.livraisonAdresse) ? (' — '+_depLivraisonLibelle(d)) : '')+(d.livraisonPrix ? (' &middot; '+d.livraisonPrix+' &euro;') : '')+'</span></div>') : '')
       +   '<div class="dep-cli-btns">'
       +     '<button class="dep-cli-btn" onclick="depOuvrirDevisDoc(\''+d._id+'\')">&#128196; PDF</button>'
       +     '<button class="dep-cli-btn" onclick="depDevisModifier(\''+d._id+'\')">&#9999;&#65039; Modifier</button>'
@@ -10540,6 +10657,7 @@ window.depDevisModifier = function(id){
   depDevisSetLivraison(!!d.livraison);
   var fla = $('devis-f-liv-adresse'); if(fla) fla.value = d.livraisonAdresse || '';
   var flp = $('devis-f-liv-prix'); if(flp) flp.value = (d.livraisonPrix ? d.livraisonPrix : '');
+  _depVilleRemplir('devis-f', d.livraisonVille, d.livraisonVilleAutre);
   _depDevisRenderCiv();
   var badge = $('devis-pays-badge');
   if(badge){
@@ -10601,6 +10719,13 @@ window.depDevisEnregistrer = function(){
     livraisonPrix: liv ? (parseFloat(($('devis-f-liv-prix')||{}).value) || 0) : 0,
     montant: montant
   };
+  if(liv){
+    var lvDevis = _depVilleLire('devis-f');
+    obj.livraisonVille = lvDevis.livraisonVille;
+    obj.livraisonVilleAutre = lvDevis.livraisonVilleAutre;
+  } else {
+    obj.livraisonVille = ''; obj.livraisonVilleAutre = '';
+  }
 
   var editId = window._depDevisEditId;
   if(editId){
@@ -10718,7 +10843,7 @@ function depRenderDevisDoc(d){
                 ? (  '<div class="fac-totaux-ligne fac-totaux-total"><span>TOTAL &Agrave; PAYER</span><span>'+(montantTransport+totalLivraison)+' &euro;</span></div>'
                    + '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed #ddd;">'
                    + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Montant colis / transport</span><span>'+montantTransport+' &euro;</span></div>'
-                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar'+(d.livraisonAdresse ? (' — '+esc(d.livraisonAdresse)) : '')+'</span><span>'+totalLivraison+' &euro;</span></div>'
+                   + '<div class="fac-totaux-ligne" style="font-size:10.5px;color:#888;"><span>Livraison &agrave; Dakar'+((d.livraisonVille||d.livraisonVilleAutre||d.livraisonAdresse) ? (' — '+_depLivraisonLibelle(d)) : '')+'</span><span>'+totalLivraison+' &euro;</span></div>'
                    + '</div>')
                 : ('<div class="fac-totaux-ligne fac-totaux-total"><span>MONTANT</span><span>'+montantTransport+' &euro;</span></div>')
               )
@@ -10832,6 +10957,7 @@ window.depDevisValiderVers = function(parcours, collecteId){
       depSetLivraisonFrance(true);
       var fla = $('fa-liv-adresse'); if(fla) fla.value = snap.livraisonAdresse || '';
       var flp = $('fa-liv-prix'); if(flp) flp.value = snap.livraisonPrix || '';
+      _depVilleRemplir('fa', snap.livraisonVille, snap.livraisonVilleAutre);
     }
   } else {
     // v1.19.93 : on rejoint explicitement la collecte choisie par le
@@ -10855,6 +10981,7 @@ window.depDevisValiderVers = function(parcours, collecteId){
       depSetLivraison(true);
       var la = $('f-liv-adresse'); if(la) la.value = snap.livraisonAdresse || '';
       var lp = $('f-liv-prix'); if(lp) lp.value = snap.livraisonPrix || '';
+      _depVilleRemplir('f', snap.livraisonVille, snap.livraisonVilleAutre);
     }
   }
   toast('✅ Devis transformé — complétez les informations manquantes (date de collecte, destinataire, photos...).');
