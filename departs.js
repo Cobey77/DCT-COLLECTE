@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.20';
+var DEP_VERSION = 'v1.20.21';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -2324,6 +2324,7 @@ function injecterEcrans(){
     + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Dans quel parcours faut-il inscrire ce client ?</div>'
     + '<div style="display:flex;flex-direction:column;gap:10px;">'
     +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisDemanderCollecte()">&#128197; Collecte</button>'
+    +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisDemanderDepot()">&#127970; D&eacute;p&ocirc;t direct</button>'
     +   '<button type="button" class="dep-st" style="padding:16px;font-size:15px;" onclick="depDevisValiderVers(\'france\')">&#127467;&#127479;&#127466;&#127482; France &amp; Europe</button>'
     + '</div>'
     + '<div class="modal-confirm-btns" style="margin-top:14px;">'
@@ -2347,6 +2348,23 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-devis-collecte\')">Annuler</button>'
     + '</div></div></div>';
   document.body.appendChild(m13b);
+
+  /* ---- Modale (v1.20.21) : choix DU CONTAINER au moment de valider un
+     devis vers le Dépôt direct — même principe que modal-devis-collecte
+     (retour de Cobey du 03/09/2026 : le devis ne proposait pas le Dépôt
+     comme destination possible, uniquement Collecte ou France & Europe). ---- */
+  var m13c = document.createElement('div');
+  m13c.className = 'modal-overlay';
+  m13c.id = 'modal-devis-depot';
+  m13c.innerHTML = '<div class="modal-sheet" style="max-height:70vh;overflow-y:auto;"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#127970;</div>'
+    + '<div class="modal-confirm-title">Choisir le container</div>'
+    + '<div style="font-size:13px;color:#555;margin:4px 0 16px;">Dans quel d&eacute;part faut-il inscrire ce client au d&eacute;p&ocirc;t ?</div>'
+    + '<div id="devis-depot-liste" style="text-align:left;"></div>'
+    + '<div class="modal-confirm-btns" style="margin-top:14px;">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-devis-depot\')">Annuler</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m13c);
 
   /* ---- Modale (v1.19.85) : refus d'un devis — suppression définitive. ---- */
   var m14 = document.createElement('div');
@@ -6920,6 +6938,13 @@ window.depOuvrirDepotForm = function(departId, clientId, viaCarre){
   _depDepotDepart = departId;
   _depDepotEditId = clientId || null;
   window._depDepotPhotos = [];
+  // v1.20.21 : nouvelle ouverture "normale" (pas via un devis) — on oublie
+  // tout devis en cours de redirection, pour ne jamais le supprimer par
+  // erreur au prochain enregistrement (voir depDevisValiderVers, qui
+  // reposera ce marqueur juste après cet appel s'il s'agit bien d'une
+  // redirection depuis un devis) — même mécanisme que ouvrirAjoutClient/
+  // ouvrirAjoutFrance.
+  window._depDevisEnCoursId = null;
 
   var titre = $('dp-form-titre');
   if(titre) titre.textContent = clientId ? 'Modifier ce client' : 'Client au dépôt';
@@ -7248,6 +7273,14 @@ window.depEnregistrerDepot = function(){
   }
 
   db.ref('dct_depot/'+id).set(fiche);
+  // v1.20.21 : le devis d'origine (voir depDevisValiderVers) n'est
+  // supprimé qu'ICI, une fois la fiche vraiment enregistrée — pas au
+  // moment du choix du container — même logique que pour Collecte et
+  // France & Europe (v1.19.86). Uniquement à la création (pas en édition).
+  if(!existant && window._depDevisEnCoursId){
+    try{ db.ref('devis/'+window._depDevisEnCoursId).remove(); }catch(eDv){}
+    window._depDevisEnCoursId = null;
+  }
   if(photosDepot.length){
     var mapPhotosDepot = {};
     photosDepot.forEach(function(p, i){ mapPhotosDepot['p'+i] = p; });
@@ -10938,6 +10971,41 @@ window.depDevisChoisirCollecteEtValider = function(collecteId){
   depDevisValiderVers('collecte', collecteId);
 };
 
+// v1.20.21 : symétrique de depDevisDemanderCollecte, pour le Dépôt direct
+// — on demande d'abord DANS QUEL CONTAINER inscrire le client (un
+// container par pays/date, voir departsDisponibles), avant d'ouvrir le
+// formulaire dépôt pré-rempli.
+window.depDevisDemanderDepot = function(){
+  closeModal('modal-devis-valider');
+  _depDevisRenderChoixDepot();
+  openModal('modal-devis-depot');
+};
+
+function _depDevisRenderChoixDepot(){
+  var box = $('devis-depot-liste');
+  if(!box) return;
+  var deps = departsDisponibles();
+  if(!deps.length){
+    box.innerHTML = '<div style="text-align:center;color:#999;font-size:13px;padding:16px;line-height:1.6;">Aucun d&eacute;part ouvert &agrave; l\'inscription pour l\'instant.</div>';
+    return;
+  }
+  var h = '';
+  deps.forEach(function(d){
+    var pays = DEP_PAYS_DEST[depPaysDepart(d)] || DEP_PAYS_DEST[DEP_PAYS_DEFAUT];
+    h += '<div onclick="depDevisChoisirDepotEtValider(\''+d._id+'\')" '
+      + 'style="display:flex;align-items:center;gap:10px;padding:11px 12px;border:1.5px solid #eee;border-radius:10px;margin-bottom:8px;cursor:pointer;">'
+      +   '<div style="flex:1;"><div style="font-size:13.5px;font-weight:800;color:#1a1a2e;">'+pays.drapeau+' '+esc(d.nom||'D&eacute;part')+'</div>'
+      +     '<div style="font-size:11.5px;color:#888;">Part le '+dateFr(d.dateDepart)+'</div></div>'
+      + '</div>';
+  });
+  box.innerHTML = h;
+}
+
+window.depDevisChoisirDepotEtValider = function(departId){
+  closeModal('modal-devis-depot');
+  depDevisValiderVers('depot', departId);
+};
+
 // v1.19.85 : le parcours (Collecte / France & Europe) se choisit ici, au
 // moment de valider — voir modal-devis-valider.
 // v1.19.86 : le devis n'est PLUS supprimé ici — seulement une fois la
@@ -10979,6 +11047,27 @@ window.depDevisValiderVers = function(parcours, collecteId){
       var flp = $('fa-liv-prix'); if(flp) flp.value = snap.livraisonPrix || '';
       _depVilleRemplir('fa', snap.livraisonVille, snap.livraisonVilleAutre);
     }
+  } else if(parcours === 'depot'){
+    // v1.20.21 : Dépôt direct ajouté comme 3e destination possible pour un
+    // devis (retour de Cobey du 03/09/2026 : seules Collecte et France &
+    // Europe étaient proposées). "collecteId" porte ici l'id du container
+    // choisi via modal-devis-depot.
+    if(!collecteId){ toast('⚠️ Choisissez d\'abord le container.'); return; }
+    depOuvrirDepotForm(collecteId, null, false);
+    window._depDevisEnCoursId = id;
+    var dprenom = $('dp-prenom'); if(dprenom) dprenom.value = snap.prenom || '';
+    var dnom = $('dp-nom'); if(dnom) dnom.value = snap.nom || '';
+    var dtel = $('dp-tel'); if(dtel) dtel.value = snap.tel || '';
+    var dadr = $('dp-adresse'); if(dadr) dadr.value = snap.adresse || '';
+    var dcolis = $('dp-colis'); if(dcolis) dcolis.value = snap.colis || '';
+    var dprix = $('dp-prix'); if(dprix) dprix.value = snap.montant || '';
+    try{ _civDct.dp = snap.civilite || ''; _renderCivDct('dp'); }catch(eCiv3){}
+    if(snap.livraison){
+      depSetLivraisonDepot(true);
+      var dla = $('dp-liv-adresse'); if(dla) dla.value = snap.livraisonAdresse || '';
+      var dlp = $('dp-liv-prix'); if(dlp) dlp.value = snap.livraisonPrix || '';
+      _depVilleRemplir('dp', snap.livraisonVille, snap.livraisonVilleAutre);
+    }
   } else {
     // v1.19.93 : on rejoint explicitement la collecte choisie par le
     // collaborateur (modal-devis-collecte) avant d'ouvrir le formulaire —
@@ -11004,7 +11093,7 @@ window.depDevisValiderVers = function(parcours, collecteId){
       _depVilleRemplir('f', snap.livraisonVille, snap.livraisonVilleAutre);
     }
   }
-  toast('✅ Devis transformé — complétez les informations manquantes (date de collecte, destinataire, photos...).');
+  toast('✅ Devis transformé — complétez les informations manquantes puis enregistrez.');
 };
 
 window.depDevisDemanderRefuser = function(id){
