@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.12';
+var DEP_VERSION = 'v1.20.13';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -693,6 +693,11 @@ var _depDepotDepart = null;     // départ dans lequel on inscrit / consulte un 
 var _depDepotEditId = null;     // id du client dépôt en cours de modification (null = création)
 window._depDepotPhotos = [];    // photos en attente pour le formulaire dépôt (v1.16.0 : jusqu'à PHOTO_MAX)
 var _depAjoutClientCarre = false; // true : le prochain saveClientConfirme() vient du carré Client
+// v1.20.13 : contexte de la fiche en lecture actuellement affichée
+// (#s-dep-fiche-lecture) — utilisé par ses boutons d'action (Modifier/
+// Photo/Note) pour savoir si c'est un client dépôt direct ou collecte,
+// et via quel écran y revenir (voir depOuvrirFicheDepot).
+var _depFicheLectureCtx = null; // { colId, clientId, depot, departId, viaCarre }
 
 // true seulement après une vraie connexion (posé dans la greffe sur
 // _finalisLoginCore) — contrairement à window.currentUser, qui est
@@ -2525,7 +2530,7 @@ function _depDepotCarreRenderListe(filtre){
     liste.forEach(function(x){
       var c = x.c;
       var clic = x.depot
-        ? "depOuvrirDepotForm('"+departId+"','"+x.clientId+"',true)"
+        ? "depOuvrirFicheDepot('"+departId+"','"+x.clientId+"',true)"
         : (x.france
           ? "depOuvrirFicheFranceDepuisCarre('"+x.clientId+"','"+departId+"')"
           : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"',true)");
@@ -4126,7 +4131,7 @@ window.depDetail = function(id, gardeFiltres){
       // container) reste utile ici.
       var peutDetacher = peutBouger && !estDepot;
       var clic = x.depot
-        ? "depOuvrirDepotForm('"+id+"','"+x.clientId+"')"
+        ? "depOuvrirFicheDepot('"+id+"','"+x.clientId+"')"
         : (x.france
           ? "depOuvrirFicheFranceDepuisDepart('"+x.clientId+"','"+id+"')"
           : "depOuvrirFicheClient('"+x.collecteId+"','"+x.clientId+"')");
@@ -6516,11 +6521,15 @@ function depRenderSuivi(c, collecteId, boxId){
    puis bouton "Modifier" pour ouvrir le vrai formulaire.
    ───────────────────────────────────────────── */
 
-function depRenderFicheLecture(colId, clientId){
-  var c = ((window.clientsParCollecte||{})[colId]||{})[clientId];
+function depRenderFicheLecture(colId, clientId, depot){
+  var c = depot ? (window.depotClients||{})[clientId] : ((window.clientsParCollecte||{})[colId]||{})[clientId];
   var box = $('dep-ficheL-content');
   var titre = $('dep-ficheL-nom');
   if(!c || !box) return;
+  // v1.20.13 : mémorisé pour les boutons d'action plus bas (Modifier/
+  // Photo/Note) — voir _depFicheLectureCtx.
+  _depFicheLectureCtx = { colId: colId, clientId: clientId, depot: !!depot,
+    departId: depot ? c.departId : null, viaCarre: !!_depDepotViaCarre };
   // v1.19.45 : drapeau pays sur la fiche aussi (voir dep-cli-n, même
   // demande de Cobey).
   var drapeauTitre = '';
@@ -6595,11 +6604,11 @@ function depRenderFicheLecture(colId, clientId){
     + '<div class="dep-fiche-card"><div class="dep-sec" style="margin-top:6px;padding-top:0;border-top:none;">Photos du colis</div>'
     +   '<div id="dep-ficheL-photos-box" style="margin-bottom:8px;"></div>'
     +   '<button type="button" class="btn btn-gray" style="background:#F3EFFF;border-color:#D9C8F5;color:#6d28d9;" '
-    +     'onclick="depAjouterPhotoFiche(\''+colId+'\',\''+clientId+'\')">&#128247; Ajouter une photo</button>'
+    +     'onclick="depAjouterPhotoFiche()">&#128247; Ajouter une photo</button>'
     + '</div>'
     + '<div class="dep-fiche-card"><div class="dep-sec" style="margin-top:6px;padding-top:0;border-top:none;">Suivi</div><div id="dep-ficheL-suivi"></div>'
     +   '<button type="button" class="btn btn-gray" style="background:#FFF9DB;border-color:#F0E2A0;color:#8A7300;margin-top:10px;" '
-    +     'onclick="depOuvrirNoteFiche(\''+colId+'\',\''+clientId+'\')">&#128221; Ajouter une note</button>'
+    +     'onclick="depOuvrirNoteFiche()">&#128221; Ajouter une note</button>'
     + '</div>'
     + '<div id="dep-ficheL-actions"></div>';
 
@@ -6607,8 +6616,10 @@ function depRenderFicheLecture(colId, clientId){
   _depChargerPhotosFiche(clientId, c, 'dep-ficheL-photos-box');
   depRenderSuivi(c, colId, 'dep-ficheL-suivi');
 
+  // v1.20.13 : le Dépôt direct n'a pas de collecte à clôturer — pas de
+  // verrou pour ces fiches-là.
   var loc = false;
-  try{ loc = isLocked(); }catch(e2){}
+  try{ loc = !depot && isLocked(); }catch(e2){}
   var act = $('dep-ficheL-actions');
   if(act){
     act.innerHTML = loc
@@ -6621,7 +6632,15 @@ function depRenderFicheLecture(colId, clientId){
 // ouvre le vrai formulaire. Sécurité : ne fait rien si la collecte est
 // réellement terminée (isLocked() prime toujours, comme pour
 // depDeverouillerFiche ci-dessous).
+// v1.20.13 : Dépôt direct — pas de garde native à lever, ouvre directement
+// le formulaire dédié (depOuvrirDepotForm), en revenant au bon endroit
+// (carré Dépôt ou carré Départ, voir _depFicheLectureCtx).
 window.depModifierFicheActuelle = function(){
+  var ctx = _depFicheLectureCtx;
+  if(ctx && ctx.depot){
+    depOuvrirDepotForm(ctx.departId, ctx.clientId, ctx.viaCarre);
+    return;
+  }
   var loc = false;
   try{ loc = isLocked(); }catch(e){}
   if(loc) return;
@@ -6649,21 +6668,23 @@ function _depEncaissePar(c){
    la saisie dans la modale sert déjà de validation explicite.
    ───────────────────────────────────────────── */
 
-window.depOuvrirNoteFiche = function(colId, clientId){
-  _depNoteFichePending = { colId: colId, id: clientId };
+window.depOuvrirNoteFiche = function(){
   var t = $('dep-note-fiche-texte');
   if(t) t.value = '';
   openModal('modal-dep-note-fiche');
 };
 
+// v1.20.13 : s'appuie désormais sur _depFicheLectureCtx (posé par
+// depRenderFicheLecture) au lieu d'un colId/clientId figé — fonctionne
+// aussi pour un client Dépôt direct (écrit via _depEcrireClient).
 window.depEnregistrerNoteFiche = function(){
-  var p = _depNoteFichePending;
-  if(!p){ closeModal('modal-dep-note-fiche'); return; }
+  var ctx = _depFicheLectureCtx;
+  if(!ctx){ closeModal('modal-dep-note-fiche'); return; }
   var t = $('dep-note-fiche-texte');
   var texte = (t && t.value || '').trim();
   if(!texte){ toast('⚠️ &Eacute;crivez une note avant d\'enregistrer.'); return; }
 
-  var fiche = ((window.clientsParCollecte||{})[p.colId]||{})[p.id];
+  var fiche = ctx.depot ? (window.depotClients||{})[ctx.clientId] : ((window.clientsParCollecte||{})[ctx.colId]||{})[ctx.clientId];
   if(!fiche){ closeModal('modal-dep-note-fiche'); return; }
 
   if(!Array.isArray(fiche.hist)) fiche.hist = [];
@@ -6675,9 +6696,9 @@ window.depEnregistrerNoteFiche = function(){
   });
 
   closeModal('modal-dep-note-fiche');
-  _depNoteFichePending = null;
-  try{ sauvegarder(); }catch(e){ console.error('departs: sauvegarder note fiche', e); }
-  try{ depRenderFicheLecture(p.colId, p.id); }catch(e2){ console.error('departs: rafraîchir fiche après note', e2); }
+  if(ctx.depot) _depEcrireClient({ depot: true, clientId: ctx.clientId }, { hist: fiche.hist });
+  else try{ sauvegarder(); }catch(e){ console.error('departs: sauvegarder note fiche', e); }
+  try{ depRenderFicheLecture(ctx.colId, ctx.clientId, ctx.depot); }catch(e2){ console.error('departs: rafraîchir fiche après note', e2); }
   toast('📝 Note ajoutée.');
 };
 
@@ -6694,36 +6715,38 @@ window.depEnregistrerNoteFiche = function(){
 
 var _depFichePhotoPending = null;
 
-window.depAjouterPhotoFiche = function(colId, clientId){
+window.depAjouterPhotoFiche = function(){
   var deja = (window._depPhotosFicheCourantes || []).length;
   if(deja >= PHOTO_MAX){ toast('⚠️ ' + PHOTO_MAX + ' photos maximum.'); return; }
-  _depFichePhotoPending = { colId: colId, id: clientId };
   var i = $('dep-ficheL-photo-input');
   if(i) i.click();
 };
 
+// v1.20.13 : s'appuie désormais sur _depFicheLectureCtx — fonctionne aussi
+// pour un client Dépôt direct (écrit via _depEcrireClient).
 window.depFicheLPhotoChoisie = function(input){
   var f = input && input.files && input.files[0];
   input.value = '';
   if(!f) return;
-  var p = _depFichePhotoPending;
-  if(!p){ return; }
+  var ctx = _depFicheLectureCtx;
+  if(!ctx){ return; }
   if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
   toast('⏳ Préparation de la photo…');
   try{
     _compresserPhoto(f, function(data){
       if(!data){ toast('❌ Photo illisible.'); return; }
       var u = window.currentUser || {};
-      db.ref('dct_photos_colis/'+p.id).push({ d: data, ts: Date.now(), q: (u.name||''), uid: (u.id||'') });
+      db.ref('dct_photos_colis/'+ctx.clientId).push({ d: data, ts: Date.now(), q: (u.name||''), uid: (u.id||'') });
 
-      var fiche = ((window.clientsParCollecte||{})[p.colId]||{})[p.id];
+      var fiche = ctx.depot ? (window.depotClients||{})[ctx.clientId] : ((window.clientsParCollecte||{})[ctx.colId]||{})[ctx.clientId];
       if(fiche){
         fiche.aPhotoColis = true;
         if(!Array.isArray(fiche.hist)) fiche.hist = [];
         fiche.hist.push({ q: (u.name||u.id||''), a: 'a ajout&eacute; une nouvelle photo du colis', ts: Date.now(), type: 'photo' });
-        try{ sauvegarder(); }catch(e){ console.error('departs: sauvegarder photo fiche', e); }
+        if(ctx.depot) _depEcrireClient({ depot: true, clientId: ctx.clientId }, { aPhotoColis: true, hist: fiche.hist });
+        else try{ sauvegarder(); }catch(e){ console.error('departs: sauvegarder photo fiche', e); }
       }
-      try{ depRenderFicheLecture(p.colId, p.id); }catch(e2){ console.error('departs: rafraîchir fiche après photo', e2); }
+      try{ depRenderFicheLecture(ctx.colId, ctx.clientId, ctx.depot); }catch(e2){ console.error('departs: rafraîchir fiche après photo', e2); }
       toast('📷 Photo ajoutée.');
     });
   }catch(e3){ toast('❌ Photo illisible.'); }
@@ -6771,6 +6794,26 @@ window.depOuvrirFicheClient = function(collecteId, clientId, viaCarreDepot){
     : function(){ depDetail(_depDetailId); };
   var bk = $('client-back'); if(bk) bk.onclick = retourDepart;
   var cn = $('client-cancel'); if(cn) cn.onclick = retourDepart;
+};
+
+// v1.20.13 : ouvre la fiche en LECTURE SEULE d'un client Dépôt direct
+// (même écran/présentation que pour un client de collecte — voir
+// depOuvrirFicheClient/depRenderFicheLecture), au lieu de tomber
+// directement sur le formulaire de modification. "✏️ Modifier la fiche"
+// y ouvre ensuite le vrai formulaire (depOuvrirDepotForm, plus bas).
+// Retour de Cobey du 03/09/2026, valable pour le carré Départ ET le
+// carré Dépôt.
+window.depOuvrirFicheDepot = function(departId, clientId, viaCarre){
+  var c = (window.depotClients||{})[clientId];
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+  _depDepotViaCarre = !!viaCarre;
+  _depDepotDepart = departId;
+  var retour = viaCarre
+    ? function(){ depCarreDepotContainer(departId); }
+    : function(){ depDetail(departId); };
+  var bk = $('client-back'); if(bk) bk.onclick = retour;
+  depRenderFicheLecture('', clientId, true);
+  goTo('s-dep-fiche-lecture');
 };
 
 /* ─────────────────────────────────────────────
