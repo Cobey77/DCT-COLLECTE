@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.18';
+var DEP_VERSION = 'v1.20.20';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -538,20 +538,40 @@ function depNomParDefaut(pays){ return DEP_NOM_CHARGEMENT[pays] || DEP_NOM_CHARG
 // couvre ce qui manque, sans jamais bloquer une inscription — liste à
 // compléter au fil de l'eau si besoin (juste ajouter un nom ici).
 var DEP_VILLES_SENEGAL = ["Adéane","Aéré Lao","Affe Djolof","Agnam Civol","Aoure","Baba Garage","Badegne Ouolof","Badion","Bagadadji","Baghere","Bakel","Bala","Balinghore","Ballou","Bamba Thialene","Bambali","Bambey","Bambilor","Bandafassi","Bani Israel","Bargny","Barkédji","Bassoul","Bele","Bembou","Bemet Bidjini","Bignarabe","Bignona","Birkelane","Biscuiterie","Bodé Lao","Boghal","Boke Dialloube","Bokhol","Bokidiawé","Bokiladji","Bona","Bonconto","Boulal","Boulel","Bounkiling","Bourouco","Boutoucoufara","Boutoupa Camaracounda","Boynguel Bamba","Camberene","Cap Skirring","Chérif Lô","Coki","Colobane","Coubalan","Coumbacara","Dabaly","Dabia","Dabo","Dagana","Dahra","Dakar","Dakar Plateau","Dakately","Dalifort","Dalla Ngabou","Dar Salam","Dara Mboss","Darou Khoudoss","Darou Marnane","Darou Minam","Darou Mouhty","Darou Nahim","Darou Salam","Darou Salam Typ","Dealy","Dembancané","Démette","Dendeye Gouy Gui","Diacounda","Diagane Barka","Diakhao","Dialacoto","Dialambere","Diama","Diamagadio","Diamaguene Sicap Mbao","Diamal","Diambati","Diamniadio","Dianké Makha","Dianke Souf","Diannah Ba","Diannah Malary","Diaobé-Kabendou","Diaoule","Diaroume","Diarrere","Diass","Diattacounda","Diawara","Diegoune","Diende","Diender","Dieuppeul Derkle","Dimboli","Dindéfélo","Dinguiraye","Diofior","Diokoul Belbouck","Diokoul Diawrigne","Dionewar","Diossong","Diouboudou","Dioulacolon","Diouloulou","Diourbel","Diouroup","Djibabouya","Djibanar","Djibidione","Djidah Thiaroye Kao","Djilasse","Djilor","Djinaky","Djinany","Djiredji","Djirnda","Dodel","Dodji","Dougue","Doumga Lao","Dya","Enampore","Ethiolo","Fafacourou","Fanaye","Fandene","Fann Point E Amitie","Faoune","Fass","Fass Ngom","Fass Thiekene","Fatick","Fimela","Fissel","Fongolimbi","Foundiougne","Gabou","Gade Escale","Gaé","Gagnick","Gainthe Kaye","Galoya Toucouleur","Gamadji Sare","Gande","Gandiaye","Gandon","Gassane","Gathiary","Gawane","Gniby","Golf Sud","Gollere","Goree","Gossas","Goudiry","Goudomp","Goumbayel","Grand Dakar","Grand Yoff","Guédé Chantier","Guede Village","Guédiawaye","Guéoul","Guet Ardo","Gueule Tapee Fass Colobane","Guinaw Rail Nord","Guinaw Rail Sud","Guinguinéo","Guiro Yero Bocar","Hamady Hounare","Hann Bel Air","Hlm","Ida Mouride","Inor","Jaxaay-Parcelles-Niakoul Rap","Joal-Fadiouth","Kab Gaye","Kael","Kaffrine","Kafountine","Kahene","Kahi","Kahone","Kamb","Kandia","Kandiaye","Kandion Mangana","Kanel","Kanene Ndiob","Kaolack","Kaour","Karang Poste","Karantaba","Kartiack","Kataba 1","Kathiotte","Kayar","Kayemor","Kébémer","Kédougou","Kelle Guèye","Kerewane","Keur Baka","Keur Maba Diakhou","Keur Madiabel","Keur Mandongo","Keur Massar","Keur Massar Nord","Keur Massar Sud","Keur Mboucki","Keur Momar Sarr","Keur Moussa","Keur Ngalgou","Keur Saloum Diane","Keur Samba Gueye","Keur Samba Kane","Keur Soce","Kevoye","Khelcom","Khelcom Birane","Khombole","Khossanto","Kidira","Koar","Kolda","Kolibantang","Komoti","Kothiary","Koul","Koulinto","Koulor","Koumpentoum","Koungheul","Kounkané","Koussan","Koussanar","Koussy","Kouthia Guaydi","Kouthiaba Wolof","Labgar","Lambaye","Latmingué","Léona","Linguère","Linkering","Loro","Louga","Lougre Thioly","Loul Sessène","Lour Escale","Mabo","Madina","Madina Foulbe","Madina Ndiathbe","Madina Wandifa","Maka Yop","Makacoulibantang","Malem Hodar","Malem Niani","Malicounda","Malika","Mampatim","Mangagoulack","Mangaroungou Santo","Marsassoum","Matam","Mbacké","Mbacke Cajor","Mbadakhoune","Mbadiane","Mbam","Mbane","Mbao","Mbar","Mbayene","Mbediene","Mbellacadiao","Mbeuleukhe","Mbeuleup","Mbolo Birane","Mboro","Mboss","Mboula","Mboumba","Mbour","Méckhé","Medina","Medina Baffe","Medina Cherif","Medina El Hadj","Medina Gounass","Médina Sabakh","Médina Yoro Foulah","Medinatoul Salam 2","Meouane","Mereto","Mérina Dakhar","Mermoz Sacre Coeur","Mery","Missira Sirimana","Missirah","Missirah Wadène","Mlomp","Mont-Rolland","Moudéry","Mpal","Nabadji Civol","Ndame","Ndande","Ndangalma","Ndankh Sène","Ndendory","Ndiaffate","Ndiaganiao","Ndiagne","Ndiago","Ndiamacouta","Ndiamalathiel","Ndiareme Limamoulaye","Ndiayène Pendao","Ndiebel","Ndiébène Gandiole","Ndiédieng","Ndiene Lagane","Ndieyene Sirakh","Ndindy","Ndiob","Ndiobene Samba Lamo","Ndiognick","Ndiop","Ndioum","Ndioum Ngainth","Ndioumane","Ndoffane","Ndoga Babacar","Ndombo Sandjiry","Ndondol","Ndorna","Ndoulo","Ndoyene","Ndrame Escale","Nemataba","Néttéboulou","Ngainthe Pathe","Nganda","Ngandiouf","Ngaparou","Ngathie Naoude","Ngayene","Ngayokheme","Nghaye","Ngnith","Ngogom","Ngohe","Ngor","Ngoudiane","Ngoundiane","Ngourane Ouolof","Ngoye","Nguékhokh","Nguelou","Nguéniène","Nguer Malal","Ngueune Sarr","Nguidile","Nguidjilone","Niagha","Niaguis","Niakhar","Niakhène","Niaming","Niamone","Niandane","Niani Toucouleur","Niassene","Ninefecha","Niomre","Nioro Alassane Tall","Nioro du Rip","Notto","Notto Gouye Diama","Nyassia","Odobere","Ogo","Orefonde","Orkadiéré","Ouadiour","Ouakam","Ouaounde","Ouarkhokh","Ouassadou","Oubadji","Oudalaye","Oudoucar","Oulampane","Ouonck","Ourossogui","Ourour","Oussouye","Pakour","Palmarin Facao","Pambal","Panal Ouolof","Paoskoto","Parcelles Assainies","Paroumba","Pass Koto","Passy","Pata","Patar","Patar Lia","Pattar","Patte d'Oie","Payar","Pékesse","Pété","Pete Ouarack","Pikine","Pikine Est","Pikine Nord","Pikine Ouest","Pire Goureye","Podor","Popenguine-Ndayane","Porokhane","Pout","Ranérou","Refane","Ribot Escale","Richard-Toll","Ronkh","Ross Béthio","Rosso-Sénégal","Rufisque","Rufisque Est","Rufisque Nord","Rufisque Ouest","Sabodala","Sadatou","Sadio","Sagatta Djoloff","Sagatta Gueth","Sagna","Saint-Louis","Sakal","Sakar","Salémata","Salikégné","Saly Escale","Saly Portudal","Sam Notaire","Sam Yabal","Sama Kanta Peulh","Samine","San Samba","Sandiara","Sangalkam","Saraya","Sare Bidji","Sare Coly Salle","Saré Yoba Diéga","Sébikotane","Sédhiou","Segre Gatta","Sémé","Sendou","Sessene","Sibassor","Sicap Liberte","Sikilo","Simbandi Balante","Simbandi Brassou","Sindia","Sindian","Sinthiang Koundara","Sinthiou Bamambe Banadji","Sinthiou Bocar Aly","Sinthiou Fissa","Sinthiou Maléme","Sinthiou Mamadou Boubou","Sokone","Somone","Soum","Suelle","Syer","Taiba Moutoupha","Taiba Ndiaye","Taiba Niassene","Taiba Thiekene","Taïf","Tambacounda","Tanaff","Tankanto Escale","Tankon","Tassete","Tattaguine","Tenghori","Tessekere Forage","Thiadiaye","Thiakhar","Thiamène","Thiamene Passe","Thiare","Thiare Ndialgui","Thiarny","Thiaroye Gare","Thiaroye Sur Mer","Thiel","Thienaba","Thieppe","Thiès","Thies Est","Thies Nord","Thies Ouest","Thietty","Thilmakha","Thilogne","Thiolom Fall","Thiomby","Thionck Essyl","Tivaouane","Tivaouane Diacksao","Tivaouane Peulh-Niaga","Tocky Gare","Tomboroncoto","Touba","Touba Fall","Touba Lappe","Touba Mbella","Touba Mboul","Touba Merina","Touba Mosquee","Touba Toul","Toubacouta","Toumboura","Touré Mbonde","Vélingara","Vélingara Ferlo","Wack Ngouna","Wakhinane Nimzatt","Walaldé","Waoundé","Wouro Sidy","Yang-Yang","Yarang Balante","Yène","Yeumbeul Nord","Yeumbeul Sud","Yoff","Ziguinchor"];
+
 var DEP_VILLE_AUTRE = '__autre__';
 
-// Bloc HTML "Ville" (menu déroulant + case "Autre" avec saisie libre) à
-// injecter juste au-dessus du champ adresse/quartier existant, sur
-// chaque formulaire concerné (préfixe : f/e/dp/fa/devis-f).
+// v1.20.19 (menu <select> illisible à 558 entrées) puis v1.20.20 : retour
+// Cobey — la saisie doit rester IMPOSSIBLE en dehors de la liste (sinon ça
+// recrée le risque de faute de frappe qu'on voulait justement éviter).
+// Donc : menu <select> qui n'accepte QUE les villes référencées (+ "Autre"
+// pour saisie libre explicite), avec un champ de recherche juste au-dessus
+// qui filtre les <option> pour ne pas avoir à scroller toute la liste.
 function _depChampVille(prefixe){
   var opts = '<option value="">— Choisir la ville —</option>'
     + DEP_VILLES_SENEGAL.map(function(v){ return '<option value="'+esc(v)+'">'+esc(v)+'</option>'; }).join('')
     + '<option value="'+DEP_VILLE_AUTRE+'">Autre (pr&eacute;ciser)&hellip;</option>';
   return '<div class="fg"><label class="fl">Ville</label>'
+    + '<input class="fi" id="'+prefixe+'-liv-filtre" placeholder="Rechercher une ville..." '
+    +   'oninput="depVilleFiltrer(\''+prefixe+'\')" style="margin-bottom:6px;">'
     + '<select class="fi" id="'+prefixe+'-liv-ville" onchange="depVilleChange(\''+prefixe+'\')">'+opts+'</select>'
     + '<input class="fi" id="'+prefixe+'-liv-ville-autre" placeholder="Nom de la ville/du village" '
     +   'style="display:none;margin-top:8px;"></div>';
 }
+
+// Filtre les <option> du menu selon le texte tapé (les 2 options fixes —
+// "Choisir" et "Autre" — restent toujours visibles).
+window.depVilleFiltrer = function(prefixe){
+  var filtre = (($(prefixe+'-liv-filtre')||{}).value || '').trim().toLowerCase();
+  var sel = $(prefixe+'-liv-ville');
+  if(!sel) return;
+  var opts = sel.options;
+  for(var i=0;i<opts.length;i++){
+    var o = opts[i];
+    if(!o.value || o.value === DEP_VILLE_AUTRE){ o.hidden = false; continue; }
+    o.hidden = filtre !== '' && o.text.toLowerCase().indexOf(filtre) === -1;
+  }
+};
 
 // Affiche/cache la saisie libre selon le choix "Autre".
 window.depVilleChange = function(prefixe){
