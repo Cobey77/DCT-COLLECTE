@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.30';
+var DEP_VERSION = 'v1.20.31';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -5642,7 +5642,14 @@ window.depPartagerWhatsapp = function(){
   var c = _depClientPourFacture(ctx);
   if(!c){ toast('⚠️ Client introuvable.'); return; }
   var msg = _depTexteMessageFacture(c, ctx);
-  window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+  // v1.20.31 : pointe désormais directement vers le numéro du client
+  // (comme le rappel de ramasse, voir _depTelIntlRelance) au lieu d'ouvrir
+  // WhatsApp sans numéro — retour de Cobey du 03/09/2026 : l'ancienne
+  // version ne proposait que les contacts déjà enregistrés, celle-ci
+  // fonctionne même si le client n'est pas dans les contacts.
+  var tel = _depTelIntlRelance(c.tel);
+  if(!tel){ toast('⚠️ Numéro de téléphone manquant.'); return; }
+  window.open('https://wa.me/' + tel + '?text=' + encodeURIComponent(msg), '_blank');
 };
 
 window.depCopierMessageWhatsapp = function(){
