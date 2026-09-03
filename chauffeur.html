@@ -37,6 +37,7 @@ input{width:100%;padding:14px;border:1.5px solid var(--border);border-radius:10p
 .client-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;}
 .client-nom{font-size:14.5px;font-weight:800;color:#111;}
 .client-adresse{font-size:12.5px;color:#666;margin-top:3px;line-height:1.4;}
+.client-colis{font-size:12.5px;color:#333;margin-top:5px;line-height:1.4;background:#F5F5F5;border-radius:8px;padding:6px 9px;}
 .badge-fait{font-size:10px;font-weight:800;background:#00b34e;color:#fff;padding:3px 9px;border-radius:20px;white-space:nowrap;}
 .badge-refus{font-size:10px;font-weight:800;background:#c0392b;color:#fff;padding:3px 9px;border-radius:20px;white-space:nowrap;}
 .actions{display:flex;gap:7px;margin-top:11px;}
@@ -269,7 +270,9 @@ function dessinerListe(ids, statuts, horaires){
     h += '<div class="' + cls + '">'
       +   '<div class="client-top">'
       +     '<div><div class="client-nom">' + (heure ? ('🕐 ' + esc(heure) + ' — ') : '') + esc(c.name || '') + '</div>'
-      +     '<div class="client-adresse">📍 ' + esc(adresse || '—') + '</div></div>';
+      +     '<div class="client-adresse">📍 ' + esc(adresse || '—') + '</div>'
+      +     (c.colis ? ('<div class="client-colis">📦 ' + esc(c.colis) + '</div>') : '')
+      +   '</div>';
     if(st) h += st.etat === 'recupere' ? '<span class="badge-fait">✓ Récupéré</span>' : '<span class="badge-refus">✕ Non récupéré</span>';
     h += '</div>';
     // Appeler / Waze restent accessibles même une fois le client clôturé
