@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.31';
+var DEP_VERSION = 'v1.20.32';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -6965,12 +6965,23 @@ function depRenderFicheLecture(colId, clientId, depot){
           + (pastilleEncaisse ? ('<br><span style="font-size:10.5px;color:var(--text3);">Encaiss&eacute; par</span><br>'+pastilleEncaisse) : ''))
     // v1.19.53 : reste à payer, visible uniquement si le paiement est
     // incomplet (retour de Cobey du 28/08/2026) — € + FCFA arrondi.
+    // v1.20.32 : "Déjà encaissé" ajouté juste au-dessus — un versement pris
+    // avant la ramasse (voir depOuvrirVersementAvance) ne se voyait qu'en
+    // fouillant le Suivi, pas assez visible (retour de Cobey du
+    // 03/09/2026, capture à l'appui : deux versements de 10 € enregistrés,
+    // rien ne l'indiquait sur la fiche elle-même).
     +   (function(){
           if(c.prixADefinir) return '';
           var pay = depCalculerPaiement(c);
-          if(pay.reste <= 0) return '';
-          return kv('Reste &agrave; payer', '<span style="color:#992020;font-weight:800;">'+pay.reste+'&nbsp;&euro;</span>'
-            + '<br><span style="font-size:11px;color:#992020;">'+esc(depFormatCFA(pay.reste))+'</span>');
+          var hPay = '';
+          if(pay.paye > 0){
+            hPay += kv('D&eacute;j&agrave; encaiss&eacute;', '<span style="color:#006b2d;font-weight:800;">'+pay.paye+'&nbsp;&euro;</span>');
+          }
+          if(pay.reste > 0){
+            hPay += kv('Reste &agrave; payer', '<span style="color:#992020;font-weight:800;">'+pay.reste+'&nbsp;&euro;</span>'
+              + '<br><span style="font-size:11px;color:#992020;">'+esc(depFormatCFA(pay.reste))+'</span>');
+          }
+          return hPay;
         })()
     // v1.20.27 : versement avant la ramasse (ex. virement reçu à
     // l'inscription) — disponible ici, avant même que la facture ne soit
