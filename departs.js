@@ -183,7 +183,7 @@
    1. CONSTANTES ET ÉTAT
    ───────────────────────────────────────────── */
 
-var DEP_VERSION = 'v1.20.26';
+var DEP_VERSION = 'v1.20.27';
 
 // v1.20.4 : précharge le SDK Firebase Auth dès le chargement de ce fichier,
 // en parallèle du reste — pour que la connexion anonyme (voir
@@ -484,6 +484,11 @@ var _depVersDevise  = 'eur';    // 'eur' | 'fcfa' — devise choisie sur le bout
 // v1.19.22 : caisse livraison, indépendante de celle du colis ci-dessus.
 var _depVersMethodeLivraison = '';
 var _depVersDeviseLivraison  = 'eur';
+// v1.20.27 : versement "avance" (paiement reçu avant la ramasse, voir plus
+// bas) — mêmes deux variables que ci-dessus, dédiées pour ne pas interférer
+// avec la saisie en cours sur une facture éventuellement déjà ouverte.
+var _depVersAvanceMethode = '';
+var _depVersAvanceDevise  = 'eur';
 // v1.19.35 : versement (colis ou livraison) en attente de confirmation —
 // voir _depOuvrirConfirmationVersement / depConfirmerVersement.
 var _depVersPending = null; // { type: 'colis'|'livraison', ctx, c, montant, devise, saisie, methode }
@@ -2252,6 +2257,41 @@ function injecterEcrans(){
     +   '<button class="btn-sm btn-green-sm" onclick="depConfirmerVersement()">&#9989; Confirmer</button>'
     + '</div></div></div>';
   document.body.appendChild(m7);
+
+  /* ---- Modale (v1.20.27) : "Ajouter un versement" depuis la fiche de
+     lecture d'un client (voir depOuvrirVersementAvance/
+     depAjouterVersementAvance), AVANT la ramasse — retour de Cobey du
+     03/09/2026 : un client réglé par virement avant sa collecte n'avait
+     aucun moyen d'en garder la trace, la facture ne s'ouvrant que le jour
+     de la ramasse. Ne touche ni au modèle ni à l'écran de la facture : une
+     fois saisi ici, le montant rejoint le même tableau c.versements que
+     celui lu par la facture (depCalculerPaiement), via la même écriture
+     (_depAjouterVersementExecuter) et la même modale de confirmation
+     (modal-dep-vers-confirm) que le versement classique. ---- */
+  var m7b = document.createElement('div');
+  m7b.className = 'modal-overlay';
+  m7b.id = 'modal-dep-versement-avance';
+  m7b.innerHTML = '<div class="modal-sheet"><div class="modal-confirm">'
+    + '<div class="modal-emoji">&#128176;</div>'
+    + '<div class="modal-confirm-title">Ajouter un versement</div>'
+    + '<div style="font-size:12.5px;color:#666;margin:2px 0 14px;">Paiement re&ccedil;u avant la collecte (ex. virement) &mdash; sera d&eacute;j&agrave; comptabilis&eacute; sur la facture, le jour de la ramasse.</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:10px;">'
+    +   '<button type="button" class="dep-st on" id="dep-vav-dev-eur" onclick="depVersAvanceDevise(\'eur\')" style="flex:1;">&euro; Euros</button>'
+    +   '<button type="button" class="dep-st" id="dep-vav-dev-fcfa" onclick="depVersAvanceDevise(\'fcfa\')" style="flex:1;">FCFA</button>'
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--text3);font-weight:700;text-align:left;margin-bottom:4px;" id="dep-vav-lab">Montant (&euro;)</div>'
+    + '<input class="fi" id="dep-vav-montant" type="number" min="0" step="1" placeholder="0" '
+    +   'style="font-size:19px;font-weight:700;text-align:center;padding:13px;margin-bottom:6px;" oninput="depVersAvanceMajFcfa()">'
+    + '<div id="dep-vav-fcfa-hint" style="display:none;font-size:11.5px;color:var(--text3);margin:0 0 10px;text-align:center;"></div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:6px;">'
+    +   '<button type="button" class="dep-st" id="dep-vav-meth-esp" onclick="depVersAvanceMethode(\'especes\')" style="flex:1;">Esp&egrave;ces</button>'
+    +   '<button type="button" class="dep-st" id="dep-vav-meth-vir" onclick="depVersAvanceMethode(\'virement\')" style="flex:1;">Virement</button>'
+    + '</div>'
+    + '<div class="modal-confirm-btns">'
+    +   '<button class="btn-sm btn-gray-sm" onclick="closeModal(\'modal-dep-versement-avance\')">Annuler</button>'
+    +   '<button class="btn-sm btn-green-sm" onclick="depAjouterVersementAvance()">&#9989; Enregistrer</button>'
+    + '</div></div></div>';
+  document.body.appendChild(m7b);
 
   /* ---- Modale (v1.19.38) : confirmation avant enregistrement des
      modifications d'une fiche client — retour de Cobey du 23/08/2026 :
@@ -5777,6 +5817,88 @@ window.depVersMajFcfa = function(){
   hint.textContent = '≈ ' + eur + ' € (taux fixe 1 € = ' + TAUX_FCFA_EUR + ' FCFA)';
 };
 
+/* ─────────────────────────────────────────────
+   v1.20.27. VERSEMENT AVANT LA RAMASSE — bouton "💰 Ajouter un versement"
+   disponible directement sur la fiche de lecture (depRenderFicheLecture),
+   accessible dès l'inscription, contrairement à la facture (depOuvrirFacture)
+   qui ne s'ouvre que via un container/départ. Retour de Cobey du 03/09/2026 :
+   un client réglé par virement avant sa collecte n'avait aucun moyen d'en
+   garder la trace. Écrit dans le MÊME c.versements que la facture (aucun
+   changement du modèle ni de l'écran facture) via les mêmes
+   _depOuvrirConfirmationVersement/_depAjouterVersementExecuter que le
+   versement classique — seule la saisie (modale dédiée ci-dessous, pour ne
+   pas entrer en conflit avec les champs d'une facture déjà ouverte) diffère.
+   ───────────────────────────────────────────── */
+
+window.depVersAvanceDevise = function(d){
+  _depVersAvanceDevise = d;
+  var be = $('dep-vav-dev-eur'), bf = $('dep-vav-dev-fcfa');
+  if(be) be.className = 'dep-st' + (d === 'eur' ? ' on' : '');
+  if(bf) bf.className = 'dep-st' + (d === 'fcfa' ? ' on' : '');
+  var lab = $('dep-vav-lab');
+  if(lab) lab.textContent = d === 'fcfa' ? 'Montant (FCFA)' : 'Montant (€)';
+  depVersAvanceMajFcfa();
+};
+
+window.depVersAvanceMethode = function(m){
+  _depVersAvanceMethode = m;
+  var be = $('dep-vav-meth-esp'), bv = $('dep-vav-meth-vir');
+  if(be) be.className = 'dep-st' + (m === 'especes' ? ' on' : '');
+  if(bv) bv.className = 'dep-st' + (m === 'virement' ? ' on' : '');
+};
+
+window.depVersAvanceMajFcfa = function(){
+  var hint = $('dep-vav-fcfa-hint');
+  if(!hint) return;
+  if(_depVersAvanceDevise !== 'fcfa'){ hint.style.display = 'none'; return; }
+  var input = $('dep-vav-montant');
+  var montantFcfa = parseFloat(input && input.value) || 0;
+  if(montantFcfa <= 0){ hint.style.display = 'none'; return; }
+  var eur = Math.round((montantFcfa / TAUX_FCFA_EUR) * 100) / 100;
+  hint.style.display = 'block';
+  hint.textContent = '≈ ' + eur + ' € (taux fixe 1 € = ' + TAUX_FCFA_EUR + ' FCFA)';
+};
+
+// Bouton "💰 Ajouter un versement" de la fiche de lecture — réinitialise la
+// saisie (devise/méthode repartent à zéro, comme sur la facture) et ouvre
+// la modale dédiée.
+window.depOuvrirVersementAvance = function(){
+  var ctx = _depFicheLectureCtx;
+  if(!ctx){ toast('⚠️ Fiche introuvable.'); return; }
+  var m = $('dep-vav-montant'); if(m) m.value = '';
+  _depVersAvanceMethode = '';
+  var be = $('dep-vav-meth-esp'), bv = $('dep-vav-meth-vir');
+  if(be) be.className = 'dep-st';
+  if(bv) bv.className = 'dep-st';
+  depVersAvanceDevise('eur');
+  openModal('modal-dep-versement-avance');
+};
+
+// Bouton "Enregistrer" de la modale — mêmes contrôles et le même passage
+// par la confirmation (_depOuvrirConfirmationVersement) que
+// depAjouterVersement, juste avec le client de la fiche de lecture
+// (_depFicheLectureCtx) au lieu de celui de la facture (_depFactureCtx).
+window.depAjouterVersementAvance = function(){
+  var ctxL = _depFicheLectureCtx;
+  if(!ctxL){ toast('⚠️ Fiche introuvable.'); return; }
+  if(!window.db || !window.firebaseReady){ toast('⚠️ Connexion indisponible, réessayez.'); return; }
+
+  var ctx = { collecteId: ctxL.colId, clientId: ctxL.clientId, depot: !!ctxL.depot };
+  var c = _depClientFacture(ctx);
+  if(!c){ toast('⚠️ Client introuvable.'); return; }
+
+  var input = $('dep-vav-montant');
+  var saisie = parseFloat(input && input.value) || 0;
+  if(saisie <= 0){ toast('⚠️ Indiquez un montant supérieur à 0.'); return; }
+  if(!_depVersAvanceMethode){ toast('⚠️ Choisissez le mode de paiement.'); return; }
+
+  var devise = _depVersAvanceDevise;
+  var montant = devise === 'fcfa' ? Math.round((saisie / TAUX_FCFA_EUR) * 100) / 100 : saisie;
+
+  closeModal('modal-dep-versement-avance');
+  _depOuvrirConfirmationVersement({ type: 'colis', ctx: ctx, c: c, montant: montant, devise: devise, saisie: saisie, methode: _depVersAvanceMethode });
+};
+
 // v1.17.0 : écriture Firebase immédiate et ciblée d'un client (collecte ou
 // dépôt), factorisée — même logique que pour les versements (voir plus
 // bas), utilisée aussi pour le prix et pourra resservir ensuite.
@@ -5888,7 +6010,16 @@ function _depAjouterVersementExecuter(p){
     + (devise === 'fcfa' ? ' (' + saisie + ' FCFA)' : '') + ' pour <strong>'+esc(c.name||'')+'</strong>');
 
   toast('✅ Versement enregistré');
-  depRenderFacture(c);
+  // v1.20.27 : appelé aussi depuis la fiche de lecture (versement avant la
+  // ramasse, voir depAjouterVersementAvance) — si c'est bien cet écran-là
+  // qui est ouvert, on le rafraîchit lui plutôt que la facture (pas
+  // forcément ouverte du tout dans ce cas).
+  var ecranFicheL = $('s-dep-fiche-lecture');
+  if(ecranFicheL && ecranFicheL.classList.contains('active') && _depFicheLectureCtx){
+    depRenderFicheLecture(_depFicheLectureCtx.colId, _depFicheLectureCtx.clientId, _depFicheLectureCtx.depot);
+  } else {
+    depRenderFacture(c);
+  }
 }
 
 // v1.16.2 : corriger un versement (erreur de saisie, trop perçu...) en le
@@ -6739,6 +6870,12 @@ function depRenderFicheLecture(colId, clientId, depot){
           return kv('Reste &agrave; payer', '<span style="color:#992020;font-weight:800;">'+pay.reste+'&nbsp;&euro;</span>'
             + '<br><span style="font-size:11px;color:#992020;">'+esc(depFormatCFA(pay.reste))+'</span>');
         })()
+    // v1.20.27 : versement avant la ramasse (ex. virement reçu à
+    // l'inscription) — disponible ici, avant même que la facture ne soit
+    // accessible (voir depOuvrirVersementAvance).
+    +   (c.prixADefinir ? '' : '<button type="button" class="btn btn-gray" '
+          + 'style="background:#EAF7EE;border-color:#BFE6C8;color:#0d7a3a;margin-top:10px;" '
+          + 'onclick="depOuvrirVersementAvance()">&#128176; Ajouter un versement</button>')
     + '</div>'
     + '<div class="dep-fiche-card">'
     +   (c.livraisonDakar
